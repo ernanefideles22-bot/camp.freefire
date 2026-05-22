@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Trophy, User, Sliders, Shield, Award, LogOut } from 'lucide-react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { Leaderboard } from './components/Leaderboard';
 import { PlayerPortal } from './components/PlayerPortal';
 import { AdminPanel } from './components/AdminPanel';
@@ -251,6 +252,9 @@ function App() {
 
       {/* Central Toast Notification System */}
       <ToastContainer messages={toasts} onClose={handleRemoveToast} />
+      
+      {/* Vercel Speed Insights */}
+      <SpeedInsights />
     </div>
   );
 }
