@@ -1,7 +1,9 @@
 // API client for Free Fire Solo Championship
-// Connects directly to FastAPI backend on http://localhost:8000
+// URL do backend via variável de ambiente (definida no Vercel e no .env.local)
+// Em produção: VITE_API_URL=https://seu-backend.railway.app
+// Em desenvolvimento local: VITE_API_URL=http://localhost:8000
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 export interface Jogador {
   id: number;
@@ -55,7 +57,6 @@ export interface StatusQueda {
   sala_liberada: boolean;
 }
 
-// Map placement to prize money in Reais (R$)
 export const getPremioPorColocacao = (colocacao: number): number => {
   if (colocacao === 1) return 20.00;
   if (colocacao === 2) return 10.00;
@@ -65,8 +66,6 @@ export const getPremioPorColocacao = (colocacao: number): number => {
   return 0.00;
 };
 
-// Points per placement according to the user's backend scores config:
-// TABELA_PONTUACAO_COLOCACAO = {1: 12, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1}
 export const getPontosPorColocacao = (colocacao: number): number => {
   const pointsTable: Record<number, number> = {
     1: 12, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1
@@ -74,7 +73,6 @@ export const getPontosPorColocacao = (colocacao: number): number => {
   return pointsTable[colocacao] || 0;
 };
 
-// Get custom authorization headers
 const getAuthHeaders = (): Record<string, string> => {
   const userJson = localStorage.getItem('currentUser');
   const headers: Record<string, string> = {};
@@ -91,7 +89,6 @@ const getAuthHeaders = (): Record<string, string> => {
   return headers;
 };
 
-// Get headers with content type JSON and auth info
 const getJsonHeaders = (): Record<string, string> => {
   return {
     'Content-Type': 'application/json',
@@ -100,16 +97,12 @@ const getJsonHeaders = (): Record<string, string> => {
 };
 
 export const apiService = {
-  // --- AUTENTICAÇÃO E CADASTRO ---
   async cadastrarJogador(nome: string, nick: string, senha?: string): Promise<Jogador> {
     const response = await fetch(`${API_BASE_URL}/auth/cadastro`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nome, nick, senha: senha || '1234' })
     });
-
     if (!response.ok) {
       if (response.status === 400) {
         const errorData = await response.json();
@@ -117,225 +110,137 @@ export const apiService = {
       }
       throw new Error('Falha ao cadastrar jogador');
     }
-
     return response.json();
   },
 
-  async login(nick: string, senha?: string): Promise<Jogador> {
+  async loginJogador(nick: string, senha: string): Promise<Jogador> {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ nick, senha: senha || '1234' })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nick, senha })
     });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        throw new Error('Nick ou senha incorretos.');
-      }
-      throw new Error('Falha ao fazer login');
-    }
-
-    return response.json();
-  },
-
-  async getJogadores(): Promise<Jogador[]> {
-    const response = await fetch(`${API_BASE_URL}/jogadores`);
-    if (!response.ok) {
-      throw new Error('Falha ao obter lista de jogadores');
-    }
-    return response.json();
-  },
-
-  async getClassificacao(): Promise<ClassificacaoItem[]> {
-    const response = await fetch(`${API_BASE_URL}/classificacao`);
-    if (!response.ok) {
-      throw new Error('Falha ao obter classificação');
-    }
-    return response.json();
-  },
-
-  async lancarResultados(numero_queda: number, resultados: ResultadoQuedaInput[]): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/quedas`, {
-      method: 'POST',
-      headers: getJsonHeaders(),
-      body: JSON.stringify({
-        numero_queda,
-        resultados
-      })
-    });
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || 'Falha ao registrar queda');
+      throw { status: response.status, message: errorData.detail || 'Nick ou senha incorretos.' };
     }
-
     return response.json();
   },
 
-  async getPlayerHistory(nick: string): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/jogadores/${encodeURIComponent(nick)}/historico`);
-    if (response.status === 404) {
-      return null;
-    }
+  async listarJogadores(): Promise<Jogador[]> {
+    const response = await fetch(`${API_BASE_URL}/jogadores`, {
+      headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error('Falha ao listar jogadores');
+    return response.json();
+  },
+
+  async obterJogador(id: number): Promise<Jogador> {
+    const response = await fetch(`${API_BASE_URL}/jogadores/${id}`, {
+      headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error('Jogador não encontrado');
+    return response.json();
+  },
+
+  async obterClassificacao(): Promise<ClassificacaoItem[]> {
+    const response = await fetch(`${API_BASE_URL}/classificacao`);
+    if (!response.ok) throw new Error('Falha ao carregar classificação');
+    return response.json();
+  },
+
+  async obterStatusQueda(numeroQueda: number): Promise<StatusQueda> {
+    const response = await fetch(`${API_BASE_URL}/quedas/${numeroQueda}/status`, {
+      headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error('Falha ao obter status da queda');
+    return response.json();
+  },
+
+  async inscreverNaQueda(numeroQueda: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/quedas/${numeroQueda}/inscrever`, {
+      method: 'POST',
+      headers: getJsonHeaders()
+    });
     if (!response.ok) {
-      throw new Error('Falha ao obter histórico do jogador');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Falha ao se inscrever na queda');
     }
+  },
+
+  async lancarResultadoQueda(payload: QuedaPayload): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/quedas/resultado`, {
+      method: 'POST',
+      headers: getJsonHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Falha ao lançar resultado');
+    }
+  },
+
+  async obterInfoSala(numeroQueda: number): Promise<SalaData> {
+    const response = await fetch(`${API_BASE_URL}/sala/${numeroQueda}`, {
+      headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error('Sala não encontrada');
     return response.json();
   },
 
-  // --- CARTEIRA / SALDO ---
+  async liberarSala(numeroQueda: number, salaId: string, senha: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/sala/liberar`, {
+      method: 'POST',
+      headers: getJsonHeaders(),
+      body: JSON.stringify({ numero_queda: numeroQueda, sala_id: salaId, senha })
+    });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || 'Falha ao liberar sala');
+    }
+  },
+
   async solicitarDeposito(valor: number): Promise<DepositoRequisicao> {
     const response = await fetch(`${API_BASE_URL}/carteira/depositar`, {
       method: 'POST',
       headers: getJsonHeaders(),
       body: JSON.stringify({ valor })
     });
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.detail || 'Falha ao solicitar depósito');
     }
-
     return response.json();
   },
 
   async obterDepositosPendentes(): Promise<DepositoRequisicao[]> {
     const response = await fetch(`${API_BASE_URL}/admin/depositos/pendentes`, {
-      method: 'GET',
       headers: getAuthHeaders()
     });
-
-    if (!response.ok) {
-      throw new Error('Falha ao obter depósitos pendentes');
-    }
-
+    if (!response.ok) throw new Error('Falha ao buscar depósitos pendentes');
     return response.json();
   },
 
-  async processarDeposito(id: number, status: 'aprovado' | 'rejeitado'): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/admin/depositos/${id}/processar`, {
+  async aprovarDeposito(depositoId: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/admin/depositos/${depositoId}/processar`, {
       method: 'POST',
       headers: getJsonHeaders(),
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status: 'aprovado' })
     });
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || 'Falha ao processar depósito');
+      throw new Error(errorData.detail || 'Falha ao aprovar depósito');
     }
-
-    return response.json();
   },
 
-  // --- INSCRIÇÕES E QUEDAS ---
-  async inscreverQueda(numero_queda: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/quedas/${numero_queda}/inscrever`, {
-      method: 'POST',
-      headers: getJsonHeaders()
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || 'Falha ao se inscrever na queda');
-    }
-
-    return response.json();
-  },
-
-  async obterStatusQueda(numero_queda: number): Promise<StatusQueda> {
-    const response = await fetch(`${API_BASE_URL}/quedas/${numero_queda}/status`, {
-      method: 'GET',
-      headers: getAuthHeaders()
-    });
-
-    if (!response.ok) {
-      throw new Error('Falha ao obter status da queda');
-    }
-
-    return response.json();
-  },
-
-  async cancelarQuedaReembolsar(numero_queda: number): Promise<any> {
-    const response = await fetch(`${API_BASE_URL}/quedas/${numero_queda}/cancelar-reembolsar`, {
-      method: 'POST',
-      headers: getJsonHeaders()
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || 'Falha ao cancelar queda e reembolsar');
-    }
-
-    return response.json();
-  },
-
-  // --- ROOM MANAGEMENT ---
-  async liberarSala(numero_queda: number, sala_id: string, senha: string): Promise<SalaData> {
-    const response = await fetch(`${API_BASE_URL}/salas`, {
+  async rejeitarDeposito(depositoId: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/admin/depositos/${depositoId}/processar`, {
       method: 'POST',
       headers: getJsonHeaders(),
-      body: JSON.stringify({
-        numero_queda,
-        sala_id,
-        senha
-      })
+      body: JSON.stringify({ status: 'rejeitado' })
     });
-
-    if (!response.ok) {
-      throw new Error('Falha ao liberar sala');
-    }
-
-    return response.json();
-  },
-
-  async obterSala(numero_queda: number): Promise<SalaData | null> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/salas/${numero_queda}`);
-      if (response.status === 404) {
-        return null;
-      }
-      if (!response.ok) {
-        throw new Error('Falha ao obter sala');
-      }
-      return await response.json();
-    } catch (err) {
-      return null;
-    }
-  },
-
-  // --- IA AGENT / OCR ENPOINT ---
-  async enviarComandoAgente(comando: string, api_key?: string): Promise<{ resposta: string }> {
-    const response = await fetch(`${API_BASE_URL}/agente/comando`, {
-      method: 'POST',
-      headers: getJsonHeaders(),
-      body: JSON.stringify({ comando, api_key: api_key || undefined })
-    });
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || 'Falha ao processar comando da IA');
+      throw new Error(errorData.detail || 'Falha ao rejeitar depósito');
     }
-
-    return response.json();
   },
-
-  async processarOcrResultado(numero_queda: number, file: File): Promise<any> {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch(`${API_BASE_URL}/quedas/${numero_queda}/processar-ocr`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: formData
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || 'Falha ao processar print OCR');
-    }
-
-    return response.json();
-  }
 };

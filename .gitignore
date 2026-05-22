@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.production
+.env.development
+__pycache__/
+*.pyc
+backend/__pycache__/
+backend/*.pyc
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.DS_Store
+.vscode/
+test-auth.html
