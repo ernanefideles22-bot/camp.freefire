@@ -20,7 +20,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
     else setRefreshing(true);
 
     try {
-      const result = await apiService.getClassificacao();
+      const result = await apiService.obterClassificacao();
       setData(result);
       setConnected(true);
       setCountdown(30); // Reset timer on successful fetch
