@@ -55,7 +55,16 @@ async def criar_cobranca_pix(body: CriarCobrancaRequest):
     cp, kp = _get_cert_files()
     exp = (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
     wh = os.getenv("BACKEND_URL", "").rstrip("/") + "/pix/webhook"
-    payload = {"code": "DEP-" + str(body.jogador_id) + "-" + str(int(datetime.utcnow().timestamp())), "amount": int(body.valor * 100), "description": "Deposito Camp FreeFire", "payment_forms": ["PIX"], "services": [{"name": "Deposito", "description": "Deposito Camp FreeFire", "amount": int(body.valor * 100)}], "customer": {"name": "Jogador #" + str(body.jogador_id), "document": {"identity": body.cpf.replace(".", "").replace("-", "").replace("/", ""), "type": "CPF"}}, "notifications": [{"channel": "WEBHOOK", "url": wh}]}
+    due = (datetime.utcnow() + timedelta(days=3)).strftime("%Y-%m-%d")
+    payload = {
+        "code": "DEP-" + str(body.jogador_id) + "-" + str(int(datetime.utcnow().timestamp())),
+        "services": [{"name": "Deposito FreeFire", "description": "Deposito Camp FreeFire", "amount": int(body.valor * 100)}],
+        "payment_terms": {"due_date": due},
+        "customer": {
+            "name": "Jogador " + str(body.jogador_id),
+            "document": {"identity": body.cpf.replace(".", "").replace("-", "").replace("/", ""), "type": "CPF"}
+        }
+    }
     async with httpx.AsyncClient(cert=(cp, kp), verify=True) as c:
         resp = await c.post(CORA_BASE + "/v2/invoices", json=payload, headers={"Authorization": "Bearer " + tkn, "Idempotency-Key": str(uuid.uuid4())})
     print(f"[CORA INVOICE] status={resp.status_code} body={resp.text[:500]}")
