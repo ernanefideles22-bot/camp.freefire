@@ -1,8 +1,7 @@
-// Componente PIX para o frontend — adicionar dentro de PlayerPortal.tsx ou como componente separado
+// Componente PIX para o frontend â adicionar dentro de PlayerPortal.tsx ou como componente separado
 // Integra com o backend /pix/criar-cobranca
 
 import { useState } from "react";
-import { apiService } from "../services/api";
 
 interface CobrancaResponse {
   id: string;
@@ -26,7 +25,7 @@ export default function PixDeposito({ jogadorId }: Props) {
 
   const criarCobranca = async () => {
     const v = parseFloat(valor);
-    if (!v || v < 1) { setErro("Valor mínimo: R$ 1,00"); return; }
+    if (!v || v < 1) { setErro("Valor mÃ­nimo: R$ 1,00"); return; }
     setErro("");
     setLoading(true);
     try {
@@ -60,7 +59,7 @@ export default function PixDeposito({ jogadorId }: Props) {
     return (
       <div style={{ background: "#1a1a2e", border: "1px solid #ff6b35", borderRadius: 12, padding: 24, maxWidth: 400 }}>
         <h3 style={{ color: "#ff6b35", textAlign: "center", margin: "0 0 16px" }}>
-          💰 PIX GERADO — R$ {cobranca.valor.toFixed(2)}
+          ð° PIX GERADO â R$ {cobranca.valor.toFixed(2)}
         </h3>
 
         {/* QR Code */}
@@ -77,18 +76,18 @@ export default function PixDeposito({ jogadorId }: Props) {
             background: "#0d0d1a", border: "1px dashed #ff6b35", borderRadius: 8,
             padding: 16, margin: "16px 0", textAlign: "center", color: "#888"
           }}>
-            QR Code indisponível — use o código abaixo
+            QR Code indisponÃ­vel â use o cÃ³digo abaixo
           </div>
         )}
 
-        {/* Código Copia e Cola */}
-        <p style={{ color: "#aaa", fontSize: 12, margin: "12px 0 4px" }}>Código PIX (Copia e Cola):</p>
+        {/* CÃ³digo Copia e Cola */}
+        <p style={{ color: "#aaa", fontSize: 12, margin: "12px 0 4px" }}>CÃ³digo PIX (Copia e Cola):</p>
         <div style={{
           background: "#0d0d1a", border: "1px solid #333", borderRadius: 6,
           padding: "8px 12px", fontSize: 11, color: "#ccc",
           wordBreak: "break-all", maxHeight: 80, overflow: "auto"
         }}>
-          {cobranca.qr_code || "Código não disponível"}
+          {cobranca.qr_code || "CÃ³digo nÃ£o disponÃ­vel"}
         </div>
 
         <button
@@ -100,11 +99,11 @@ export default function PixDeposito({ jogadorId }: Props) {
             cursor: "pointer", fontWeight: "bold", fontSize: 14
           }}
         >
-          {copiado ? "✅ COPIADO!" : "📋 COPIAR CÓDIGO PIX"}
+          {copiado ? "â COPIADO!" : "ð COPIAR CÃDIGO PIX"}
         </button>
 
         <p style={{ color: "#888", fontSize: 11, textAlign: "center", margin: "8px 0" }}>
-          Expira em 30 minutos • Após pagar, o saldo será creditado automaticamente
+          Expira em 30 minutos â¢ ApÃ³s pagar, o saldo serÃ¡ creditado automaticamente
         </p>
 
         <button
@@ -123,9 +122,9 @@ export default function PixDeposito({ jogadorId }: Props) {
 
   return (
     <div style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 12, padding: 24, maxWidth: 400 }}>
-      <h3 style={{ color: "#ff6b35", margin: "0 0 16px" }}>💸 Depositar via PIX</h3>
+      <h3 style={{ color: "#ff6b35", margin: "0 0 16px" }}>ð¸ Depositar via PIX</h3>
 
-      <label style={{ color: "#aaa", fontSize: 13 }}>Valor do depósito:</label>
+      <label style={{ color: "#aaa", fontSize: 13 }}>Valor do depÃ³sito:</label>
       <div style={{ display: "flex", gap: 8, margin: "8px 0 4px" }}>
         {[5, 10, 20, 50].map((v) => (
           <button
@@ -157,7 +156,7 @@ export default function PixDeposito({ jogadorId }: Props) {
         }}
       />
 
-      {erro && <p style={{ color: "#ef4444", fontSize: 13, margin: "4px 0" }}>⚠️ {erro}</p>}
+      {erro && <p style={{ color: "#ef4444", fontSize: 13, margin: "4px 0" }}>â ï¸ {erro}</p>}
 
       <button
         onClick={criarCobranca}
@@ -170,11 +169,11 @@ export default function PixDeposito({ jogadorId }: Props) {
           fontWeight: "bold", fontSize: 15
         }}
       >
-        {loading ? "Gerando PIX..." : "⚡ GERAR QR CODE PIX"}
+        {loading ? "Gerando PIX..." : "â¡ GERAR QR CODE PIX"}
       </button>
 
       <p style={{ color: "#555", fontSize: 11, textAlign: "center", margin: "12px 0 0" }}>
-        Processado via Cora Bank • Aprovação instantânea
+        Processado via Cora Bank â¢ AprovaÃ§Ã£o instantÃ¢nea
       </p>
     </div>
   );
