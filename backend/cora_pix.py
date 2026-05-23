@@ -58,8 +58,9 @@ async def criar_cobranca_pix(body: CriarCobrancaRequest):
     payload = {"code": "DEP-" + str(body.jogador_id) + "-" + str(int(datetime.utcnow().timestamp())), "amount": int(body.valor * 100), "description": "Deposito Camp FreeFire", "payment_forms": ["PIX"], "services": [{"name": "Deposito", "description": "Deposito Camp FreeFire", "amount": int(body.valor * 100)}], "customer": {"name": "Jogador #" + str(body.jogador_id), "document": {"identity": body.cpf.replace(".", "").replace("-", "").replace("/", ""), "type": "CPF"}}, "notifications": [{"channel": "WEBHOOK", "url": wh}]}
     async with httpx.AsyncClient(cert=(cp, kp), verify=True) as c:
         resp = await c.post(CORA_BASE + "/v2/invoices", json=payload, headers={"Authorization": "Bearer " + tkn, "Idempotency-Key": str(uuid.uuid4())})
+    print(f"[CORA INVOICE] status={resp.status_code} body={resp.text[:500]}")
     if resp.status_code not in (200, 201):
-        raise HTTPException(502, "Erro Cora: " + resp.text)
+        raise HTTPException(502, f"Erro Cora status={resp.status_code}: {resp.text}")
     data = resp.json()
     pix = data.get("payment_options", {}).get("pix", {})
     return CobrancaResponse(invoice_id=data.get("id",""), qr_code=pix.get("emv",""), qr_code_image=pix.get("qr_code_image",""), valor=body.valor, status=data.get("status","PENDING"), expiracao=exp)
