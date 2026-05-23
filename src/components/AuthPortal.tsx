@@ -39,7 +39,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
     setLoading(true);
     try {
       if (isLogin) {
-        const user = await apiService.login(nick.trim(), senha);
+        const user = await apiService.loginJogador(nick.trim(), senha);
         addToast('Sucesso!', `Bem-vindo de volta, ${user.nome}!`, 'success');
         // Save to localStorage
         localStorage.setItem('currentUser', JSON.stringify(user));
