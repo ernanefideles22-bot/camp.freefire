@@ -1,4 +1,4 @@
-import os, base64, tempfile
+import os, base64, tempfile, uuid
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
@@ -56,7 +56,7 @@ async def criar_cobranca_pix(body: CriarCobrancaRequest):
     wh = os.getenv("BACKEND_URL", "").rstrip("/") + "/pix/webhook"
     payload = {"code": "DEP-" + str(body.jogador_id) + "-" + str(int(datetime.utcnow().timestamp())), "amount": int(body.valor * 100), "description": "Deposito Camp FreeFire", "payment_forms": ["PIX"], "customer": {"name": "Jogador #" + str(body.jogador_id)}, "notifications": [{"channel": "WEBHOOK", "url": wh}]}
     async with httpx.AsyncClient(cert=(cp, kp), verify=True) as c:
-        resp = await c.post(CORA_BASE + "/v2/invoices", json=payload, headers={"Authorization": "Bearer " + tkn})
+        resp = await c.post(CORA_BASE + "/v2/invoices", json=payload, headers={"Authorization": "Bearer " + tkn, "Idempotency-Key": str(uuid.uuid4())})
     if resp.status_code not in (200, 201):
         raise HTTPException(502, "Erro Cora: " + resp.text)
     data = resp.json()
