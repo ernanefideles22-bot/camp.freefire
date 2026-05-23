@@ -1,180 +1,139 @@
-// Componente PIX para o frontend â adicionar dentro de PlayerPortal.tsx ou como componente separado
-// Integra com o backend /pix/criar-cobranca
-
 import { useState } from "react";
-
-interface CobrancaResponse {
-  id: string;
-  qr_code: string;
-  qr_code_image: string;
-  valor: number;
-  status: string;
-  expiracao: string;
-}
 
 interface Props {
   jogadorId: number;
 }
 
 export default function PixDeposito({ jogadorId }: Props) {
-  const [valor, setValor] = useState<string>("");
+  const [valor, setValor] = useState<number>(10);
+  const [cpf, setCpf] = useState("");
   const [loading, setLoading] = useState(false);
-  const [cobranca, setCobranca] = useState<CobrancaResponse | null>(null);
-  const [copiado, setCopiado] = useState(false);
-  const [erro, setErro] = useState<string>("");
+  const [qrCode, setQrCode] = useState("");
+  const [qrImage, setQrImage] = useState("");
+  const [invoiceId, setInvoiceId] = useState("");
+  const [erro, setErro] = useState("");
 
-  const criarCobranca = async () => {
-    const v = parseFloat(valor);
-    if (!v || v < 1) { setErro("Valor mÃ­nimo: R$ 1,00"); return; }
-    setErro("");
+  const formatCpf = (v: string) => {
+    const digits = v.replace(/\D/g, "").slice(0, 11);
+    return digits
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+  };
+
+  const gerarCobranca = async () => {
+    const cpfDigits = cpf.replace(/\D/g, "");
+    if (cpfDigits.length !== 11) {
+      setErro("CPF inválido. Digite os 11 dígitos.");
+      return;
+    }
     setLoading(true);
+    setErro("");
+    setQrCode("");
+    setQrImage("");
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/pix/criar-cobranca`,
+      const resp = await fetch(
+        (import.meta.env.VITE_API_URL || "https://campfreefire-production.up.railway.app") +
+          "/pix/criar-cobranca",
         {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-user-id": String(jogadorId) },
-          body: JSON.stringify({ jogador_id: jogadorId, valor: v }),
+          body: JSON.stringify({ jogador_id: jogadorId, valor, cpf: cpfDigits }),
         }
       );
-      if (!res.ok) throw new Error(await res.text());
-      setCobranca(await res.json());
-    } catch (e: any) {
-      setErro("Erro ao gerar PIX: " + (e.message || "tente novamente"));
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || "Erro ao gerar cobrança");
+      setQrCode(data.qr_code);
+      setQrImage(data.qr_code_image);
+      setInvoiceId(data.invoice_id);
+    } catch (e: unknown) {
+      setErro(e instanceof Error ? e.message : "Erro desconhecido");
     } finally {
       setLoading(false);
     }
   };
 
-  const copiarCodigo = () => {
-    if (!cobranca?.qr_code) return;
-    navigator.clipboard.writeText(cobranca.qr_code);
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 3000);
-  };
-
-  const resetar = () => { setCobranca(null); setValor(""); setErro(""); };
-
-  if (cobranca) {
-    return (
-      <div style={{ background: "#1a1a2e", border: "1px solid #ff6b35", borderRadius: 12, padding: 24, maxWidth: 400 }}>
-        <h3 style={{ color: "#ff6b35", textAlign: "center", margin: "0 0 16px" }}>
-          ð° PIX GERADO â R$ {cobranca.valor.toFixed(2)}
-        </h3>
-
-        {/* QR Code */}
-        {cobranca.qr_code_image ? (
-          <div style={{ textAlign: "center", margin: "16px 0" }}>
-            <img
-              src={`data:image/png;base64,${cobranca.qr_code_image}`}
-              alt="QR Code PIX"
-              style={{ width: 200, height: 200, border: "4px solid #ff6b35", borderRadius: 8 }}
-            />
-          </div>
-        ) : (
-          <div style={{
-            background: "#0d0d1a", border: "1px dashed #ff6b35", borderRadius: 8,
-            padding: 16, margin: "16px 0", textAlign: "center", color: "#888"
-          }}>
-            QR Code indisponÃ­vel â use o cÃ³digo abaixo
-          </div>
-        )}
-
-        {/* CÃ³digo Copia e Cola */}
-        <p style={{ color: "#aaa", fontSize: 12, margin: "12px 0 4px" }}>CÃ³digo PIX (Copia e Cola):</p>
-        <div style={{
-          background: "#0d0d1a", border: "1px solid #333", borderRadius: 6,
-          padding: "8px 12px", fontSize: 11, color: "#ccc",
-          wordBreak: "break-all", maxHeight: 80, overflow: "auto"
-        }}>
-          {cobranca.qr_code || "CÃ³digo nÃ£o disponÃ­vel"}
-        </div>
-
-        <button
-          onClick={copiarCodigo}
-          style={{
-            width: "100%", margin: "12px 0 0", padding: "10px 0",
-            background: copiado ? "#22c55e" : "#ff6b35",
-            color: "#fff", border: "none", borderRadius: 8,
-            cursor: "pointer", fontWeight: "bold", fontSize: 14
-          }}
-        >
-          {copiado ? "â COPIADO!" : "ð COPIAR CÃDIGO PIX"}
-        </button>
-
-        <p style={{ color: "#888", fontSize: 11, textAlign: "center", margin: "8px 0" }}>
-          Expira em 30 minutos â¢ ApÃ³s pagar, o saldo serÃ¡ creditado automaticamente
-        </p>
-
-        <button
-          onClick={resetar}
-          style={{
-            width: "100%", padding: "8px 0", background: "transparent",
-            color: "#888", border: "1px solid #333", borderRadius: 8,
-            cursor: "pointer", fontSize: 13
-          }}
-        >
-          Gerar novo PIX
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ background: "#1a1a2e", border: "1px solid #333", borderRadius: 12, padding: 24, maxWidth: 400 }}>
-      <h3 style={{ color: "#ff6b35", margin: "0 0 16px" }}>ð¸ Depositar via PIX</h3>
+    <div style={{ padding: "16px", background: "#1a1a2e", borderRadius: "12px", color: "#fff", marginTop: "16px" }}>
+      <h3 style={{ margin: "0 0 12px", color: "#00d4aa" }}>💰 Depositar via PIX</h3>
 
-      <label style={{ color: "#aaa", fontSize: 13 }}>Valor do depÃ³sito:</label>
-      <div style={{ display: "flex", gap: 8, margin: "8px 0 4px" }}>
-        {[5, 10, 20, 50].map((v) => (
-          <button
-            key={v}
-            onClick={() => setValor(String(v))}
-            style={{
-              flex: 1, padding: "8px 0",
-              background: valor === String(v) ? "#ff6b35" : "#0d0d1a",
-              color: valor === String(v) ? "#fff" : "#aaa",
-              border: "1px solid #333", borderRadius: 6, cursor: "pointer", fontSize: 13
-            }}
-          >
-            R${v}
-          </button>
-        ))}
+      {/* Valor */}
+      <div style={{ marginBottom: "12px" }}>
+        <label style={{ display: "block", marginBottom: "4px", fontSize: "14px", color: "#aaa" }}>Valor (R$)</label>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+          {[5, 10, 20, 50].map((v) => (
+            <button
+              key={v}
+              onClick={() => setValor(v)}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "8px",
+                border: valor === v ? "2px solid #00d4aa" : "1px solid #444",
+                background: valor === v ? "#00d4aa22" : "#2a2a3e",
+                color: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              R$ {v}
+            </button>
+          ))}
+        </div>
+        <input
+          type="number"
+          min={1}
+          value={valor}
+          onChange={(e) => setValor(Number(e.target.value))}
+          style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #444", background: "#2a2a3e", color: "#fff", boxSizing: "border-box" }}
+        />
       </div>
 
-      <input
-        type="number"
-        min="1"
-        step="0.01"
-        placeholder="Ou digite o valor \(R$\)"
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        style={{
-          width: "100%", padding: "10px 12px", background: "#0d0d1a",
-          border: "1px solid #333", borderRadius: 8, color: "#fff",
-          fontSize: 14, boxSizing: "border-box", margin: "8px 0"
-        }}
-      />
-
-      {erro && <p style={{ color: "#ef4444", fontSize: 13, margin: "4px 0" }}>â ï¸ {erro}</p>}
+      {/* CPF */}
+      <div style={{ marginBottom: "12px" }}>
+        <label style={{ display: "block", marginBottom: "4px", fontSize: "14px", color: "#aaa" }}>Seu CPF</label>
+        <input
+          type="text"
+          placeholder="000.000.000-00"
+          value={cpf}
+          onChange={(e) => setCpf(formatCpf(e.target.value))}
+          style={{ width: "100%", padding: "8px", borderRadius: "8px", border: "1px solid #444", background: "#2a2a3e", color: "#fff", boxSizing: "border-box" }}
+        />
+      </div>
 
       <button
-        onClick={criarCobranca}
+        onClick={gerarCobranca}
         disabled={loading}
         style={{
-          width: "100%", padding: "12px 0", marginTop: 8,
-          background: loading ? "#555" : "#ff6b35",
-          color: "#fff", border: "none", borderRadius: 8,
+          width: "100%",
+          padding: "10px",
+          background: loading ? "#555" : "#00d4aa",
+          color: "#000",
+          fontWeight: "bold",
+          border: "none",
+          borderRadius: "8px",
           cursor: loading ? "not-allowed" : "pointer",
-          fontWeight: "bold", fontSize: 15
+          fontSize: "15px",
         }}
       >
-        {loading ? "Gerando PIX..." : "â¡ GERAR QR CODE PIX"}
+        {loading ? "Gerando QR Code..." : "Gerar QR Code PIX"}
       </button>
 
-      <p style={{ color: "#555", fontSize: 11, textAlign: "center", margin: "12px 0 0" }}>
-        Processado via Cora Bank â¢ AprovaÃ§Ã£o instantÃ¢nea
-      </p>
+      {erro && <p style={{ color: "#ff6b6b", marginTop: "10px", fontSize: "13px" }}>{erro}</p>}
+
+      {qrCode && (
+        <div style={{ marginTop: "16px", textAlign: "center" }}>
+          {qrImage && <img src={qrImage} alt="QR Code PIX" style={{ width: "200px", height: "200px", borderRadius: "8px" }} />}
+          <p style={{ fontSize: "12px", color: "#aaa", marginTop: "8px" }}>Código PIX:</p>
+          <div
+            style={{ background: "#2a2a3e", padding: "8px", borderRadius: "8px", fontSize: "11px", wordBreak: "break-all", cursor: "pointer" }}
+            onClick={() => navigator.clipboard.writeText(qrCode)}
+            title="Clique para copiar"
+          >
+            {qrCode}
+          </div>
+          <p style={{ fontSize: "11px", color: "#888", marginTop: "4px" }}>Clique no código para copiar</p>
+          <p style={{ fontSize: "11px", color: "#888" }}>ID: {invoiceId}</p>
+        </div>
+      )}
     </div>
   );
 }
