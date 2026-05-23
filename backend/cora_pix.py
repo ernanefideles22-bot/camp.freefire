@@ -59,6 +59,7 @@ async def criar_cobranca_pix(body: CriarCobrancaRequest):
     payload = {
         "code": "DEP-" + str(body.jogador_id) + "-" + str(int(datetime.utcnow().timestamp())),
         "services": [{"name": "Deposito FreeFire", "description": "Deposito Camp FreeFire", "amount": int(body.valor * 100)}],
+        "payment_forms": ["PIX"],
         "payment_terms": {"due_date": due},
         "customer": {
             "name": "Jogador " + str(body.jogador_id),
