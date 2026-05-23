@@ -68,12 +68,27 @@ async def criar_cobranca_pix(body: CriarCobrancaRequest):
     }
     async with httpx.AsyncClient(cert=(cp, kp), verify=True) as c:
         resp = await c.post(CORA_BASE + "/v2/invoices", json=payload, headers={"Authorization": "Bearer " + tkn, "Idempotency-Key": str(uuid.uuid4())})
-    print(f"[CORA INVOICE] status={resp.status_code} body={resp.text[:500]}")
+    print(f"[CORA INVOICE] status={resp.status_code} body={resp.text[:800]}")
     if resp.status_code not in (200, 201):
         raise HTTPException(502, f"Erro Cora status={resp.status_code}: {resp.text}")
     data = resp.json()
-    pix = data.get("payment_options", {}).get("pix", {})
-    return CobrancaResponse(invoice_id=data.get("id",""), qr_code=pix.get("emv",""), qr_code_image=pix.get("qr_code_image",""), valor=body.valor, status=data.get("status","PENDING"), expiracao=exp)
+    invoice_id = data.get("id", "")
+    # Tenta pegar QR code da resposta (varios caminhos possiveis)
+    pix = data.get("pix") or data.get("payment_options", {}).get("pix") or {}
+    qr_code = pix.get("emv") or pix.get("qr_code") or pix.get("copy_paste") or ""
+    qr_image = pix.get("image_base64") or pix.get("qr_code_image") or ""
+    # Se QR vazio, busca via GET /v2/invoices/{id}/pix
+    if not qr_code and invoice_id:
+        import asyncio as _aio
+        await _aio.sleep(2)
+        async with httpx.AsyncClient(cert=(cp, kp), verify=True) as c2:
+            r2 = await c2.get(CORA_BASE + f"/v2/invoices/{invoice_id}/pix", headers={"Authorization": "Bearer " + tkn})
+        print(f"[CORA PIX GET] status={r2.status_code} body={r2.text[:500]}")
+        if r2.status_code == 200:
+            p2 = r2.json()
+            qr_code = p2.get("emv") or p2.get("qr_code") or p2.get("copy_paste") or ""
+            qr_image = p2.get("image_base64") or p2.get("qr_code_image") or ""
+    return CobrancaResponse(invoice_id=invoice_id, qr_code=qr_code, qr_code_image=qr_image, valor=body.valor, status=data.get("status","PENDING"), expiracao=exp)
 
 @router.post("/webhook")
 async def pix_webhook(request: Request):
