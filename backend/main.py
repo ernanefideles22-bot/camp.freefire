@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from fastapi.middleware.cors import CORSMiddleware
 
 # ==========================================
-# CARREGAMENTO DAS VARIÃVEIS DE AMBIENTE (.env)
+# CARREGAMENTO DAS VARIÃÂVEIS DE AMBIENTE (.env)
 # ==========================================
 def carregar_env():
     for caminho in [".env", "backend/.env", "../.env", "../../.env"]:
@@ -28,7 +28,7 @@ def carregar_env():
 
 carregar_env()
 
-# Unificar caminho do SQLite usando caminho absoluto relativo ao diretÃ³rio deste script
+# Unificar caminho do SQLite usando caminho absoluto relativo ao diretÃÂ³rio deste script
 import os
 from cora_pix import router as pix_router
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -75,7 +75,7 @@ class InfoSalaModel(Base):
     __tablename__ = "info_salas"
     id = Column(Integer, primary_key=True, index=True)
     numero_queda = Column(Integer, unique=True, nullable=False)
-    sala_id = Column(String, nullable=False)  # ID numÃ©rico gerado pelo Free Fire
+    sala_id = Column(String, nullable=False)  # ID numÃÂ©rico gerado pelo Free Fire
     senha = Column(String, nullable=False)
 
 class QuedaModel(Base):
@@ -94,32 +94,54 @@ def executar_migracoes():
             result = connection.execute("PRAGMA table_info(jogadores)").fetchall()
             colunas = [row[1] for row in result]
             
-            # Adiciona senha_hash se nÃ£o existir
+            # Adiciona senha_hash se nÃÂ£o existir
             if "senha_hash" not in colunas:
-                print("MigraÃ§Ã£o: Adicionando coluna 'senha_hash' Ã  tabela 'jogadores'.")
+                print("MigraÃÂ§ÃÂ£o: Adicionando coluna 'senha_hash' ÃÂ  tabela 'jogadores'.")
                 connection.execute("ALTER TABLE jogadores ADD COLUMN senha_hash VARCHAR DEFAULT ''")
                 default_hash = hashlib.sha256("1234".encode("utf-8")).hexdigest()
                 connection.execute(f"UPDATE jogadores SET senha_hash = '{default_hash}'")
                 
-            # Adiciona saldo se nÃ£o existir
+            # Adiciona saldo se nÃÂ£o existir
             if "saldo" not in colunas:
-                print("MigraÃ§Ã£o: Adicionando coluna 'saldo' Ã  tabela 'jogadores'.")
+                print("MigraÃÂ§ÃÂ£o: Adicionando coluna 'saldo' ÃÂ  tabela 'jogadores'.")
                 connection.execute("ALTER TABLE jogadores ADD COLUMN saldo FLOAT DEFAULT 0.0")
                 
-            # Adiciona is_admin se nÃ£o existir
+            # Adiciona is_admin se nÃÂ£o existir
             if "is_admin" not in colunas:
-                print("MigraÃ§Ã£o: Adicionando coluna 'is_admin' Ã  tabela 'jogadores'.")
+                print("MigraÃÂ§ÃÂ£o: Adicionando coluna 'is_admin' ÃÂ  tabela 'jogadores'.")
                 connection.execute("ALTER TABLE jogadores ADD COLUMN is_admin BOOLEAN DEFAULT 0")
                 connection.execute("UPDATE jogadores SET is_admin = 1 WHERE LOWER(nick) = 'admin'")
                 
-            print("MigraÃ§Ãµes do banco de dados verificadas e executadas com sucesso.")
+            print("MigraÃÂ§ÃÂµes do banco de dados verificadas e executadas com sucesso.")
     except Exception as e:
-        print(f"Erro crÃ­tico durante migraÃ§Ã£o do banco de dados: {e}")
+        print(f"Erro crÃÂ­tico durante migraÃÂ§ÃÂ£o do banco de dados: {e}")
 
 executar_migracoes()
 
+def seed_admin():
+    import hashlib
+    from sqlalchemy.orm import sessionmaker as _sm
+    _db = _sm(autocommit=False, autoflush=False, bind=engine)()
+    try:
+        _adm = _db.query(JogadorModel).filter(JogadorModel.nick == 'admin').first()
+        if not _adm:
+            _h = hashlib.sha256('Admin@2025'.encode('utf-8')).hexdigest()
+            _adm = JogadorModel(nome='Administrador', nick='admin', senha_hash=_h, saldo=0.0, is_admin=True)
+            _db.add(_adm)
+            _db.commit()
+            print('[SEED] Admin criado: nick=admin senha=Admin@2025')
+        elif not _adm.is_admin:
+            _adm.is_admin = True
+            _db.commit()
+            print('[SEED] is_admin=True setado para admin')
+    finally:
+        _db.close()
+
+seed_admin()
+
+
 # ==========================================
-# SCHEMAS DE VALIDAÃÃO (PYDANTIC)
+# SCHEMAS DE VALIDAÃÂÃÂO (PYDANTIC)
 # ==========================================
 class JogadorCreate(BaseModel):
     nome: str = Field(..., min_length=2, max_length=50)
@@ -200,7 +222,7 @@ class ClassificacaoGeralResponse(BaseModel):
     ganhos_reais: float
 
 # ==========================================
-# MOTOR DE PONTUAÃÃO
+# MOTOR DE PONTUAÃÂÃÂO
 # ==========================================
 TABELA_PONTUACAO_COLOCACAO = {
     1: 12, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1
@@ -212,7 +234,7 @@ def calcular_pontos(colocacao: int, abates: int) -> int:
 app = FastAPI(title="Campeonato Free Fire Solo API", version="1.1.0")
 
 # ==========================================
-# CONFIGURAÃÃO DO MIDDLEWARE CORS
+# CONFIGURAÃÂÃÂO DO MIDDLEWARE CORS
 # ==========================================
 app.add_middleware(
     CORSMiddleware,
@@ -224,7 +246,7 @@ app.add_middleware(
 app.include_router(pix_router)
 
 # ==========================================
-# FUNÃÃES AUXILIARES / UTILITÃRIAS
+# FUNÃÂÃÂES AUXILIARES / UTILITÃÂRIAS
 # ==========================================
 def get_db():
     db = SessionLocal()
@@ -240,29 +262,29 @@ def obter_usuario_atual(db, x_user_id: Optional[str] = Header(None)) -> JogadorM
     if not x_user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="UsuÃ¡rio nÃ£o autenticado (x-user-id ausente)."
+            detail="UsuÃÂ¡rio nÃÂ£o autenticado (x-user-id ausente)."
         )
     try:
         user_id = int(x_user_id)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="ID de usuÃ¡rio invÃ¡lido."
+            detail="ID de usuÃÂ¡rio invÃÂ¡lido."
         )
     jogador = db.query(JogadorModel).filter(JogadorModel.id == user_id).first()
     if not jogador:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="UsuÃ¡rio nÃ£o encontrado."
+            detail="UsuÃÂ¡rio nÃÂ£o encontrado."
         )
     return jogador
 
-# ROTAS DE JOGADORES E AUTENTICAÃÃO
+# ROTAS DE JOGADORES E AUTENTICAÃÂÃÂO
 @app.post("/auth/cadastro", response_model=JogadorResponse, status_code=201)
 def cadastrar_usuario(jogador: JogadorCreate, db: Session = Depends(get_db)):
     db_jogador = db.query(JogadorModel).filter(JogadorModel.nick == jogador.nick).first()
     if db_jogador:
-        raise HTTPException(status_code=400, detail="Este Nick jÃ¡ estÃ¡ cadastrado.")
+        raise HTTPException(status_code=400, detail="Este Nick jÃÂ¡ estÃÂ¡ cadastrado.")
     
     # Se for o primeiro cadastro ou o nick for "admin", torna admin
     num_jogadores = db.query(JogadorModel).count()
@@ -299,7 +321,7 @@ def listar_jogadores(db: Session = Depends(get_db)):
     jogadores = db.query(JogadorModel).all()
     return jogadores
 
-# ROTAS DE CARTEIRA / DEPÃSITOS
+# ROTAS DE CARTEIRA / DEPÃÂSITOS
 @app.post("/carteira/depositar", response_model=DepositoResponse, status_code=201)
 def solicitar_deposito(dados: DepositoRequest, x_user_id: str = Header(...), db: Session = Depends(get_db)):
     jogador = obter_usuario_atual(db, x_user_id)
@@ -344,13 +366,13 @@ def processar_deposito(id: int, dados: ProcessarDepositoInput, x_user_id: str = 
         
     req = db.query(DepositoRequisicaoModel).filter(DepositoRequisicaoModel.id == id).first()
     if not req:
-        raise HTTPException(status_code=404, detail="RequisiÃ§Ã£o de depÃ³sito nÃ£o encontrada.")
+        raise HTTPException(status_code=404, detail="RequisiÃÂ§ÃÂ£o de depÃÂ³sito nÃÂ£o encontrada.")
         
     if req.status != "pendente":
-        raise HTTPException(status_code=400, detail="Esta requisiÃ§Ã£o jÃ¡ foi processada.")
+        raise HTTPException(status_code=400, detail="Esta requisiÃÂ§ÃÂ£o jÃÂ¡ foi processada.")
         
     if dados.status not in ["aprovado", "rejeitado"]:
-        raise HTTPException(status_code=400, detail="Status invÃ¡lido. Use 'aprovado' ou 'rejeitado'.")
+        raise HTTPException(status_code=400, detail="Status invÃÂ¡lido. Use 'aprovado' ou 'rejeitado'.")
         
     req.status = dados.status
     if dados.status == "aprovado":
@@ -359,37 +381,53 @@ def processar_deposito(id: int, dados: ProcessarDepositoInput, x_user_id: str = 
             jogador.saldo += req.valor
             
     db.commit()
-    return {"message": f"DepÃ³sito {id} processado com status: {dados.status}."}
+    return {"message": f"DepÃÂ³sito {id} processado com status: {dados.status}."}
 
-# ROTAS DE INSCRIÃÃES
+# ROTAS ADMIN - JOGADORES
+@app.delete('/admin/jogadores/{jogador_id}')
+def deletar_jogador(jogador_id: int, x_user_id: str = Header(...), db: Session = Depends(get_db)):
+    admin = obter_usuario_atual(db, x_user_id)
+    if not admin.is_admin:
+        raise HTTPException(status_code=403, detail='Acesso negado.')
+    jogador = db.query(JogadorModel).filter(JogadorModel.id == jogador_id).first()
+    if not jogador:
+        raise HTTPException(status_code=404, detail='Jogador nao encontrado.')
+    if jogador.is_admin:
+        raise HTTPException(status_code=400, detail='Nao e possivel deletar o admin.')
+    db.delete(jogador)
+    db.commit()
+    return {'message': f'Jogador {jogador_id} deletado com sucesso.'}
+
+
+# ROTAS DE INSCRIÃÂÃÂES
 @app.post("/quedas/{numero_queda}/inscrever")
 def inscrever_queda(numero_queda: int, x_user_id: str = Header(...), db: Session = Depends(get_db)):
     jogador = obter_usuario_atual(db, x_user_id)
     
-    # 1. Verificar se jÃ¡ estÃ¡ inscrito
+    # 1. Verificar se jÃÂ¡ estÃÂ¡ inscrito
     inscricao_existente = db.query(InscricaoQuedaModel).filter(
         InscricaoQuedaModel.numero_queda == numero_queda,
         InscricaoQuedaModel.jogador_id == jogador.id
     ).first()
     
     if inscricao_existente:
-        return {"message": "Jogador jÃ¡ estÃ¡ inscrito nesta queda.", "inscrito": True}
+        return {"message": "Jogador jÃÂ¡ estÃÂ¡ inscrito nesta queda.", "inscrito": True}
         
     # 2. Verificar limite de 48 jogadores
     count_inscritos = db.query(InscricaoQuedaModel).filter(
         InscricaoQuedaModel.numero_queda == numero_queda
     ).count()
     if count_inscritos >= 48:
-        raise HTTPException(status_code=400, detail="Esta queda jÃ¡ atingiu o limite de 48 jogadores.")
+        raise HTTPException(status_code=400, detail="Esta queda jÃÂ¡ atingiu o limite de 48 jogadores.")
         
     # 3. Verificar saldo (R$ 2,00)
     if jogador.saldo < 2.0:
-        raise HTTPException(status_code=400, detail="Saldo insuficiente. VocÃª precisa de no mÃ­nimo R$ 2,00 para se inscrever.")
+        raise HTTPException(status_code=400, detail="Saldo insuficiente. VocÃÂª precisa de no mÃÂ­nimo R$ 2,00 para se inscrever.")
         
     # 4. Debitar saldo
     jogador.saldo -= 2.0
     
-    # 5. Criar inscriÃ§Ã£o
+    # 5. Criar inscriÃÂ§ÃÂ£o
     nova_inscricao = InscricaoQuedaModel(
         numero_queda=numero_queda,
         jogador_id=jogador.id,
@@ -405,7 +443,7 @@ def inscrever_queda(numero_queda: int, x_user_id: str = Header(...), db: Session
     ).count()
     
     return {
-        "message": "InscriÃ§Ã£o realizada com sucesso!",
+        "message": "InscriÃÂ§ÃÂ£o realizada com sucesso!",
         "inscrito": True,
         "inscritos_count": count_inscritos
     }
@@ -417,7 +455,7 @@ def obter_status_queda(numero_queda: int, x_user_id: Optional[str] = Header(None
         InscricaoQuedaModel.numero_queda == numero_queda
     ).count()
     
-    # 2. Verificar se o jogador logado estÃ¡ inscrito
+    # 2. Verificar se o jogador logado estÃÂ¡ inscrito
     esta_inscrito = False
     if x_user_id:
         try:
@@ -431,7 +469,7 @@ def obter_status_queda(numero_queda: int, x_user_id: Optional[str] = Header(None
         except ValueError:
             pass
             
-    # 3. Verificar se dados de sala estÃ£o liberados
+    # 3. Verificar se dados de sala estÃÂ£o liberados
     sala = db.query(InfoSalaModel).filter(InfoSalaModel.numero_queda == numero_queda).first()
     sala_liberada = sala is not None
     
@@ -462,7 +500,7 @@ def cancelar_reembolsar_queda(numero_queda: int, x_user_id: str = Header(...), d
                 reembolsados += 1
         db.delete(insc)
         
-    # TambÃ©m apagar dados de sala se existirem
+    # TambÃÂ©m apagar dados de sala se existirem
     db.query(InfoSalaModel).filter(InfoSalaModel.numero_queda == numero_queda).delete()
     
     db.commit()
@@ -478,7 +516,7 @@ async def processar_ocr_queda(numero_queda: int, file: UploadFile = File(...), x
     # Verificar API KEY do Gemini
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise HTTPException(status_code=400, detail="Chave de API do Gemini nÃ£o configurada no backend.")
+        raise HTTPException(status_code=400, detail="Chave de API do Gemini nÃÂ£o configurada no backend.")
         
     # Ler imagem
     try:
@@ -496,17 +534,17 @@ async def processar_ocr_queda(numero_queda: int, file: UploadFile = File(...), x
             "data": contents
         }
         
-        # InstruÃ§Ã£o para leitura do placar do Free Fire
+        # InstruÃÂ§ÃÂ£o para leitura do placar do Free Fire
         prompt = (
             "Analise este print do placar final de uma partida de Free Fire (Modo Solo).\n"
             "Identifique todos os jogadores listados na imagem.\n"
             "Para cada jogador identificado, extraia:\n"
-            "- jogador_nick (o nickname visÃ­vel no placar)\n"
-            "- colocacao (a posiÃ§Ã£o final dele, um nÃºmero inteiro de 1 a 52)\n"
-            "- abates (a quantidade de kills/eliminaÃ§Ãµes, nÃºmero inteiro de 0 a 50)\n\n"
-            "VocÃª deve responder APENAS com um array JSON vÃ¡lido, contendo objetos com os campos 'jogador_nick', 'colocacao' e 'abates'.\n"
-            "NÃ£o adicione nenhuma explicaÃ§Ã£o, markdown ou caracteres extras fora do JSON.\n"
-            "Exemplo de saÃ­da:\n"
+            "- jogador_nick (o nickname visÃÂ­vel no placar)\n"
+            "- colocacao (a posiÃÂ§ÃÂ£o final dele, um nÃÂºmero inteiro de 1 a 52)\n"
+            "- abates (a quantidade de kills/eliminaÃÂ§ÃÂµes, nÃÂºmero inteiro de 0 a 50)\n\n"
+            "VocÃÂª deve responder APENAS com um array JSON vÃÂ¡lido, contendo objetos com os campos 'jogador_nick', 'colocacao' e 'abates'.\n"
+            "NÃÂ£o adicione nenhuma explicaÃÂ§ÃÂ£o, markdown ou caracteres extras fora do JSON.\n"
+            "Exemplo de saÃÂ­da:\n"
             '[{"jogador_nick": "loko01", "colocacao": 1, "abates": 5}, {"jogador_nick": "Baiano", "colocacao": 2, "abates": 1}]'
         )
         
@@ -553,7 +591,7 @@ async def processar_ocr_queda(numero_queda: int, file: UploadFile = File(...), x
     except json.JSONDecodeError as je:
         raise HTTPException(
             status_code=500,
-            detail=f"Gemini retornou um formato JSON invÃ¡lido: {response.text}"
+            detail=f"Gemini retornou um formato JSON invÃÂ¡lido: {response.text}"
         )
     except Exception as e:
         raise HTTPException(
@@ -582,23 +620,23 @@ def liberar_sala(dados_sala: CriarSalaInput, db: Session = Depends(get_db)):
 def obter_sala(numero_queda: int, db: Session = Depends(get_db)):
     sala = db.query(InfoSalaModel).filter(InfoSalaModel.numero_queda == numero_queda).first()
     if not sala:
-        raise HTTPException(status_code=404, detail="Dados da sala para esta queda ainda nÃ£o foram liberados.")
+        raise HTTPException(status_code=404, detail="Dados da sala para esta queda ainda nÃÂ£o foram liberados.")
     return sala
 
-# ROTAS DE PONTUAÃÃO
+# ROTAS DE PONTUAÃÂÃÂO
 @app.post("/quedas", status_code=201)
 def registrar_queda(dados: RegistroQuedaBatch, db: Session = Depends(get_db)):
     # 1. Validar resultados e verificar duplicados antes de salvar
     for res in dados.resultados:
         jogador = db.query(JogadorModel).filter(JogadorModel.id == res.jogador_id).first()
         if not jogador:
-            raise HTTPException(status_code=404, detail=f"Jogador ID {res.jogador_id} nÃ£o existe.")
+            raise HTTPException(status_code=404, detail=f"Jogador ID {res.jogador_id} nÃÂ£o existe.")
             
         registro_duplicado = db.query(QuedaModel).filter(
             QuedaModel.numero_queda == dados.numero_queda, QuedaModel.jogador_id == res.jogador_id
         ).first()
         if registro_duplicado:
-            raise HTTPException(status_code=400, detail=f"Jogador ID {res.jogador_id} jÃ¡ possui resultado registrado na Queda {dados.numero_queda}.")
+            raise HTTPException(status_code=400, detail=f"Jogador ID {res.jogador_id} jÃÂ¡ possui resultado registrado na Queda {dados.numero_queda}.")
             
     # 2. Registrar resultados e creditar saldo dos ganhadores
     def obter_premio(colocacao: int) -> float:
@@ -611,7 +649,7 @@ def registrar_queda(dados: RegistroQuedaBatch, db: Session = Depends(get_db)):
         
     for res in dados.resultados:
         jogador = db.query(JogadorModel).filter(JogadorModel.id == res.jogador_id).first()
-        # Creditar prÃªmio se houver
+        # Creditar prÃÂªmio se houver
         premio = obter_premio(res.colocacao)
         if premio > 0.0:
             jogador.saldo += premio
@@ -625,9 +663,9 @@ def registrar_queda(dados: RegistroQuedaBatch, db: Session = Depends(get_db)):
         db.add(nova_pontuacao)
         
     db.commit()
-    return {"message": f"Resultados da Queda {dados.numero_queda} salvos e premiaÃ§Ãµes pagas!"}
+    return {"message": f"Resultados da Queda {dados.numero_queda} salvos e premiaÃÂ§ÃÂµes pagas!"}
 
-# FunÃ§Ã£o interna para obter classificaÃ§Ã£o
+# FunÃÂ§ÃÂ£o interna para obter classificaÃÂ§ÃÂ£o
 def obter_classificacao_geral_interna(db: Session):
     jogadores = db.query(JogadorModel).all()
     leaderboard = []
@@ -666,7 +704,7 @@ def obter_classificacao_geral_route(db: Session = Depends(get_db)):
 def obter_historico_jogador(nick: str, db: Session = Depends(get_db)):
     jogador = db.query(JogadorModel).filter(JogadorModel.nick == nick).first()
     if not jogador:
-        raise HTTPException(status_code=404, detail="Jogador nÃ£o encontrado.")
+        raise HTTPException(status_code=404, detail="Jogador nÃÂ£o encontrado.")
     
     quedas = db.query(QuedaModel).filter(QuedaModel.jogador_id == jogador.id).all()
     
@@ -717,15 +755,15 @@ def obter_historico_jogador(nick: str, db: Session = Depends(get_db)):
 def criar_jogador_ferramenta(nome: str, nick: str) -> str:
     """
     Cadastra um novo competidor (jogador) no campeonato.
-    ParÃ¢metros:
-    - nome: Nome completo do jogador (ex: JoÃ£o da Silva)
+    ParÃÂ¢metros:
+    - nome: Nome completo do jogador (ex: JoÃÂ£o da Silva)
     - nick: Nickname de jogo do jogador (ex: Nobru)
     """
     db = SessionLocal()
     try:
         db_jogador = db.query(JogadorModel).filter(JogadorModel.nick == nick).first()
         if db_jogador:
-            return f"Erro: O jogador com nick '{nick}' jÃ¡ estÃ¡ cadastrado no sistema."
+            return f"Erro: O jogador com nick '{nick}' jÃÂ¡ estÃÂ¡ cadastrado no sistema."
         
         default_hash = hash_senha("1234")
         novo_jogador = JogadorModel(
@@ -747,10 +785,10 @@ def criar_jogador_ferramenta(nome: str, nick: str) -> str:
 
 def liberar_sala_ferramenta(numero_queda: int, sala_id: str, senha: str) -> str:
     """
-    Cadastra ou atualiza o ID da sala e a Senha para uma queda (partida) especÃ­fica.
-    ParÃ¢metros:
-    - numero_queda: O nÃºmero da partida/queda (ex: 1, 2, 3)
-    - sala_id: O ID numÃ©rico da sala personalizada gerado pelo Free Fire (ex: 88392)
+    Cadastra ou atualiza o ID da sala e a Senha para uma queda (partida) especÃÂ­fica.
+    ParÃÂ¢metros:
+    - numero_queda: O nÃÂºmero da partida/queda (ex: 1, 2, 3)
+    - sala_id: O ID numÃÂ©rico da sala personalizada gerado pelo Free Fire (ex: 88392)
     - senha: A senha definida para a sala personalizada (ex: 1234)
     """
     db = SessionLocal()
@@ -774,26 +812,26 @@ def liberar_sala_ferramenta(numero_queda: int, sala_id: str, senha: str) -> str:
 
 def registrar_resultado_individual_ferramenta(numero_queda: int, jogador_nick: str, colocacao: int, abates: int) -> str:
     """
-    Registra a pontuaÃ§Ã£o e abates obtidos por um jogador em uma queda especÃ­fica.
-    ParÃ¢metros:
-    - numero_queda: O nÃºmero da queda em que a partida ocorreu (ex: 1, 2)
+    Registra a pontuaÃÂ§ÃÂ£o e abates obtidos por um jogador em uma queda especÃÂ­fica.
+    ParÃÂ¢metros:
+    - numero_queda: O nÃÂºmero da queda em que a partida ocorreu (ex: 1, 2)
     - jogador_nick: O nickname exato do jogador participante (ex: Nobru)
-    - colocacao: A posiÃ§Ã£o final do jogador na partida (entre 1 e 48)
-    - abates: A quantidade de eliminaÃ§Ãµes (abates/kills) feitas por esse jogador
+    - colocacao: A posiÃÂ§ÃÂ£o final do jogador na partida (entre 1 e 48)
+    - abates: A quantidade de eliminaÃÂ§ÃÂµes (abates/kills) feitas por esse jogador
     """
     db = SessionLocal()
     try:
         jogador = db.query(JogadorModel).filter(JogadorModel.nick == jogador_nick).first()
         if not jogador:
-            return f"Erro: O jogador com o nick '{jogador_nick}' nÃ£o estÃ¡ cadastrado no campeonato."
+            return f"Erro: O jogador com o nick '{jogador_nick}' nÃÂ£o estÃÂ¡ cadastrado no campeonato."
             
         registro_duplicado = db.query(QuedaModel).filter(
             QuedaModel.numero_queda == numero_queda, QuedaModel.jogador_id == jogador.id
         ).first()
         if registro_duplicado:
-            return f"Erro: O jogador '{jogador_nick}' jÃ¡ possui pontuaÃ§Ã£o cadastrada para a Queda {numero_queda}."
+            return f"Erro: O jogador '{jogador_nick}' jÃÂ¡ possui pontuaÃÂ§ÃÂ£o cadastrada para a Queda {numero_queda}."
             
-        # Creditar prÃªmio se houver colocaÃ§Ã£o premiada
+        # Creditar prÃÂªmio se houver colocaÃÂ§ÃÂ£o premiada
         def obter_premio(col: int) -> float:
             if col == 1: return 20.0
             if col == 2: return 10.0
@@ -814,17 +852,17 @@ def registrar_resultado_individual_ferramenta(numero_queda: int, jogador_nick: s
         )
         db.add(nova_pontuacao)
         db.commit()
-        return f"Sucesso: PontuaÃ§Ã£o gravada para '{jogador_nick}' na Queda {numero_queda}. ColocaÃ§Ã£o: {colocacao}Âº lugar, Abates: {abates}."
+        return f"Sucesso: PontuaÃÂ§ÃÂ£o gravada para '{jogador_nick}' na Queda {numero_queda}. ColocaÃÂ§ÃÂ£o: {colocacao}ÃÂº lugar, Abates: {abates}."
     except Exception as e:
         db.rollback()
-        return f"Erro ao registrar pontuaÃ§Ã£o individual: {str(e)}"
+        return f"Erro ao registrar pontuaÃÂ§ÃÂ£o individual: {str(e)}"
     finally:
         db.close()
 
 def listar_jogadores_cadastrados_ferramenta() -> str:
     """
     Retorna a lista de todos os competidores (jogadores) cadastrados no campeonato.
-    Ãtil para consultar IDs, nomes e nicks cadastrados no banco de dados.
+    ÃÂtil para consultar IDs, nomes e nicks cadastrados no banco de dados.
     """
     import json
     db = SessionLocal()
@@ -841,7 +879,7 @@ def listar_jogadores_cadastrados_ferramenta() -> str:
 
 def obter_classificacao_atual_ferramenta() -> str:
     """
-    Retorna a classificaÃ§Ã£o geral atual do campeonato (leaderboard), contendo os pontos,
+    Retorna a classificaÃÂ§ÃÂ£o geral atual do campeonato (leaderboard), contendo os pontos,
     abates, quedas jogadas e ganhos em dinheiro acumulados de cada jogador.
     """
     import json
@@ -850,14 +888,14 @@ def obter_classificacao_atual_ferramenta() -> str:
         classificacao = obter_classificacao_geral_interna(db)
         return json.dumps(classificacao, ensure_ascii=False)
     except Exception as e:
-        return f"Erro ao obter classificaÃ§Ã£o: {str(e)}"
+        return f"Erro ao obter classificaÃÂ§ÃÂ£o: {str(e)}"
     finally:
         db.close()
 
 def cadastrar_jogadores_lote_ferramenta(jogadores_json: str) -> str:
     """
-    Cadastra mÃºltiplos competidores (jogadores) de uma Ãºnica vez (em lote).
-    ParÃ¢metros:
+    Cadastra mÃÂºltiplos competidores (jogadores) de uma ÃÂºnica vez (em lote).
+    ParÃÂ¢metros:
     - jogadores_json: String no formato JSON contendo uma lista de objetos com 'nome' e 'nick'. 
                       Exemplo: '[{"nome": "Felipe", "nick": "Lipe"}, {"nome": "Gabriel", "nick": "Biel"}]'
     """
@@ -875,12 +913,12 @@ def cadastrar_jogadores_lote_ferramenta(jogadores_json: str) -> str:
             nome = jog.get("nome", "").strip()
             nick = jog.get("nick", "").strip()
             if not nome or not nick:
-                erros.append(f"Jogador invÃ¡lido (nome ou nick ausente): {jog}")
+                erros.append(f"Jogador invÃÂ¡lido (nome ou nick ausente): {jog}")
                 continue
                 
             db_jogador = db.query(JogadorModel).filter(JogadorModel.nick == nick).first()
             if db_jogador:
-                erros.append(f"Nick '{nick}' jÃ¡ cadastrado.")
+                erros.append(f"Nick '{nick}' jÃÂ¡ cadastrado.")
                 continue
                 
             novo_jogador = JogadorModel(
@@ -909,9 +947,9 @@ def cadastrar_jogadores_lote_ferramenta(jogadores_json: str) -> str:
 
 def registrar_resultados_lote_ferramenta(numero_queda: int, resultados_json: str) -> str:
     """
-    Registra a pontuaÃ§Ã£o e abates de mÃºltiplos jogadores (ou de toda a partida) para uma queda especÃ­fica em lote.
-    ParÃ¢metros:
-    - numero_queda: O nÃºmero da queda/partida (ex: 1, 2)
+    Registra a pontuaÃÂ§ÃÂ£o e abates de mÃÂºltiplos jogadores (ou de toda a partida) para uma queda especÃÂ­fica em lote.
+    ParÃÂ¢metros:
+    - numero_queda: O nÃÂºmero da queda/partida (ex: 1, 2)
     - resultados_json: String JSON contendo uma lista de objetos com 'jogador_nick', 'colocacao' (1 a 48) e 'abates'.
                        Exemplo: '[{"jogador_nick": "Lipe", "colocacao": 1, "abates": 5}, {"jogador_nick": "Biel", "colocacao": 2, "abates": 2}]'
     """
@@ -939,33 +977,33 @@ def registrar_resultados_lote_ferramenta(numero_queda: int, resultados_json: str
             abates = res.get("abates", 0)
             
             if not nick or colocacao is None:
-                erros.append(f"Resultado invÃ¡lido (nick ou colocaÃ§Ã£o ausente): {res}")
+                erros.append(f"Resultado invÃÂ¡lido (nick ou colocaÃÂ§ÃÂ£o ausente): {res}")
                 continue
                 
             try:
                 colocacao = int(colocacao)
                 abates = int(abates)
             except ValueError:
-                erros.append(f"ColocaÃ§Ã£o ou abates invÃ¡lidos para o nick '{nick}': {res}")
+                erros.append(f"ColocaÃÂ§ÃÂ£o ou abates invÃÂ¡lidos para o nick '{nick}': {res}")
                 continue
                 
             if colocacao < 1 or colocacao > 52:
-                erros.append(f"ColocaÃ§Ã£o invÃ¡lida para o nick '{nick}' (deve ser entre 1 e 52): {colocacao}")
+                erros.append(f"ColocaÃÂ§ÃÂ£o invÃÂ¡lida para o nick '{nick}' (deve ser entre 1 e 52): {colocacao}")
                 continue
                 
             jogador = db.query(JogadorModel).filter(JogadorModel.nick == nick).first()
             if not jogador:
-                erros.append(f"Nick '{nick}' nÃ£o encontrado.")
+                erros.append(f"Nick '{nick}' nÃÂ£o encontrado.")
                 continue
                 
             registro_duplicado = db.query(QuedaModel).filter(
                 QuedaModel.numero_queda == numero_queda, QuedaModel.jogador_id == jogador.id
             ).first()
             if registro_duplicado:
-                erros.append(f"O jogador '{nick}' jÃ¡ pontuou na Queda {numero_queda}.")
+                erros.append(f"O jogador '{nick}' jÃÂ¡ pontuou na Queda {numero_queda}.")
                 continue
                 
-            # Creditar prÃªmio se houver
+            # Creditar prÃÂªmio se houver
             premio = obter_premio(colocacao)
             if premio > 0.0:
                 jogador.saldo += premio
@@ -977,7 +1015,7 @@ def registrar_resultados_lote_ferramenta(numero_queda: int, resultados_json: str
                 abates=abates
             )
             db.add(nova_pontuacao)
-            sucessos.append(f"'{nick}' em {colocacao}Âº lugar ({abates} abates)")
+            sucessos.append(f"'{nick}' em {colocacao}ÃÂº lugar ({abates} abates)")
             
         db.commit()
         
@@ -1004,14 +1042,14 @@ def processar_comando_agente(dados: AgenteComandoInput):
     except ImportError:
         raise HTTPException(
             status_code=500,
-            detail="A biblioteca 'google-generativeai' nÃ£o estÃ¡ instalada no servidor. Por favor, instale executando 'pip install google-generativeai'."
+            detail="A biblioteca 'google-generativeai' nÃÂ£o estÃÂ¡ instalada no servidor. Por favor, instale executando 'pip install google-generativeai'."
         )
         
     api_key = dados.api_key or os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(
             status_code=400,
-            detail="Chave de API do Gemini nÃ£o configurada. Configure a variÃ¡vel de ambiente GEMINI_API_KEY ou envie sua chave pelo painel de chat."
+            detail="Chave de API do Gemini nÃÂ£o configurada. Configure a variÃÂ¡vel de ambiente GEMINI_API_KEY ou envie sua chave pelo painel de chat."
         )
         
     try:
@@ -1030,21 +1068,21 @@ def processar_comando_agente(dados: AgenteComandoInput):
             model_name='gemini-2.5-flash',
             tools=ferramentas,
             system_instruction=(
-                "VocÃª Ã© o assistente virtual inteligente administrador do campeonato de Free Fire (Modo Solo).\n"
-                "Seu dever Ã© receber comandos do organizador e chamar a ferramenta apropriada correspondente.\n"
-                "VocÃª tem o superpoder de gerenciar todo o campeonato por texto natural:\n"
-                "1. Cadastrar competidores (individuais usando criar_jogador_ferramenta ou mÃºltiplos usando cadastrar_jogadores_lote_ferramenta).\n"
+                "VocÃÂª ÃÂ© o assistente virtual inteligente administrador do campeonato de Free Fire (Modo Solo).\n"
+                "Seu dever ÃÂ© receber comandos do organizador e chamar a ferramenta apropriada correspondente.\n"
+                "VocÃÂª tem o superpoder de gerenciar todo o campeonato por texto natural:\n"
+                "1. Cadastrar competidores (individuais usando criar_jogador_ferramenta ou mÃÂºltiplos usando cadastrar_jogadores_lote_ferramenta).\n"
                 "2. Liberar ou atualizar IDs e senhas de salas personalizadas para os jogadores (usando liberar_sala_ferramenta).\n"
                 "3. Consultar a lista de jogadores cadastrados para bater nicks e IDs (usando listar_jogadores_cadastrados_ferramenta).\n"
-                "4. Consultar a tabela de classificaÃ§Ã£o/leaderboard (usando obter_classificacao_atual_ferramenta) para responder dÃºvidas de posiÃ§Ãµes.\n"
-                "5. Registrar resultados/abates de partidas (individual usando registrar_resultado_individual_ferramenta ou mÃºltiplos jogadores em lote de uma vez sÃ³ usando registrar_resultados_lote_ferramenta).\n\n"
-                "ATENÃÃO COM RESULTADOS DE FIM DE JOGO:\n"
-                "Se o organizador enviar uma lista de resultados (ex: tabela copiando e colando, ou frase listando vÃ¡rios jogadores), faÃ§a o seguinte:\n"
-                "a) Chame listar_jogadores_cadastrados_ferramenta para buscar os nicks corretos se necessÃ¡rio e verificar se existem.\n"
-                "b) Extraia de cada linha o nick, colocaÃ§Ã£o (ex: 1Âº, 2Âº) e abates.\n"
-                "c) Chame a ferramenta registrar_resultados_lote_ferramenta fornecendo o nÃºmero da queda e os dados no formato JSON exigido (uma lista de objetos com 'jogador_nick', 'colocacao' e 'abates').\n\n"
-                "Sempre responda de maneira profissional, prestativa e em portuguÃªs brasileiro.\n"
-                "Ao terminar uma aÃ§Ã£o com sucesso, informe ao organizador de forma clara e resumida os detalhes da operaÃ§Ã£o executada no banco de dados."
+                "4. Consultar a tabela de classificaÃÂ§ÃÂ£o/leaderboard (usando obter_classificacao_atual_ferramenta) para responder dÃÂºvidas de posiÃÂ§ÃÂµes.\n"
+                "5. Registrar resultados/abates de partidas (individual usando registrar_resultado_individual_ferramenta ou mÃÂºltiplos jogadores em lote de uma vez sÃÂ³ usando registrar_resultados_lote_ferramenta).\n\n"
+                "ATENÃÂÃÂO COM RESULTADOS DE FIM DE JOGO:\n"
+                "Se o organizador enviar uma lista de resultados (ex: tabela copiando e colando, ou frase listando vÃÂ¡rios jogadores), faÃÂ§a o seguinte:\n"
+                "a) Chame listar_jogadores_cadastrados_ferramenta para buscar os nicks corretos se necessÃÂ¡rio e verificar se existem.\n"
+                "b) Extraia de cada linha o nick, colocaÃÂ§ÃÂ£o (ex: 1ÃÂº, 2ÃÂº) e abates.\n"
+                "c) Chame a ferramenta registrar_resultados_lote_ferramenta fornecendo o nÃÂºmero da queda e os dados no formato JSON exigido (uma lista de objetos com 'jogador_nick', 'colocacao' e 'abates').\n\n"
+                "Sempre responda de maneira profissional, prestativa e em portuguÃÂªs brasileiro.\n"
+                "Ao terminar uma aÃÂ§ÃÂ£o com sucesso, informe ao organizador de forma clara e resumida os detalhes da operaÃÂ§ÃÂ£o executada no banco de dados."
             )
         )
         
