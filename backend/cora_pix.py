@@ -9,7 +9,7 @@ CORA_CLIENT_ID = os.getenv("CORA_CLIENT_ID", "int-48bwiGVJx0Nqaxhm53ZKz7")
 CORA_CERT_B64  = os.getenv("CORA_CERT_B64", "")
 CORA_KEY_B64   = os.getenv("CORA_KEY_B64", "")
 CORA_BASE      = "https://matls-clients.api.cora.com.br"
-CORA_AUTH_URL  = "https://matls-clients.api.cora.com.br/auth/token"
+CORA_AUTH_URL  = "https://matls-clients.api.cora.com.br/token"
 CORA_AUTH_URL_V2 = "https://matls-clients.api.cora.com.br/oauth2/token"
 _token_cache = {}
 
