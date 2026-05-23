@@ -64,6 +64,50 @@ export const getPremioPorColocacao = (colocacao: number): number => {
   if (colocacao === 4) return 5.00;
   if (colocacao >= 5 && colocacao <= 10) return 1.50;
   return 0.00;
+  async cancelarQuedaReembolsar(numero: number): Promise<{message: string}> {
+    const response = await fetch(`${API_BASE_URL}/quedas/${numero}/cancelar-reembolsar`, {
+      method: 'POST', headers: getJsonHeaders()
+    });
+    if (!response.ok) { const e = await response.json().catch(()=>({})); throw new Error(e.detail || 'Falha ao cancelar queda'); }
+    return response.json();
+  },
+
+  async processarOcrResultado(numeroQueda: number, file: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(`${API_BASE_URL}/quedas/${numeroQueda}/processar-ocr`, {
+      method: 'POST', headers: getAuthHeaders(), body: formData
+    });
+    if (!response.ok) { const e = await response.json().catch(()=>({})); throw new Error(e.detail || 'Falha no OCR'); }
+    return response.json();
+  },
+
+  async getPlayerHistory(nick: string): Promise<any> {
+    const response = await fetch(`${API_BASE_URL}/jogadores/${nick}/historico`, {
+      headers: getAuthHeaders()
+    });
+    if (!response.ok) throw new Error('Falha ao carregar historico');
+    return response.json();
+  },
+
+  async enviarComandoAgente(comando: string, apiKey?: string): Promise<{resposta: string}> {
+    const response = await fetch(`${API_BASE_URL}/agente/comando`, {
+      method: 'POST', headers: getJsonHeaders(),
+      body: JSON.stringify({ comando, api_key: apiKey })
+    });
+    if (!response.ok) { const e = await response.json().catch(()=>({})); throw new Error(e.detail || 'Erro no agente'); }
+    return response.json();
+  },
+
+  async processarDeposito(depositoId: number, status: 'aprovado' | 'rejeitado'): Promise<{message: string}> {
+    const response = await fetch(`${API_BASE_URL}/admin/depositos/${depositoId}/processar`, {
+      method: 'POST', headers: getJsonHeaders(),
+      body: JSON.stringify({ status })
+    });
+    if (!response.ok) { const e = await response.json().catch(()=>({})); throw new Error(e.detail || 'Falha ao processar deposito'); }
+    return response.json();
+  },
+
 };
 
 export const getPontosPorColocacao = (colocacao: number): number => {
@@ -168,7 +212,7 @@ export const apiService = {
   },
 
   async lancarResultadoQueda(payload: QuedaPayload): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/quedas/resultado`, {
+    const response = await fetch(`${API_BASE_URL}/quedas`, {
       method: 'POST',
       headers: getJsonHeaders(),
       body: JSON.stringify(payload)
@@ -180,7 +224,7 @@ export const apiService = {
   },
 
   async obterInfoSala(numeroQueda: number): Promise<SalaData> {
-    const response = await fetch(`${API_BASE_URL}/sala/${numeroQueda}`, {
+    const response = await fetch(`${API_BASE_URL}/salas/${numeroQueda}`, {
       headers: getAuthHeaders()
     });
     if (!response.ok) throw new Error('Sala não encontrada');
@@ -188,7 +232,7 @@ export const apiService = {
   },
 
   async liberarSala(numeroQueda: number, salaId: string, senha: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/sala/liberar`, {
+    const response = await fetch(`${API_BASE_URL}/salas`, {
       method: 'POST',
       headers: getJsonHeaders(),
       body: JSON.stringify({ numero_queda: numeroQueda, sala_id: salaId, senha })
