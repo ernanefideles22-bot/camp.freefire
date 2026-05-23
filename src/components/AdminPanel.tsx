@@ -58,7 +58,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   const fetchPlayers = async () => {
     setLoadingPlayersList(true);
     try {
-      const data = await apiService.getJogadores();
+      const data = await apiService.listarJogadores();
       setPlayers(data);
     } catch (err) {
       onAddToast('error', 'Falha ao buscar jogadores', 'Não foi possível listar os jogadores cadastrados.');
@@ -306,7 +306,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     setLoadingResults(true);
 
     try {
-      await apiService.lancarResultados(quedaNum, formattedResultados);
+      await apiService.lancarResultadoQueda({numero_queda: quedaNum, resultados: formattedResultados});
       onAddToast('success', 'Resultados Registrados', `Queda ${quedaNum} lançada com sucesso no campeonato! Saldos dos vencedores foram creditados.`);
       
       // Reset form
