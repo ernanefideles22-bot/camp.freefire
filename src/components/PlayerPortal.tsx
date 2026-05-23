@@ -78,7 +78,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
 
       // If player is registered and room credentials are ready, fetch them
       if (status.esta_inscrito && status.sala_liberada) {
-        const room = await apiService.obterSala(selectedQueda);
+        const room = await apiService.obterInfoSala(selectedQueda);
         setSalaInfo(room);
       } else {
         setSalaInfo(null);
@@ -144,7 +144,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
   const handleInscricao = async () => {
     setLoadingInscricao(true);
     try {
-      await apiService.inscreverQueda(selectedQueda);
+      await apiService.inscreverNaQueda(selectedQueda);
       onAddToast('success', 'Inscrição Confirmada!', 'R$ 2,00 foram debitados do seu saldo.');
       
       // Update local wallet state
