@@ -39,6 +39,7 @@ async def get_cora_token():
 class CriarCobrancaRequest(BaseModel):
     jogador_id: int
     valor: float
+    cpf: str = "00000000000"
 
 class CobrancaResponse(BaseModel):
     invoice_id: str
@@ -54,7 +55,7 @@ async def criar_cobranca_pix(body: CriarCobrancaRequest):
     cp, kp = _get_cert_files()
     exp = (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
     wh = os.getenv("BACKEND_URL", "").rstrip("/") + "/pix/webhook"
-    payload = {"code": "DEP-" + str(body.jogador_id) + "-" + str(int(datetime.utcnow().timestamp())), "amount": int(body.valor * 100), "description": "Deposito Camp FreeFire", "payment_forms": ["PIX"], "customer": {"name": "Jogador #" + str(body.jogador_id)}, "notifications": [{"channel": "WEBHOOK", "url": wh}]}
+    payload = {"code": "DEP-" + str(body.jogador_id) + "-" + str(int(datetime.utcnow().timestamp())), "amount": int(body.valor * 100), "description": "Deposito Camp FreeFire", "payment_forms": ["PIX"], "services": [{"name": "Deposito", "description": "Deposito Camp FreeFire", "amount": int(body.valor * 100)}], "customer": {"name": "Jogador #" + str(body.jogador_id), "document": {"identity": body.cpf.replace(".", "").replace("-", "").replace("/", ""), "type": "CPF"}}, "notifications": [{"channel": "WEBHOOK", "url": wh}]}
     async with httpx.AsyncClient(cert=(cp, kp), verify=True) as c:
         resp = await c.post(CORA_BASE + "/v2/invoices", json=payload, headers={"Authorization": "Bearer " + tkn, "Idempotency-Key": str(uuid.uuid4())})
     if resp.status_code not in (200, 201):
