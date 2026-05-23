@@ -22,7 +22,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
     setError('');
 
     if (!nick.trim() || !senha.trim()) {
-      setError('Por favor, preencha todos os campos obrigatórios.');
+      setError('Por favor, preencha todos os campos obrigatÃ³rios.');
       return;
     }
 
@@ -32,7 +32,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
     }
 
     if (!isLogin && senha !== confirmSenha) {
-      setError('As senhas não coincidem.');
+      setError('As senhas nÃ£o coincidem.');
       return;
     }
 
@@ -53,7 +53,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Ocorreu um erro ao processar sua solicitação.');
+      setError(err.message || 'Ocorreu um erro ao processar sua solicitaÃ§Ã£o.');
       addToast('Erro no portal', err.message || 'Verifique seus dados e tente novamente.', 'error');
     } finally {
       setLoading(false);
@@ -78,7 +78,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
             Solo Championship
           </h2>
           <p className="text-sm text-zinc-400 mt-1">
-            {isLogin ? 'Acesse sua conta para entrar nas salas' : 'Crie sua conta para começar a jogar'}
+            {isLogin ? 'Acesse sua conta para entrar nas salas' : 'Crie sua conta para comeÃ§ar a jogar'}
           </p>
         </div>
 
@@ -97,8 +97,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
                   <User className="w-4 h-4" />
                 </div>
-                <input
-                  type="text"
+                <input style={{fontSize:"16px"}}                   type="text"
                   required
                   placeholder="Seu nome"
                   value={nome}
@@ -115,10 +114,9 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
                 <Gamepad2 className="w-4 h-4" />
               </div>
-              <input
-                type="text"
+              <input style={{fontSize:"16px"}}                 type="text"
                 required
-                placeholder="Ex: Nobru_apelão"
+                placeholder="Ex: Nobru_apelÃ£o"
                 value={nick}
                 onChange={(e) => setNick(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-accent-cyan focus:shadow-[0_0_15px_rgba(0,240,255,0.15)] focus:outline-none transition-all duration-200"
@@ -132,10 +130,9 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
                 <Lock className="w-4 h-4" />
               </div>
-              <input
-                type="password"
+              <input style={{fontSize:"16px"}}                 type="password"
                 required
-                placeholder="••••••••"
+                placeholder="â¢â¢â¢â¢â¢â¢â¢â¢"
                 value={senha}
                 onChange={(e) => setSenha(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-primary focus:shadow-[0_0_15px_rgba(139,92,246,0.15)] focus:outline-none transition-all duration-200"
@@ -150,10 +147,9 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
                   <Lock className="w-4 h-4" />
                 </div>
-                <input
-                  type="password"
+                <input style={{fontSize:"16px"}}                   type="password"
                   required
-                  placeholder="••••••••"
+                  placeholder="â¢â¢â¢â¢â¢â¢â¢â¢"
                   value={confirmSenha}
                   onChange={(e) => setConfirmSenha(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-primary focus:shadow-[0_0_15px_rgba(139,92,246,0.15)] focus:outline-none transition-all duration-200"
@@ -162,8 +158,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
             </div>
           )}
 
-          <button
-            type="submit"
+          <button style={{minHeight:"44px",touchAction:"manipulation"}}             type="submit"
             disabled={loading}
             className={`w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-white font-bold transition-all duration-300 select-none ${
               loading
@@ -185,14 +180,13 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, addToast 
         </form>
 
         <div className="mt-8 text-center">
-          <button
-            onClick={() => {
+          <button style={{minHeight:"44px",touchAction:"manipulation"}}             onClick={() => {
               setIsLogin(!isLogin);
               setError('');
             }}
             className="text-sm font-semibold text-zinc-400 hover:text-white transition-colors"
           >
-            {isLogin ? 'Não tem uma conta? Cadastre-se' : 'Já tem uma conta? Faça Login'}
+            {isLogin ? 'NÃ£o tem uma conta? Cadastre-se' : 'JÃ¡ tem uma conta? FaÃ§a Login'}
           </button>
         </div>
       </div>
