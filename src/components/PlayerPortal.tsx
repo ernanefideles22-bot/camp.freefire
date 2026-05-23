@@ -14,6 +14,7 @@ import {
 import { apiService } from '../services/api';
 import type { Jogador, SalaData, StatusQueda } from '../services/api';
 import { Spinner } from './Spinner';
+import PixDeposito from './PixDeposito';
 
 interface PlayerPortalProps {
   currentUser: Jogador;
@@ -63,7 +64,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
         });
       }
     } catch (err) {
-      console.error('Erro ao buscar histórico:', err);
+      console.error('Erro ao buscar histÃ³rico:', err);
     } finally {
       setLoadingHistory(false);
     }
@@ -145,7 +146,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     setLoadingInscricao(true);
     try {
       await apiService.inscreverNaQueda(selectedQueda);
-      onAddToast('success', 'Inscrição Confirmada!', 'R$ 2,00 foram debitados do seu saldo.');
+      onAddToast('success', 'InscriÃ§Ã£o Confirmada!', 'R$ 2,00 foram debitados do seu saldo.');
       
       // Update local wallet state
       const updatedUser = { ...currentUser, saldo: (currentUser.saldo || 0) - 2.0 };
@@ -156,7 +157,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
       fetchQuedaStatus();
       fetchPlayerStats();
     } catch (err: any) {
-      onAddToast('error', 'Erro na Inscrição', err.message || 'Verifique seu saldo e tente novamente.');
+      onAddToast('error', 'Erro na InscriÃ§Ã£o', err.message || 'Verifique seu saldo e tente novamente.');
     } finally {
       setLoadingInscricao(false);
     }
@@ -167,7 +168,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     e.preventDefault();
     const valor = parseFloat(valorDeposito);
     if (isNaN(valor) || valor < 2.0) {
-      onAddToast('warning', 'Valor Inválido', 'O valor mínimo para depósito é de R$ 2,00.');
+      onAddToast('warning', 'Valor InvÃ¡lido', 'O valor mÃ­nimo para depÃ³sito Ã© de R$ 2,00.');
       return;
     }
 
@@ -176,9 +177,9 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
       await apiService.solicitarDeposito(valor);
       setSolicitacaoPendente(true);
       localStorage.setItem(`pending_pix_${currentUser.id}`, 'true');
-      onAddToast('success', 'Solicitação Enviada', `Depósito de R$ ${valor.toFixed(2)} registrado. Aguardando aprovação.`);
+      onAddToast('success', 'SolicitaÃ§Ã£o Enviada', `DepÃ³sito de R$ ${valor.toFixed(2)} registrado. Aguardando aprovaÃ§Ã£o.`);
     } catch (err: any) {
-      onAddToast('error', 'Erro no Depósito', err.message || 'Ocorreu um erro ao processar a solicitação.');
+      onAddToast('error', 'Erro no DepÃ³sito', err.message || 'Ocorreu um erro ao processar a solicitaÃ§Ã£o.');
     } finally {
       setLoadingDeposito(false);
     }
@@ -189,15 +190,15 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     if (type === 'id') {
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
-      onAddToast('info', 'ID Copiado', 'ID da sala copiado para a área de transferência.');
+      onAddToast('info', 'ID Copiado', 'ID da sala copiado para a Ã¡rea de transferÃªncia.');
     } else if (type === 'senha') {
       setCopiedSenha(true);
       setTimeout(() => setCopiedSenha(false), 2000);
-      onAddToast('info', 'Senha Copiada', 'Senha da sala copiada para a área de transferência.');
+      onAddToast('info', 'Senha Copiada', 'Senha da sala copiada para a Ã¡rea de transferÃªncia.');
     } else {
       setCopiedPix(true);
       setTimeout(() => setCopiedPix(false), 2000);
-      onAddToast('info', 'PIX Copiado', 'Chave PIX copiada para a área de transferência.');
+      onAddToast('info', 'PIX Copiado', 'Chave PIX copiada para a Ã¡rea de transferÃªncia.');
     }
   };
 
@@ -279,7 +280,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
             {loadingStatus ? (
               <div className="py-12 flex flex-col items-center justify-center gap-3">
                 <Spinner size="lg" className="text-primary" />
-                <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Verificando inscrições...</p>
+                <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Verificando inscriÃ§Ãµes...</p>
               </div>
             ) : (
               statusQueda && (
@@ -296,14 +297,14 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                            Não Inscrito
+                            NÃ£o Inscrito
                           </span>
                         )}
                       </div>
                       <p className="text-xs text-zinc-400">
                         {statusQueda.esta_inscrito
-                          ? 'Sua vaga está garantida! Veja os detalhes da sala abaixo.'
-                          : 'Participe desta queda solo! A inscrição custa R$ 2,00 do seu saldo.'}
+                          ? 'Sua vaga estÃ¡ garantida! Veja os detalhes da sala abaixo.'
+                          : 'Participe desta queda solo! A inscriÃ§Ã£o custa R$ 2,00 do seu saldo.'}
                       </p>
                     </div>
 
@@ -315,7 +316,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                     </div>
                   </div>
 
-                  {/* Lotação Progress Bar */}
+                  {/* LotaÃ§Ã£o Progress Bar */}
                   <div className="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-zinc-800/80">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
@@ -404,12 +405,12 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                             <div className="flex-grow">
                               <h5 className="text-sm font-bold">
                                 {secondsLeft > 0 
-                                  ? 'Atenção! Entre na sala agora!' 
+                                  ? 'AtenÃ§Ã£o! Entre na sala agora!' 
                                   : 'Contagem regressiva encerrada.'}
                               </h5>
                               <p className="text-xs text-zinc-500 font-medium mt-0.5">
                                 {secondsLeft > 0 
-                                  ? 'A partida começará em breve. Certifique-se de estar logado na sala.' 
+                                  ? 'A partida comeÃ§arÃ¡ em breve. Certifique-se de estar logado na sala.' 
                                   : 'O administrador deve iniciar a partida a qualquer momento.'}
                               </p>
                             </div>
@@ -426,9 +427,9 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                         /* Registered but admin hasn't released credentials yet */
                         <div className="p-5 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 text-center space-y-2">
                           <Gamepad2 className="w-8 h-8 text-zinc-600 mx-auto animate-bounce" />
-                          <h5 className="text-sm font-bold text-zinc-300">Sala em Preparação</h5>
+                          <h5 className="text-sm font-bold text-zinc-300">Sala em PreparaÃ§Ã£o</h5>
                           <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
-                            Você já está inscrito! O organizador liberará o ID e a Senha da sala assim que a queda estiver lotada ou programada para começar.
+                            VocÃª jÃ¡ estÃ¡ inscrito! O organizador liberarÃ¡ o ID e a Senha da sala assim que a queda estiver lotada ou programada para comeÃ§ar.
                           </p>
                           <div className="pt-2">
                             <button
@@ -472,7 +473,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
 
               <div className="p-4 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900/40 to-zinc-950/40 flex items-center justify-between shadow-md">
                 <div className="space-y-0.5">
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Quedas Concluídas</span>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Quedas ConcluÃ­das</span>
                   <h4 className="text-lg font-black text-primary font-mono">
                     {historyData.totalMatches}
                   </h4>
@@ -481,9 +482,9 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
 
               <div className="p-4 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900/40 to-zinc-950/40 flex items-center justify-between shadow-md">
                 <div className="space-y-0.5">
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Rank Médio</span>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Rank MÃ©dio</span>
                   <h4 className="text-lg font-black text-purple-400 font-mono">
-                    {historyData.averagePlacement > 0 ? `${historyData.averagePlacement}º` : '-'}
+                    {historyData.averagePlacement > 0 ? `${historyData.averagePlacement}Âº` : '-'}
                   </h4>
                 </div>
               </div>
@@ -495,7 +496,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
           <div className="space-y-3">
             <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
               <Award className="w-5 h-5 text-primary" />
-              Suas Pontuações Anteriores
+              Suas PontuaÃ§Ãµes Anteriores
             </h3>
 
             <div className="rounded-2xl border border-zinc-800 bg-panel-bg/40 backdrop-blur-md overflow-hidden shadow-xl">
@@ -507,9 +508,9 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                     <thead>
                       <tr className="border-b border-zinc-800 bg-zinc-900/50">
                         <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Queda #</th>
-                        <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Colocação</th>
+                        <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">ColocaÃ§Ã£o</th>
                         <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 text-right">Abates</th>
-                        <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 text-right">Premiação</th>
+                        <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 text-right">PremiaÃ§Ã£o</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-900">
@@ -518,7 +519,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                           <td className="px-5 py-3 font-bold text-xs text-zinc-300">Queda {h.numero_queda}</td>
                           <td className="px-5 py-3">
                             <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${getPlacementBadge(h.colocacao)}`}>
-                              {h.colocacao}º lugar
+                              {h.colocacao}Âº lugar
                             </span>
                           </td>
                           <td className="px-5 py-3 text-right text-xs text-zinc-300">{h.abates}</td>
@@ -532,7 +533,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                 </div>
               ) : (
                 <div className="p-6 text-center text-zinc-500 text-xs">
-                  Você ainda não possui quedas pontuadas registradas neste campeonato.
+                  VocÃª ainda nÃ£o possui quedas pontuadas registradas neste campeonato.
                 </div>
               )}
             </div>
@@ -554,12 +555,13 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
             </div>
 
             <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-850 text-center space-y-1">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Saldo Disponível</span>
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Saldo DisponÃ­vel</span>
               <h3 className="text-3xl font-black text-white font-mono">
                 R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}
               </h3>
             </div>
           </div>
+              <PixDeposito jogadorId={currentUser.id} />
 
           {/* PIX Deposit Manual Form */}
           <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-4">
@@ -573,9 +575,9 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                 <div className="flex items-start gap-2.5">
                   <Clock className="w-4.5 h-4.5 text-amber-400 mt-0.5 flex-shrink-0" />
                   <div className="space-y-1">
-                    <h5 className="text-xs font-bold text-amber-300">Depósito Pendente</h5>
+                    <h5 className="text-xs font-bold text-amber-300">DepÃ³sito Pendente</h5>
                     <p className="text-[10px] text-zinc-400 leading-normal">
-                      Sua solicitação de saldo foi enviada ao administrador. Assim que ele confirmar a transferência via Pix, seu saldo será atualizado.
+                      Sua solicitaÃ§Ã£o de saldo foi enviada ao administrador. Assim que ele confirmar a transferÃªncia via Pix, seu saldo serÃ¡ atualizado.
                     </p>
                   </div>
                 </div>
@@ -587,7 +589,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                     }}
                     className="text-[9px] font-bold text-zinc-500 hover:text-zinc-300 transition-colors uppercase tracking-wider"
                   >
-                    Fazer Outra Solicitação
+                    Fazer Outra SolicitaÃ§Ã£o
                   </button>
                 </div>
               </div>
@@ -645,7 +647,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                     ) : (
                       <Send className="w-3.5 h-3.5" />
                     )}
-                    {loadingDeposito ? 'Enviando...' : 'Solicitar Depósito'}
+                    {loadingDeposito ? 'Enviando...' : 'Solicitar DepÃ³sito'}
                   </button>
                 </form>
               </div>
