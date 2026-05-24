@@ -17,6 +17,7 @@ export default function PixDeposito({ jogadorId }: Props) {
   const [cpf, setCpf] = useState("");
   const [loading, setLoading] = useState(false);
   const [qrCode, setQrCode] = useState("");
+  const [qrError, setQrError] = useState(false);
   const [invoiceId, setInvoiceId] = useState("");
   const [erro, setErro] = useState("");
   const [copied, setCopied] = useState(false);
@@ -25,9 +26,10 @@ export default function PixDeposito({ jogadorId }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErro(""); setQrCode(""); setInvoiceId(""); setCopied(false);
-    if (!valor || parseFloat(valor) < 1) { setErro("Valor mínimo: R$ 1,00"); return; }
-    if (cpfDigits.length !== 11) { setErro("CPF inválido — informe 11 dígitos"); return; }
+    setErro(""); setQrCode("");
+      setQrError(false); setInvoiceId(""); setCopied(false);
+    if (!valor || parseFloat(valor) < 1) { setErro("Valor mÃ­nimo: R$ 1,00"); return; }
+    if (cpfDigits.length !== 11) { setErro("CPF invÃ¡lido â informe 11 dÃ­gitos"); return; }
     setLoading(true);
     try {
       const r = await fetch(API + "/pix/criar-cobranca", {
@@ -36,8 +38,9 @@ export default function PixDeposito({ jogadorId }: Props) {
         body: JSON.stringify({ jogador_id: jogadorId, valor: parseFloat(valor), cpf: cpfDigits }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Erro ao gerar cobrança");
+      if (!r.ok) throw new Error(data.detail || "Erro ao gerar cobranÃ§a");
       setQrCode(data.qr_code || "");
+      setQrError(false);
       setInvoiceId(data.invoice_id || "");
     } catch (err: any) {
       setErro(err.message || "Erro desconhecido");
@@ -60,7 +63,7 @@ export default function PixDeposito({ jogadorId }: Props) {
 
   return (
     <div style={{ padding: "16px", background: "#1a1a2e", borderRadius: "12px", color: "#fff", marginTop: "16px" }}>
-      <h3 style={{ margin: "0 0 12px", color: "#00d4aa" }}>💰 Depositar via PIX</h3>
+      <h3 style={{ margin: "0 0 12px", color: "#00d4aa" }}>ð° Depositar via PIX</h3>
 
       {!qrCode ? (
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
@@ -84,20 +87,26 @@ export default function PixDeposito({ jogadorId }: Props) {
         </form>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
-          <p style={{ margin: 0, color: "#aaa" }}>Escaneie o QR code ou copie o código PIX:</p>
+          <p style={{ margin: 0, color: "#aaa" }}>Escaneie o QR code ou copie o cÃ³digo PIX:</p>
           <img src={qrImageUrl} alt="QR Code PIX"
             style={{ width: "240px", height: "240px", borderRadius: "8px", background: "#fff", padding: "4px" }}
-            onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+            onError={() => setQrError(true)} />
+            {qrError && (
+              <div style={{ color: "#f90", fontSize: "13px", marginTop: "4px" }}>
+                ⚠️ Imagem do QR não carregou. Copie o código abaixo e cole no seu banco.
+              </div>
+            )}
           <div style={{ background: "#111", padding: "12px", borderRadius: "8px", width: "100%", wordBreak: "break-all", fontSize: "12px", color: "#ccc" }}>
             {qrCode}
           </div>
           <button onClick={handleCopy}
             style={{ ...btnStyle, padding: "12px 24px", background: copied ? "#00d4aa" : "#333", color: copied ? "#000" : "#fff", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "15px", width: "100%" }}>
-            {copied ? "✓ Copiado!" : "📋 Copiar código PIX"}
+            {copied ? "â Copiado!" : "ð Copiar cÃ³digo PIX"}
           </button>
-          <button onClick={() => { setQrCode(""); setErro(""); }}
+          <button onClick={() => { setQrCode("");
+      setQrError(false); setErro(""); }}
             style={{ ...btnStyle, padding: "8px", background: "transparent", color: "#aaa", border: "1px solid #444", borderRadius: "8px", width: "100%" }}>
-            ← Novo depósito
+            â Novo depÃ³sito
           </button>
         </div>
       )}
