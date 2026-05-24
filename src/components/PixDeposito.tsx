@@ -24,7 +24,7 @@ export default function PixDeposito({ jogadorId }: Props) {
   const gerarCobranca = async () => {
     const cpfDigits = cpf.replace(/\D/g, "");
     if (cpfDigits.length !== 11) {
-      setErro("CPF inválido. Digite os 11 dígitos.");
+      setErro("CPF invÃ¡lido. Digite os 11 dÃ­gitos.");
       return;
     }
     setLoading(true);
@@ -42,7 +42,7 @@ export default function PixDeposito({ jogadorId }: Props) {
         }
       );
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.detail || "Erro ao gerar cobrança");
+      if (!resp.ok) throw new Error(data.detail || "Erro ao gerar cobranÃ§a");
       setQrCode(data.qr_code);
       setQrImage(data.qr_code_image);
       setInvoiceId(data.invoice_id);
@@ -55,7 +55,7 @@ export default function PixDeposito({ jogadorId }: Props) {
 
   return (
     <div style={{ padding: "16px", background: "#1a1a2e", borderRadius: "12px", color: "#fff", marginTop: "16px" }}>
-      <h3 style={{ margin: "0 0 12px", color: "#00d4aa" }}>💰 Depositar via PIX</h3>
+      <h3 style={{ margin: "0 0 12px", color: "#00d4aa" }}>ð° Depositar via PIX</h3>
 
       {/* Valor */}
       <div style={{ marginBottom: "12px" }}>
@@ -121,8 +121,8 @@ export default function PixDeposito({ jogadorId }: Props) {
 
       {qrCode && (
         <div style={{ marginTop: "16px", textAlign: "center" }}>
-          {qrImage && <img src={qrImage} alt="QR Code PIX" style={{ width: "200px", height: "200px", borderRadius: "8px" }} />}
-          <p style={{ fontSize: "12px", color: "#aaa", marginTop: "8px" }}>Código PIX:</p>
+          {qrImage && <img src={qrImage || (qrCode ? `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrCode)}&size=220x220` : '')} alt="QR Code PIX" style={{ width: "220px", height: "220px", borderRadius: "8px" }} />}
+          <p style={{ fontSize: "12px", color: "#aaa", marginTop: "8px" }}>CÃ³digo PIX:</p>
           <div
             style={{ background: "#2a2a3e", padding: "8px", borderRadius: "8px", fontSize: "11px", wordBreak: "break-all", cursor: "pointer" }}
             onClick={() => navigator.clipboard.writeText(qrCode)}
@@ -130,7 +130,7 @@ export default function PixDeposito({ jogadorId }: Props) {
           >
             {qrCode}
           </div>
-          <p style={{ fontSize: "11px", color: "#888", marginTop: "4px" }}>Clique no código para copiar</p>
+          <p style={{ fontSize: "11px", color: "#888", marginTop: "4px" }}>Clique no cÃ³digo para copiar</p>
           <p style={{ fontSize: "11px", color: "#888" }}>ID: {invoiceId}</p>
         </div>
       )}
