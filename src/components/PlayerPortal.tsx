@@ -1,16 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  DollarSign,
-  Wallet,
-  Send,
-  Clock,
-  Gamepad2,
-  Copy,
-  Check,
-  RefreshCw,
-  Award,
-  QrCode
-} from 'lucide-react';
+import { DollarSign, Wallet, Clock, Gamepad2, Copy, Check, RefreshCw, Award } from 'lucide-react';
 import { apiService } from '../services/api';
 import type { Jogador, SalaData, StatusQueda } from '../services/api';
 import { Spinner } from './Spinner';
@@ -38,14 +27,10 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
   const [loadingInscricao, setLoadingInscricao] = useState<boolean>(false);
   
   // Wallet states
-  const [valorDeposito, setValorDeposito] = useState<string>('10.00');
-  const [loadingDeposito, setLoadingDeposito] = useState<boolean>(false);
-  const [solicitacaoPendente, setSolicitacaoPendente] = useState<boolean>(false);
   
   // Copy states
   const [copiedId, setCopiedId] = useState<boolean>(false);
   const [copiedSenha, setCopiedSenha] = useState<boolean>(false);
-  const [copiedPix, setCopiedPix] = useState<boolean>(false);
 
   // Persistent Timer State
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
@@ -164,26 +149,6 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
   };
 
   // Submit PIX deposit request
-  const handleDepositoRequest = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const valor = parseFloat(valorDeposito);
-    if (isNaN(valor) || valor < 2.0) {
-      onAddToast('warning', 'Valor InvÃ¡lido', 'O valor mÃ­nimo para depÃ³sito Ã© de R$ 2,00.');
-      return;
-    }
-
-    setLoadingDeposito(true);
-    try {
-      await apiService.solicitarDeposito(valor);
-      setSolicitacaoPendente(true);
-      localStorage.setItem(`pending_pix_${currentUser.id}`, 'true');
-      onAddToast('success', 'SolicitaÃ§Ã£o Enviada', `DepÃ³sito de R$ ${valor.toFixed(2)} registrado. Aguardando aprovaÃ§Ã£o.`);
-    } catch (err: any) {
-      onAddToast('error', 'Erro no DepÃ³sito', err.message || 'Ocorreu um erro ao processar a solicitaÃ§Ã£o.');
-    } finally {
-      setLoadingDeposito(false);
-    }
-  };
 
   const handleCopy = (text: string, type: 'id' | 'senha' | 'pix') => {
     navigator.clipboard.writeText(text);
@@ -542,119 +507,26 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
         </div>
 
         {/* RIGHT COLUMN: DIGITAL WALLET & PIX DETAILS (4cols) */}
-        <div className="lg:col-span-4 space-y-6">
-          
-          {/* Wallet Balance Card */}
-          <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-primary" />
-                Carteira Digital
-              </h4>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            </div>
-
-            <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-850 text-center space-y-1">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Saldo DisponÃ­vel</span>
-              <h3 className="text-3xl font-black text-white font-mono">
-                R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}
-              </h3>
-            </div>
-          </div>
-              <PixDeposito jogadorId={currentUser.id} />
-
-          {/* PIX Deposit Manual Form */}
-          <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-4">
-            <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-              <QrCode className="w-4 h-4 text-accent-cyan" />
-              Recarregar Saldo
-            </h4>
-
-            {solicitacaoPendente ? (
-              <div className="p-4.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
-                <div className="flex items-start gap-2.5">
-                  <Clock className="w-4.5 h-4.5 text-amber-400 mt-0.5 flex-shrink-0" />
-                  <div className="space-y-1">
-                    <h5 className="text-xs font-bold text-amber-300">DepÃ³sito Pendente</h5>
-                    <p className="text-[10px] text-zinc-400 leading-normal">
-                      Sua solicitaÃ§Ã£o de saldo foi enviada ao administrador. Assim que ele confirmar a transferÃªncia via Pix, seu saldo serÃ¡ atualizado.
-                    </p>
-                  </div>
-                </div>
-                <div className="pt-2">
-                  <button
-                    onClick={() => {
-                      localStorage.removeItem(`pending_pix_${currentUser.id}`);
-                      setSolicitacaoPendente(false);
-                    }}
-                    className="text-[9px] font-bold text-zinc-500 hover:text-zinc-300 transition-colors uppercase tracking-wider"
-                  >
-                    Fazer Outra SolicitaÃ§Ã£o
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                
-                {/* Instructions */}
-                <p className="text-xs text-zinc-400 leading-normal">
-                  Transfira o valor desejado usando a chave PIX do administrador abaixo, digite o valor enviado e clique em solicitar.
-                </p>
-
-                {/* PIX Key copy board */}
-                <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-850 flex items-center justify-between gap-3">
-                  <div className="overflow-hidden space-y-0.5">
-                    <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block">Chave PIX (E-mail)</span>
-                    <span className="text-xs font-mono font-bold text-white block truncate">pix@freefirechampionship.com</span>
-                  </div>
-                  <button
-                    onClick={() => handleCopy('pix@freefirechampionship.com', 'pix')}
-                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer"
-                    title="Copiar Chave PIX"
-                  >
-                    {copiedPix ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                </div>
-
-                {/* Amount Form */}
-                <form onSubmit={handleDepositoRequest} className="space-y-3">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Valor Pago (R$)</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500 text-xs font-bold font-mono">
-                        R$
-                      </div>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="2.00"
-                        required
-                        value={valorDeposito}
-                        onChange={(e) => setValorDeposito(e.target.value)}
-                        placeholder="10.00"
-                        className="w-full bg-zinc-950 border border-zinc-850 pl-9 pr-4 py-2.5 rounded-xl text-sm text-white focus:border-accent-cyan focus:outline-none focus:ring-1 focus:ring-accent-cyan font-mono"
-                      />
+                {/* RIGHT COLUMN: DIGITAL WALLET & PIX (4cols) */}
+                <div className="lg:col-span-4 space-y-6">
+                  <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                        <Wallet className="w-4 h-4 text-primary" />
+                        Carteira Digital
+                      </h4>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                     </div>
+                    <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 text-center space-y-1">
+                      <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Saldo Disponível</span>
+                      <h3 className="text-3xl font-black text-white font-mono">
+                        R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}
+                      </h3>
+                    </div>
+                    <div className="border-t border-zinc-800" />
+                    <PixDeposito jogadorId={currentUser.id} />
                   </div>
-
-                  <button
-                    type="submit"
-                    disabled={loadingDeposito}
-                    className="w-full py-2.5 rounded-xl bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.15)] font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    {loadingDeposito ? (
-                      <Spinner size="sm" className="text-zinc-950" />
-                    ) : (
-                      <Send className="w-3.5 h-3.5" />
-                    )}
-                    {loadingDeposito ? 'Enviando...' : 'Solicitar DepÃ³sito'}
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
-
-        </div>
+                </div>
 
       </div>
     </div>
