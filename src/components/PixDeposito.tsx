@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { QrCode, ChevronLeft } from 'lucide-react';
 
 const API = import.meta.env.VITE_API_URL || "https://campfreefire-production.up.railway.app";
 
@@ -26,19 +27,19 @@ export default function PixDeposito({ jogadorId }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErro(""); setQrCode("");
-      setQrError(false); setInvoiceId(""); setCopied(false);
-    if (!valor || parseFloat(valor) < 1) { setErro("Valor mÃÂ­nimo: R$ 1,00"); return; }
-    if (cpfDigits.length !== 11) { setErro("CPF invÃÂ¡lido Ã¢ÂÂ informe 11 dÃÂ­gitos"); return; }
+    setErro(""); setQrCode(""); setQrError(false); setInvoiceId(""); setCopied(false);
+    const parsedValor = parseFloat(valor.replace(",", "."));
+    if (!valor || isNaN(parsedValor) || parsedValor < 1) { setErro("Valor mínimo: R$ 1,00"); return; }
+    if (cpfDigits.length !== 11) { setErro("CPF inválido — informe 11 dígitos"); return; }
     setLoading(true);
     try {
       const r = await fetch(API + "/pix/criar-cobranca", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jogador_id: jogadorId, valor: parseFloat(valor), cpf: cpfDigits }),
+        body: JSON.stringify({ jogador_id: jogadorId, valor: parsedValor, cpf: cpfDigits }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Erro ao gerar cobranÃÂ§a");
+      if (!r.ok) throw new Error(data.detail || "Erro ao gerar cobrança");
       setQrCode(data.qr_code || "");
       setQrError(false);
       setInvoiceId(data.invoice_id || "");
@@ -56,7 +57,6 @@ export default function PixDeposito({ jogadorId }: Props) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // fallback for older browsers
       const el = document.createElement("textarea");
       el.value = qrCode;
       document.body.appendChild(el);
@@ -69,74 +69,121 @@ export default function PixDeposito({ jogadorId }: Props) {
   };
 
   const qrImageUrl = qrCode
-    ? "https://api.qrserver.com/v1/create-qr-code/?data=" + encodeURIComponent(qrCode) + "&size=240x240&margin=8"
+    ? "https://api.qrserver.com/v1/create-qr-code/?data=" + encodeURIComponent(qrCode) + "&size=220x220&margin=8"
     : "";
 
-  const btnStyle: React.CSSProperties = { minHeight: "44px", touchAction: "manipulation", cursor: "pointer" };
-  const inputStyle: React.CSSProperties = { fontSize: "16px", padding: "10px", borderRadius: "8px", border: "1px solid #444", background: "#111", color: "#fff", width: "100%", boxSizing: "border-box" };
-
   return (
-    <div style={{ padding: "16px", background: "#1a1a2e", borderRadius: "12px", color: "#fff", marginTop: "16px" }}>
-      <h3 style={{ margin: "0 0 12px", color: "#00d4aa" }}>Ã°ÂÂÂ° Depositar via PIX</h3>
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-3">Depositar via PIX</p>
 
       {!qrCode ? (
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-            {[5, 10, 20, 50].map(v => (
-              <button key={v} type="button" onClick={() => setValor(String(v))}
-                style={{ ...btnStyle, padding: "8px 16px", background: valor === String(v) ? "#00d4aa" : "#333", color: "#fff", border: "none", borderRadius: "8px", fontWeight: "bold" }}>
-                R$ {v}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {/* Quick value buttons */}
+          <div className="grid grid-cols-4 gap-1.5">
+            {[2, 10, 20, 50].map(v => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setValor(String(v))}
+                className={`py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  valor === String(v)
+                    ? "bg-primary border-primary text-white"
+                    : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                }`}
+              >
+                R${v}
               </button>
             ))}
           </div>
-          <input type="number" placeholder="Outro valor (R$)" value={valor} min="1" step="0.01"
-            onChange={e => setValor(e.target.value)} style={inputStyle} />
-          <input type="text" placeholder="CPF (000.000.000-00)" value={cpf} inputMode="numeric"
-            onChange={e => setCpf(formatCpf(e.target.value))} style={inputStyle} />
-          {erro && <p style={{ color: "#ff6b6b", margin: 0 }}>{erro}</p>}
-          <button type="submit" disabled={loading}
-            style={{ ...btnStyle, padding: "12px", background: loading ? "#555" : "#00d4aa", color: "#000", border: "none", borderRadius: "8px", fontWeight: "bold", fontSize: "16px" }}>
-            {loading ? "Gerando PIX..." : "Gerar QR Code PIX"}
+
+          {/* Manual value input — type text to avoid browser locking 0 */}
+          <input
+            type="text"
+            inputMode="decimal"
+            placeholder="Outro valor (ex: 15,00)"
+            value={valor}
+            onChange={e => {
+              const raw = e.target.value.replace(/[^0-9.,]/g, "");
+              setValor(raw);
+            }}
+            className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2.5 rounded-xl text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary font-mono placeholder:text-zinc-600"
+          />
+
+          {/* CPF input */}
+          <input
+            type="text"
+            placeholder="CPF (000.000.000-00)"
+            value={cpf}
+            inputMode="numeric"
+            onChange={e => setCpf(formatCpf(e.target.value))}
+            className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2.5 rounded-xl text-sm text-white focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-zinc-600"
+          />
+
+          {erro && <p className="text-xs text-rose-400 font-semibold">{erro}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 rounded-xl bg-primary text-white font-bold text-sm transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90 flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Gerando PIX...
+              </>
+            ) : (
+              <>
+                <QrCode className="w-4 h-4" />
+                Gerar QR Code PIX
+              </>
+            )}
           </button>
         </form>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
-          <p style={{ margin: 0, color: "#aaa" }}>Escaneie o QR code ou copie o cÃÂ³digo PIX:</p>
-          <img src={qrImageUrl} alt="QR Code PIX"
-            style={{ width: "240px", height: "240px", borderRadius: "8px", background: "#fff", padding: "4px" }}
-            onError={() => setQrError(true)} />
-            {qrError && (
-              <div style={{ color: "#f90", fontSize: "13px", marginTop: "4px" }}>
-                â ï¸ Imagem do QR nÃ£o carregou. Copie o cÃ³digo abaixo e cole no seu banco.
-              </div>
-            )}
-          <div style={{ background: "#111", padding: "12px", borderRadius: "8px", width: "100%", wordBreak: "break-all", fontSize: "12px", color: "#ccc" }}>
+        <div className="space-y-3">
+          <p className="text-xs text-zinc-400 text-center">Escaneie o QR code ou copie o código:</p>
+
+          {/* QR Image */}
+          <div className="flex justify-center">
+            <img
+              src={qrImageUrl}
+              alt="QR Code PIX"
+              className="w-[220px] h-[220px] rounded-xl bg-white p-1"
+              onError={() => setQrError(true)}
+            />
+          </div>
+
+          {qrError && (
+            <p className="text-xs text-amber-400 text-center font-semibold">
+              ⚠️ Imagem não carregou. Copie o código abaixo.
+            </p>
+          )}
+
+          {/* EMV code */}
+          <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-[10px] font-mono text-zinc-500 break-all leading-relaxed">
             {qrCode}
           </div>
+
+          {/* Copy button */}
           <button
-          onClick={handleCopy}
-          disabled={!qrCode}
-          style={{
-            marginTop: "10px",
-            width: "100%",
-            padding: "12px",
-            background: copied ? "#22c55e" : "#f97316",
-            color: "#fff",
-            border: "none",
-            borderRadius: "8px",
-            fontWeight: "bold",
-            fontSize: "15px",
-            cursor: qrCode ? "pointer" : "not-allowed",
-            transition: "background 0.3s",
-            letterSpacing: "0.5px",
-          }}
-        >
-          {copied ? "✅ Código copiado!" : "📋 Copiar código PIX"}
-        </button>
-          <button onClick={() => { setQrCode("");
-      setQrError(false); setErro(""); }}
-            style={{ ...btnStyle, padding: "8px", background: "transparent", color: "#aaa", border: "1px solid #444", borderRadius: "8px", width: "100%" }}>
-            Ã¢ÂÂ Novo depÃÂ³sito
+            onClick={handleCopy}
+            disabled={!qrCode}
+            className={`w-full py-3 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              copied
+                ? "bg-emerald-500 text-white"
+                : "bg-orange-500 hover:bg-orange-400 text-white"
+            }`}
+          >
+            {copied ? "✅ Código copiado!" : "📋 Copiar código PIX"}
+          </button>
+
+          {/* Back button */}
+          <button
+            onClick={() => { setQrCode(""); setQrError(false); setErro(""); }}
+            className="w-full py-2 rounded-xl bg-transparent border border-zinc-800 text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            Novo depósito
           </button>
         </div>
       )}
