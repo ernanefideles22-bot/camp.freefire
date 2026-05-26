@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, Key, HelpCircle, Eye, EyeOff, Bot, User, Trash2 } from 'lucide-react';
+import { Sparkles, Send, HelpCircle, Bot, User, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { Spinner } from './Spinner';
 
@@ -26,8 +26,6 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [apiKey, setApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -40,20 +38,7 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
     scrollToBottom();
   }, [messages, loading]);
 
-  // Load API Key from local storage if saved
-  useEffect(() => {
-    const savedKey = localStorage.getItem('ff_gemini_api_key');
-    if (savedKey) setApiKey(savedKey);
-  }, []);
 
-  const handleSaveApiKey = (val: string) => {
-    setApiKey(val);
-    if (val.trim()) {
-      localStorage.setItem('ff_gemini_api_key', val.trim());
-    } else {
-      localStorage.removeItem('ff_gemini_api_key');
-    }
-  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +58,7 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
     setLoading(true);
 
     try {
-      const response = await apiService.enviarComandoAgente(userText, apiKey || undefined);
+      const response = await apiService.enviarComandoAgente(userText, undefined);
       
       const agentMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -229,31 +214,8 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Field & Key Config */}
+      {/* Input Field */}
       <div className="pt-3 border-t border-zinc-900 space-y-2">
-        {/* API Key configuration input */}
-        <div className="relative">
-          <div className="flex items-center justify-between text-[10px] font-bold text-zinc-500 mb-1">
-            <label className="flex items-center gap-1">
-              <Key className="w-3 h-3" /> Configuração da API Key (Opcional se definida no backend)
-            </label>
-            <button 
-              type="button"
-              onClick={() => setShowApiKey(!showApiKey)}
-              className="hover:text-zinc-300 cursor-pointer flex items-center gap-0.5"
-            >
-              {showApiKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              {showApiKey ? 'Ocultar' : 'Visualizar'}
-            </button>
-          </div>
-          <input
-            type={showApiKey ? "text" : "password"}
-            placeholder="Insira sua GEMINI_API_KEY..."
-            value={apiKey}
-            onChange={(e) => handleSaveApiKey(e.target.value)}
-            className="w-full px-3 py-1.5 rounded-lg bg-zinc-950/80 border border-zinc-900 text-xs text-zinc-300 placeholder-zinc-700 focus:border-primary focus:outline-none transition-all font-mono"
-          />
-        </div>
 
         {/* Chat submit form */}
         <form onSubmit={handleSendMessage} className="flex gap-2">
