@@ -29,8 +29,8 @@ export default function PixDeposito({ jogadorId }: Props) {
     e.preventDefault();
     setErro(""); setQrCode(""); setQrError(false); setInvoiceId(""); setCopied(false);
     const parsedValor = parseFloat(valor.replace(",", "."));
-    if (!valor || isNaN(parsedValor) || parsedValor < 1) { setErro("Valor mÃ­nimo: R$ 1,00"); return; }
-    if (cpfDigits.length !== 11) { setErro("CPF invÃ¡lido â informe 11 dÃ­gitos"); return; }
+    if (!valor || isNaN(parsedValor) || parsedValor < 1) { setErro("Valor mínimo: R$ 1,00"); return; }
+    if (cpfDigits.length !== 11) { setErro("CPF inválido — informe 11 dígitos"); return; }
     setLoading(true);
     try {
       const r = await fetch(API + "/pix/criar-cobranca", {
@@ -39,12 +39,12 @@ export default function PixDeposito({ jogadorId }: Props) {
         body: JSON.stringify({ jogador_id: jogadorId, valor: parsedValor, cpf: cpfDigits }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Erro ao gerar cobranÃ§a");
+      if (!r.ok) throw new Error(data.detail || "Erro ao gerar cobrança");
       setQrCode(data.qr_code || "");
       setQrError(false);
       setInvoiceId(data.invoice_id || "");
-    } catch (err) {
-      setErro((err as any).message || "Erro desconhecido");
+    } catch (err: any) {
+      setErro(err.message || "Erro desconhecido");
     } finally {
       setLoading(false);
     }
@@ -71,6 +71,8 @@ export default function PixDeposito({ jogadorId }: Props) {
   const qrImageUrl = qrCode
     ? "https://api.qrserver.com/v1/create-qr-code/?data=" + encodeURIComponent(qrCode) + "&size=220x220&margin=8"
     : "";
+
+  void invoiceId;
 
   return (
     <div>
@@ -107,7 +109,7 @@ export default function PixDeposito({ jogadorId }: Props) {
         </form>
       ) : (
         <div className="space-y-3">
-          <p className="text-xs text-zinc-400 text-center">Escaneie o QR code ou copie o cÃ³digo:</p>
+          <p className="text-xs text-zinc-400 text-center">Escaneie o QR code ou copie o código:</p>
           <div className="flex justify-center">
             <img src={qrImageUrl} alt="QR Code PIX"
               className="w-[220px] h-[220px] rounded-xl bg-white p-1"
@@ -115,7 +117,7 @@ export default function PixDeposito({ jogadorId }: Props) {
           </div>
           {qrError && (
             <p className="text-xs text-amber-400 text-center font-semibold">
-              â ï¸ Imagem nÃ£o carregou. Copie o cÃ³digo abaixo.
+              ⚠️ Imagem não carregou. Copie o código abaixo.
             </p>
           )}
           <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-[10px] font-mono text-zinc-500 break-all leading-relaxed">
@@ -125,11 +127,11 @@ export default function PixDeposito({ jogadorId }: Props) {
             className={`w-full py-3 rounded-xl font-bold text-sm transition-all cursor-pointer flex items-center justify-center gap-2 ${
               copied ? "bg-emerald-500 text-white" : "bg-orange-500 hover:bg-orange-400 text-white"
             }`}>
-            {copied ? "â CÃ³digo copiado!" : "ð Copiar cÃ³digo PIX"}
+            {copied ? "✓ Código copiado!" : "📋 Copiar código PIX"}
           </button>
           <button onClick={() => { setQrCode(""); setQrError(false); setErro(""); }}
             className="w-full py-2 rounded-xl bg-transparent border border-zinc-800 text-xs text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer flex items-center justify-center gap-1.5">
-            <ChevronLeft className="w-3.5 h-3.5" />Novo depÃ³sito
+            <ChevronLeft className="w-3.5 h-3.5" />Novo depósito
           </button>
         </div>
       )}
