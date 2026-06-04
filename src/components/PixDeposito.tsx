@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { QrCode, ChevronLeft } from 'lucide-react';
 
-const API = import.meta.env.VITE_API_URL || "https://campfreefire-production.up.railway.app";
+// FIX 1.8: usar apenas variavel de ambiente - sem URL hardcoded
+const API = import.meta.env.VITE_API_URL || "";
 
 interface Props { jogadorId: number; }
 
