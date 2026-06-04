@@ -15,7 +15,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
   const [connected, setConnected] = useState<boolean>(true);
   const [countdown, setCountdown] = useState<number>(30);
 
-  const loadData = useCallback(async (isSilent = false) => {
+  // FIX 1.9: loadData aceita suppressToast=false para autorefresh silencioso
+  const loadData = useCallback(async (isSilent = false, suppressToast = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
 
@@ -23,13 +24,19 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
       const result = await apiService.obterClassificacao();
       setData(result);
       setConnected(true);
-      setCountdown(30); // Reset timer on successful fetch
-      if (isSilent) {
-        onAddToast('success', 'Tabela Atualizada', 'Os dados de classificação foram atualizados com sucesso.');
+      setCountdown(30);
+      // Toast apenas em refresh manual (nao no polling automatico)
+      if (isSilent && !suppressToast) {
+        onAddToast('success', 'Tabela Atualizada', 'Os dados de classificacao foram atualizados com sucesso.');
       }
     } catch (err) {
-      setConnected(false);
-      onAddToast('error', 'Erro ao Carregar Dados', 'Não foi possível buscar a classificação do campeonato.');
+      // Em refresh automatico, falha silenciosa (sem spam de toasts)
+      if (!suppressToast) {
+        setConnected(false);
+        onAddToast('error', 'Erro ao Carregar Dados', 'Nao foi possivel buscar a classificacao do campeonato.');
+      } else {
+        setConnected(false);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -41,17 +48,23 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
     loadData();
   }, [loadData]);
 
-  // Polling & Countdown Timer
+  // FIX 1.9: separar countdown (1s) do fetch (30s) — sem toast automatico
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev <= 1) {
-          loadData(true);
-          return 30;
-        }
-        return prev - 1;
-      });
+    // Countdown visual a cada 1s (sem chamar API)
+    const countdownTimer = setInterval(() => {
+      setCountdown((prev) => (prev <= 1 ? 30 : prev - 1));
     }, 1000);
+
+    // Fetch silencioso a cada 30s — sem toast automatico
+    const fetchTimer = setInterval(() => {
+      loadData(false, true); // silent = true (sem toast)
+    }, 30000);
+
+    return () => {
+      clearInterval(countdownTimer);
+      clearInterval(fetchTimer);
+    };
+  }, [loadData]);
 
     return () => clearInterval(timer);
   }, [loadData]);
