@@ -19,50 +19,34 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
   const [selectedQueda, setSelectedQueda] = useState<number>(1);
   const [historyData, setHistoryData] = useState<any>(null);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
-  
-  // Room and inscription states
   const [statusQueda, setStatusQueda] = useState<StatusQueda | null>(null);
   const [salaInfo, setSalaInfo] = useState<SalaData | null>(null);
   const [loadingStatus, setLoadingStatus] = useState<boolean>(false);
   const [loadingInscricao, setLoadingInscricao] = useState<boolean>(false);
-  
-  // Wallet states
-  
-  // Copy states
   const [copiedId, setCopiedId] = useState<boolean>(false);
   const [copiedSenha, setCopiedSenha] = useState<boolean>(false);
-
-  // Persistent Timer State
   const [secondsLeft, setSecondsLeft] = useState<number>(0);
 
-  // Fetch player match history and stats
   const fetchPlayerStats = async () => {
     setLoadingHistory(true);
     try {
       const res = await apiService.getPlayerHistory(currentUser.nick);
       if (res) {
         setHistoryData(res);
-        // Also sync balance from DB to local state
-        onUpdateUser({
-          ...currentUser,
-          saldo: res.jogador.saldo
-        });
+        onUpdateUser({ ...currentUser, saldo: res.jogador.saldo });
       }
     } catch (err) {
-      console.error('Erro ao buscar hist�rico:', err);
+      console.error('Erro ao buscar historico:', err);
     } finally {
       setLoadingHistory(false);
     }
   };
 
-  // Fetch selected Queda status (inscription counts, is_registered, etc.)
   const fetchQuedaStatus = async (silent = false) => {
     if (!silent) setLoadingStatus(true);
     try {
       const status = await apiService.obterStatusQueda(selectedQueda);
       setStatusQueda(status);
-
-      // If player is registered and room credentials are ready, fetch them
       if (status.esta_inscrito && status.sala_liberada) {
         const room = await apiService.obterInfoSala(selectedQueda);
         setSalaInfo(room);
@@ -76,88 +60,61 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     }
   };
 
-  // Run on mount and when user / selectedQueda changes
   useEffect(() => {
     fetchPlayerStats();
     fetchQuedaStatus();
-
-
-    // Set up polling for the active room status every 6 seconds
-    const interval = setInterval(() => {
-      fetchQuedaStatus(true);
-    }, 6000);
-
+    const interval = setInterval(() => { fetchQuedaStatus(true); }, 6000);
     return () => clearInterval(interval);
   }, [selectedQueda, currentUser.id]);
 
-  // Synchronized persistent timer trigger when room details are released
   useEffect(() => {
-    if (!salaInfo) {
-      setSecondsLeft(0);
-      return;
-    }
-
+    if (!salaInfo) { setSecondsLeft(0); return; }
     const timerKey = `room_timer_${selectedQueda}_${currentUser.id}`;
     let expiry = localStorage.getItem(timerKey);
     let expiryTime = expiry ? parseInt(expiry, 10) : null;
-
     if (!expiryTime) {
-      // 5 minutes from now
       expiryTime = Date.now() + 5 * 60 * 1000;
       localStorage.setItem(timerKey, String(expiryTime));
     }
-
     const updateTimer = () => {
       const remaining = Math.max(0, Math.floor((expiryTime! - Date.now()) / 1000));
       setSecondsLeft(remaining);
-      if (remaining === 0) {
-        clearInterval(timerInterval);
-      }
+      if (remaining === 0) clearInterval(timerInterval);
     };
-
     updateTimer();
     const timerInterval = setInterval(updateTimer, 1000);
-
     return () => clearInterval(timerInterval);
   }, [salaInfo, selectedQueda, currentUser.id]);
 
-  // Handle Room Registration (Charges R$ 2.00)
   const handleInscricao = async () => {
     setLoadingInscricao(true);
     try {
       await apiService.inscreverNaQueda(selectedQueda);
-      onAddToast('success', 'Inscri��o Confirmada!', 'R$ 2,00 foram debitados do seu saldo.');
-      
-      // Update local wallet state
+      onAddToast('success', 'Inscricao Confirmada!', 'R$ 2,00 foram debitados do seu saldo.');
       const updatedUser = { ...currentUser, saldo: (currentUser.saldo || 0) - 2.0 };
       onUpdateUser(updatedUser);
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
-      
-      // Refresh status and stats
       fetchQuedaStatus();
       fetchPlayerStats();
     } catch (err: any) {
-      onAddToast('error', 'Erro na Inscri��o', err.message || 'Verifique seu saldo e tente novamente.');
+      onAddToast('error', 'Erro na Inscricao', err.message || 'Verifique seu saldo e tente novamente.');
     } finally {
       setLoadingInscricao(false);
     }
   };
-
-  // Submit PIX deposit request
 
   const handleCopy = (text: string, type: 'id' | 'senha') => {
     navigator.clipboard.writeText(text);
     if (type === 'id') {
       setCopiedId(true);
       setTimeout(() => setCopiedId(false), 2000);
-      onAddToast('info', 'ID Copiado', 'ID da sala copiado para a �rea de transfer�ncia.');
-    } else if (type === 'senha') {
+      onAddToast('info', 'ID Copiado', 'ID da sala copiado para a area de transferencia.');
+    } else {
       setCopiedSenha(true);
       setTimeout(() => setCopiedSenha(false), 2000);
-      onAddToast('info', 'Senha Copiada', 'Senha da sala copiada para a �rea de transfer�ncia.');
+      onAddToast('info', 'Senha Copiada', 'Senha da sala copiada para a area de transferencia.');
+    }
   };
-
-  }
 
   const formatTime = (secs: number) => {
     const minutes = Math.floor(secs / 60);
@@ -175,7 +132,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Welcome Panel */}
+      {/* Painel de boas-vindas */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-6 rounded-2xl border border-zinc-800 bg-panel-bg/40 backdrop-blur-md gap-4 shadow-xl">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white font-bold text-2xl shadow-md uppercase">
@@ -188,104 +145,65 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
             </p>
           </div>
         </div>
-
-        {/* Sync Wallet Button */}
-        <button
-          onClick={() => {
-            fetchPlayerStats();
-            fetchQuedaStatus();
-            onAddToast('info', 'Atualizando Dados', 'Sincronizando saldo e status com o servidor...');
-          }}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 active:scale-95 transition-all cursor-pointer"
-        >
+        <button onClick={() => { fetchPlayerStats(); fetchQuedaStatus(); onAddToast('info', 'Atualizando Dados', 'Sincronizando saldo e status com o servidor...'); }}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 active:scale-95 transition-all cursor-pointer">
           <RefreshCw className="w-4 h-4" />
           Sincronizar Saldo
         </button>
       </div>
 
-      {/* Main Grid: Wallet & Inscription Portal */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* LEFT COLUMN: ROOM SUBSCRIPTIONS & COUNTER (8cols) */}
+        {/* Coluna esquerda */}
         <div className="lg:col-span-8 space-y-6">
-          
-          {/* Room Selector Tab */}
+          {/* Seletor de Queda */}
           <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-4 shadow-xl">
             <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400 mb-3.5">Selecione a Queda</h3>
             <div className="grid grid-cols-3 gap-2">
               {[1, 2, 3].map((num) => (
-                <button
-                  key={num}
-                  onClick={() => {
-                    setSelectedQueda(num);
-                    setSalaInfo(null);
-                  }}
-                  className={`py-3 rounded-xl font-bold text-sm border transition-all cursor-pointer ${
-                    selectedQueda === num
-                      ? 'bg-primary border-primary text-white shadow-[0_0_12px_rgba(139,92,246,0.25)]'
-                      : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
-                  }`}
-                >
+                <button key={num} onClick={() => { setSelectedQueda(num); setSalaInfo(null); }}
+                  className={`py-3 rounded-xl font-bold text-sm border transition-all cursor-pointer ${selectedQueda === num ? 'bg-primary border-primary text-white shadow-[0_0_12px_rgba(139,92,246,0.25)]' : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}`}>
                   Queda #{num}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Active Subscription/Room Card */}
+          {/* Card da sala */}
           <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-6 shadow-xl relative overflow-hidden">
             {loadingStatus ? (
               <div className="py-12 flex flex-col items-center justify-center gap-3">
                 <Spinner size="lg" className="text-primary" />
-                <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Verificando inscri��es...</p>
+                <p className="text-zinc-500 text-xs font-bold uppercase tracking-wider">Verificando inscricoes...</p>
               </div>
             ) : (
               statusQueda && (
                 <div className="space-y-6">
-                  
-                  {/* Status Summary Banner */}
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2.5">
                         <h4 className="text-lg font-bold text-white">Sala da Queda {statusQueda.numero_queda}</h4>
                         {statusQueda.esta_inscrito ? (
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black text-emerald-400 uppercase tracking-wider">
-                            Inscrito & Pago
-                          </span>
+                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-black text-emerald-400 uppercase tracking-wider">Inscrito & Pago</span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                            N�o Inscrito
-                          </span>
+                          <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Nao Inscrito</span>
                         )}
                       </div>
                       <p className="text-xs text-zinc-400">
-                        {statusQueda.esta_inscrito
-                          ? 'Sua vaga est� garantida! Veja os detalhes da sala abaixo.'
-                          : 'Participe desta queda solo! A inscri��o custa R$ 2,00 do seu saldo.'}
+                        {statusQueda.esta_inscrito ? 'Sua vaga esta garantida! Veja os detalhes da sala abaixo.' : 'Participe desta queda! A inscricao custa R$ 2,00 do seu saldo.'}
                       </p>
                     </div>
-
                     <div className="text-right">
                       <span className="text-xs text-zinc-500 font-bold uppercase tracking-wider block">Jogadores</span>
-                      <span className="text-lg font-black text-white font-mono leading-none">
-                        {statusQueda.inscritos_count} / {statusQueda.limite}
-                      </span>
+                      <span className="text-lg font-black text-white font-mono leading-none">{statusQueda.inscritos_count} / {statusQueda.limite}</span>
                     </div>
                   </div>
 
-                  {/* Lota��o Progress Bar */}
                   <div className="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-zinc-800/80">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        statusQueda.inscritos_count >= 48 ? 'bg-accent-orange glow-orange' : 'bg-primary glow-purple'
-                      }`}
-                      style={{ width: `${(statusQueda.inscritos_count / statusQueda.limite) * 100}%` }}
-                    />
+                    <div className={`h-full rounded-full transition-all duration-500 ${statusQueda.inscritos_count >= 48 ? 'bg-accent-orange' : 'bg-primary'}`}
+                      style={{ width: `${(statusQueda.inscritos_count / statusQueda.limite) * 100}%` }} />
                   </div>
 
-                  {/* Dynamic Action Area */}
                   {!statusQueda.esta_inscrito ? (
-                    /* User needs to subscribe */
                     <div className="p-5 bg-zinc-950/40 rounded-xl border border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="flex items-center gap-3.5">
                         <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400">
@@ -296,103 +214,62 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                           <p className="text-xs text-zinc-500 font-semibold mt-0.5">Seu saldo atual: R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}</p>
                         </div>
                       </div>
-
-                      <button
-                        onClick={handleInscricao}
+                      <button onClick={handleInscricao}
                         disabled={loadingInscricao || (currentUser.saldo || 0) < 2.0}
-                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 ${
-                          (currentUser.saldo || 0) < 2.0
-                            ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed'
-                            : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]'
-                        }`}
-                      >
-                        {loadingInscricao ? (
-                          <Spinner size="sm" className="text-zinc-950" />
-                        ) : (
-                          <Gamepad2 className="w-4 h-4" />
-                        )}
+                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 ${(currentUser.saldo || 0) < 2.0 ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]'}`}>
+                        {loadingInscricao ? <Spinner size="sm" className="text-zinc-950" /> : <Gamepad2 className="w-4 h-4" />}
                         {loadingInscricao ? 'Confirmando...' : (currentUser.saldo || 0) < 2.0 ? 'Saldo Insuficiente' : 'Inscrever-se por R$ 2,00'}
                       </button>
                     </div>
                   ) : (
-                    /* User is inscribed. Show Room credentials if admin released them */
                     <div className="space-y-4">
                       {salaInfo ? (
                         <div className="space-y-4">
-                          {/* Room Credentials Panel */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {/* ID Field */}
-                            <div className="px-5 py-3 rounded-xl bg-zinc-950 border border-zinc-850 flex items-center justify-between gap-4">
+                            <div className="px-5 py-3 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-4">
                               <div className="space-y-0.5">
                                 <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">ID DA SALA FF</span>
                                 <span className="text-lg font-black text-white font-mono tracking-wider">{salaInfo.sala_id}</span>
                               </div>
-                              <button
-                                onClick={() => handleCopy(salaInfo.sala_id, 'id')}
-                                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer"
-                              >
-                                {copiedId ? <Check className="w-4.5 h-4.5 text-emerald-400" /> : <Copy className="w-4.5 h-4.5" />}
+                              <button onClick={() => handleCopy(salaInfo.sala_id, 'id')} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer">
+                                {copiedId ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                               </button>
                             </div>
-
-                            {/* Password Field */}
-                            <div className="px-5 py-3 rounded-xl bg-zinc-950 border border-zinc-850 flex items-center justify-between gap-4">
+                            <div className="px-5 py-3 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between gap-4">
                               <div className="space-y-0.5">
                                 <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block">SENHA DA SALA</span>
                                 <span className="text-lg font-black text-white font-mono tracking-wider">{salaInfo.senha}</span>
                               </div>
-                              <button
-                                onClick={() => handleCopy(salaInfo.senha, 'senha')}
-                                className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer"
-                              >
-                                {copiedSenha ? <Check className="w-4.5 h-4.5 text-emerald-400" /> : <Copy className="w-4.5 h-4.5" />}
+                              <button onClick={() => handleCopy(salaInfo.senha, 'senha')} className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer">
+                                {copiedSenha ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                               </button>
                             </div>
                           </div>
-
-                          {/* Countdown Timer Warning */}
-                          <div className={`p-4 rounded-xl border flex items-center gap-4 ${
-                            secondsLeft > 0 
-                              ? 'bg-rose-500/10 border-rose-500/20 text-rose-200' 
-                              : 'bg-zinc-950 border-zinc-850 text-zinc-400'
-                          }`}>
+                          <div className={`p-4 rounded-xl border flex items-center gap-4 ${secondsLeft > 0 ? 'bg-rose-500/10 border-rose-500/20 text-rose-200' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
                             <div className={`p-2.5 rounded-lg bg-zinc-900 flex items-center justify-center ${secondsLeft > 0 ? 'text-rose-500 animate-pulse' : 'text-zinc-600'}`}>
                               <Clock className="w-5 h-5" />
                             </div>
                             <div className="flex-grow">
-                              <h5 className="text-sm font-bold">
-                                {secondsLeft > 0 
-                                  ? 'Aten��o! Entre na sala agora!' 
-                                  : 'Contagem regressiva encerrada.'}
-                              </h5>
-                              <p className="text-xs text-zinc-500 font-medium mt-0.5">
-                                {secondsLeft > 0 
-                                  ? 'A partida come�ar� em breve. Certifique-se de estar logado na sala.' 
-                                  : 'O administrador deve iniciar a partida a qualquer momento.'}
-                              </p>
+                              <h5 className="text-sm font-bold">{secondsLeft > 0 ? 'Atencao! Entre na sala agora!' : 'Contagem regressiva encerrada.'}</h5>
+                              <p className="text-xs text-zinc-500 font-medium mt-0.5">{secondsLeft > 0 ? 'A partida comecara em breve.' : 'O administrador deve iniciar a partida a qualquer momento.'}</p>
                             </div>
                             {secondsLeft > 0 && (
                               <div className="text-right">
-                                <span className="text-2xl font-mono font-black text-rose-500 tracking-wider">
-                                  {formatTime(secondsLeft)}
-                                </span>
+                                <span className="text-2xl font-mono font-black text-rose-500 tracking-wider">{formatTime(secondsLeft)}</span>
                               </div>
                             )}
                           </div>
                         </div>
                       ) : (
-                        /* Registered but admin hasn't released credentials yet */
                         <div className="p-5 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 text-center space-y-2">
                           <Gamepad2 className="w-8 h-8 text-zinc-600 mx-auto animate-bounce" />
-                          <h5 className="text-sm font-bold text-zinc-300">Sala em Prepara��o</h5>
+                          <h5 className="text-sm font-bold text-zinc-300">Sala em Preparacao</h5>
                           <p className="text-xs text-zinc-500 max-w-sm mx-auto leading-relaxed">
-                            Voc��j� est� inscrito! O organizador liberar� o ID e a Senha da sala assim que a queda estiver lotada ou programada para come�ar.
+                            Voce ja esta inscrito! O organizador liberara o ID e a Senha da sala assim que a queda estiver pronta para comecar.
                           </p>
                           <div className="pt-2">
-                            <button
-                              onClick={() => fetchQuedaStatus()}
-                              className="px-4 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-bold text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer"
-                            >
+                            <button onClick={() => fetchQuedaStatus()}
+                              className="px-4 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] font-bold text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer">
                               Verificar Sala
                             </button>
                           </div>
@@ -400,62 +277,47 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                       )}
                     </div>
                   )}
-
                 </div>
               )
             )}
           </div>
 
-          {/* Historical Stats Panel */}
+          {/* Estatisticas */}
           {historyData && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              
               <div className="p-4 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900/40 to-zinc-950/40 flex items-center justify-between shadow-md">
                 <div className="space-y-0.5">
                   <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Ganhos Acumulados</span>
-                  <h4 className="text-lg font-black text-accent-cyan font-mono">
-                    R$ {historyData.totalEarnings.toFixed(2).replace('.', ',')}
-                  </h4>
+                  <h4 className="text-lg font-black text-accent-cyan font-mono">R$ {historyData.totalEarnings.toFixed(2).replace('.', ',')}</h4>
                 </div>
               </div>
-
               <div className="p-4 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900/40 to-zinc-950/40 flex items-center justify-between shadow-md">
                 <div className="space-y-0.5">
                   <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Kills de Carreira</span>
-                  <h4 className="text-lg font-black text-accent-orange font-mono">
-                    {historyData.totalKills}
-                  </h4>
+                  <h4 className="text-lg font-black text-accent-orange font-mono">{historyData.totalKills}</h4>
                 </div>
               </div>
-
               <div className="p-4 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900/40 to-zinc-950/40 flex items-center justify-between shadow-md">
                 <div className="space-y-0.5">
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Quedas Conclu�das</span>
-                  <h4 className="text-lg font-black text-primary font-mono">
-                    {historyData.totalMatches}
-                  </h4>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Quedas Concluidas</span>
+                  <h4 className="text-lg font-black text-primary font-mono">{historyData.totalMatches}</h4>
                 </div>
               </div>
-
               <div className="p-4 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900/40 to-zinc-950/40 flex items-center justify-between shadow-md">
                 <div className="space-y-0.5">
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Rank M�dio</span>
-                  <h4 className="text-lg font-black text-purple-400 font-mono">
-                    {historyData.averagePlacement > 0 ? `${historyData.averagePlacement}�` : '-'}
-                  </h4>
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Rank Medio</span>
+                  <h4 className="text-lg font-black text-purple-400 font-mono">{historyData.averagePlacement > 0 ? `${historyData.averagePlacement}o` : '-'}</h4>
                 </div>
               </div>
-
             </div>
           )}
 
-          {/* Matches History Section */}
+          {/* Historico de partidas */}
           <div className="space-y-3">
             <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
               <Award className="w-5 h-5 text-primary" />
-              Suas Pontua��es Anteriores
+              Suas Pontuacoes Anteriores
             </h3>
-
             <div className="rounded-2xl border border-zinc-800 bg-panel-bg/40 backdrop-blur-md overflow-hidden shadow-xl">
               {loadingHistory ? (
                 <div className="py-8 flex justify-center"><Spinner size="sm" /></div>
@@ -465,9 +327,9 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                     <thead>
                       <tr className="border-b border-zinc-800 bg-zinc-900/50">
                         <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Queda #</th>
-                        <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Coloca��o</th>
+                        <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Colocacao</th>
                         <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 text-right">Abates</th>
-                        <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 text-right">Premia��o</th>
+                        <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 text-right">Premiacao</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-900">
@@ -475,9 +337,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                         <tr key={h.numero_queda} className="hover:bg-zinc-900/30 transition-colors">
                           <td className="px-5 py-3 font-bold text-xs text-zinc-300">Queda {h.numero_queda}</td>
                           <td className="px-5 py-3">
-                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${getPlacementBadge(h.colocacao)}`}>
-                              {h.colocacao}� lugar
-                            </span>
+                            <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${getPlacementBadge(h.colocacao)}`}>{h.colocacao}o lugar</span>
                           </td>
                           <td className="px-5 py-3 text-right text-xs text-zinc-300">{h.abates}</td>
                           <td className={`px-5 py-3 text-right font-bold text-xs font-mono ${h.premio > 0 ? 'text-accent-cyan' : 'text-zinc-500'}`}>
@@ -490,36 +350,33 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                 </div>
               ) : (
                 <div className="p-6 text-center text-zinc-500 text-xs">
-                  Voc� ainda n�o possui quedas pontuadas registradas neste campeonato.
+                  Voce ainda nao possui quedas pontuadas registradas neste campeonato.
                 </div>
               )}
             </div>
           </div>
-
         </div>
 
-        {/* RIGHT COLUMN: DIGITAL WALLET & PIX DETAILS (4cols) */}
-                {/* RIGHT COLUMN: DIGITAL WALLET & PIX (4cols) */}
-                <div className="lg:col-span-4 space-y-6">
-                  <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-                        <Wallet className="w-4 h-4 text-primary" />
-                        Carteira Digital
-                      </h4>
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    </div>
-                    <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 text-center space-y-1">
-                      <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Saldo Dispon��vel</span>
-                      <h3 className="text-3xl font-black text-white font-mono">
-                        R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}
-                      </h3>
-                    </div>
-                    <div className="border-t border-zinc-800" />
-                    <PixDeposito jogadorId={currentUser.id} />
-                  </div>
-                </div>
-
+        {/* Coluna direita - Carteira */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-primary" />
+                Carteira Digital
+              </h4>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+            <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 text-center space-y-1">
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Saldo Disponivel</span>
+              <h3 className="text-3xl font-black text-white font-mono">
+                R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}
+              </h3>
+            </div>
+            <div className="border-t border-zinc-800" />
+            <PixDeposito jogadorId={currentUser.id} />
+          </div>
+        </div>
       </div>
     </div>
   );
