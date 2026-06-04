@@ -1,20 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import api from '../services/api';
-
-interface Jogador {
-  id: number;
-  nome: string;
-  nick: string;
-  saldo: number;
-  is_admin: boolean;
-}
+import { apiService } from '../services/api';
+import type { Jogador } from '../services/api';
 
 interface AuthContextData {
   jogador: Jogador | null;
   isAuthenticated: boolean;
   isAdmin: boolean;
-  login: (nick: string, senha: string) => Promise<boolean>;
+  login: (nick: string, senha: string) => Promise<Jogador>;
   logout: () => void;
+  updateJogador: (user: Jogador) => void;
   loading: boolean;
 }
 
@@ -27,50 +21,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const isAuthenticated = !!jogador;
   const isAdmin = jogador?.is_admin || false;
 
+  // FIX 1.3: usar as mesmas chaves que App.tsx (currentUser + access_token)
   useEffect(() => {
     const token = localStorage.getItem('access_token');
-    const savedUser = localStorage.getItem('jogador');
+    const savedUser = localStorage.getItem('currentUser');
 
     if (token && savedUser) {
       try {
         setJogador(JSON.parse(savedUser));
       } catch (e) {
         localStorage.removeItem('access_token');
-        localStorage.removeItem('jogador');
+        localStorage.removeItem('currentUser');
       }
     }
     setLoading(false);
   }, []);
 
-  const login = async (nick: string, senha: string): Promise<boolean> => {
-    try {
-      const response = await api.post('/auth/login', { nick, senha });
-      
-      const { access_token, jogador: userData } = response.data;
-      
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('jogador', JSON.stringify(userData));
-      
-      setJogador(userData);
-      return true;
-    } catch (error: any) {
-      console.error("Erro no login:", error.response?.data || error);
-      return false;
-    }
+  const login = async (nick: string, senha: string): Promise<Jogador> => {
+    // FIX 1.3: usar apiService unificado em vez de fetch direto
+    const user = await apiService.loginJogador(nick, senha);
+    setJogador(user);
+    return user;
   };
 
   const logout = () => {
     localStorage.removeItem('access_token');
-    localStorage.removeItem('jogador');
+    localStorage.removeItem('currentUser');
     setJogador(null);
-    window.location.href = '/login';
+  };
+
+  const updateJogador = (user: Jogador) => {
+    setJogador(user);
+    localStorage.setItem('currentUser', JSON.stringify(user));
   };
 
   return (
-    <AuthContext.Provider value={{ jogador, isAuthenticated, isAdmin, login, logout, loading }}>
+    <AuthContext.Provider value={{ jogador, isAuthenticated, isAdmin, login, logout, updateJogador, loading }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth deve ser usado dentro de um AuthProvider');
+  }
+  return context;
+};
