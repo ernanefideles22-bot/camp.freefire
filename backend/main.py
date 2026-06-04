@@ -11,7 +11,12 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 # ====================== CONFIG JWT ======================
-SECRET_KEY = os.environ.get("SECRET_KEY", "chave-secreta-temporaria-mude-depois")
+# FIX 1.2: SECRET_KEY deve ser definida via variavel de ambiente
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY nao configurada. Defina no Railway antes de iniciar."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 7 * 24 * 60
 
@@ -22,7 +27,16 @@ security = HTTPBearer()
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR}/campeonato_freefire.db")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {})
+# FIX 1.7: corrigir dialeto para Railway PostgreSQL
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+pg8000://", 1)
+elif DATABASE_URL.startswith("postgresql://") and "pg8000" not in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+pg8000://", 1)
+
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -64,10 +78,16 @@ def obter_usuario_atual(credentials: HTTPAuthorizationCredentials = Depends(secu
         user_id = int(payload.get("sub"))
         jogador = db.query(JogadorModel).filter(JogadorModel.id == user_id).first()
         if not jogador:
-            raise HTTPException(404, "Usuário não encontrado")
+            raise HTTPException(404, "Usuario nao encontrado")
         return jogador
     except Exception:
-        raise HTTPException(401, "Token inválido ou expirado")
+        raise HTTPException(401, "Token invalido ou expirado")
+
+# FIX 2.1: guarda de rota para endpoints administrativos
+def require_admin(jogador: JogadorModel = Depends(obter_usuario_atual)):
+    if not jogador.is_admin:
+        raise HTTPException(403, "Acesso restrito ao administrador.")
+    return jogador
 
 # ====================== SCHEMAS ======================
 class JogadorCreate(BaseModel):
@@ -89,9 +109,15 @@ class JogadorResponse(BaseModel):
 # ====================== APP ======================
 app = FastAPI(title="Campeonato Free Fire")
 
+# FIX 2.2: CORS restritivo - aceitar apenas origens configuradas
+ALLOWED_ORIGINS = os.environ.get(
+    "ALLOWED_ORIGINS",
+    "https://camp-freefire.vercel.app"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -101,14 +127,14 @@ app.add_middleware(
 @app.post("/auth/cadastro", response_model=JogadorResponse)
 def cadastrar(jogador: JogadorCreate, db: Session = Depends(get_db)):
     if db.query(JogadorModel).filter(JogadorModel.nick == jogador.nick).first():
-        raise HTTPException(400, "Nick já existe")
-    
+        raise HTTPException(400, "Nick ja existe")
+
     novo = JogadorModel(
         nome=jogador.nome,
         nick=jogador.nick,
         senha_hash=hash_senha(jogador.senha),
         saldo=0.0,
-        is_admin = db.query(JogadorModel).count() == 0
+        is_admin=db.query(JogadorModel).count() == 0
     )
     db.add(novo)
     db.commit()
@@ -120,7 +146,7 @@ def login(dados: JogadorLogin, db: Session = Depends(get_db)):
     jogador = db.query(JogadorModel).filter(JogadorModel.nick == dados.nick).first()
     if not jogador or not verificar_senha(dados.senha, jogador.senha_hash):
         raise HTTPException(401, "Nick ou senha incorretos")
-    
+
     token = criar_access_token({"sub": str(jogador.id)})
     return {"access_token": token, "token_type": "bearer", "jogador": jogador}
 
@@ -128,4 +154,4 @@ def login(dados: JogadorLogin, db: Session = Depends(get_db)):
 def me(jogador: JogadorModel = Depends(obter_usuario_atual)):
     return jogador
 
-print("🚀 Backend JWT iniciado!")
+print("Backend JWT iniciado com sucesso!")
