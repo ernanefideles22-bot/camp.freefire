@@ -66,8 +66,6 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
     };
   }, [loadData]);
 
-    return () => clearInterval(timer);
-  }, [loadData]);
 
   const handleManualRefresh = () => {
     loadData(true);
