@@ -241,13 +241,13 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
           <span>•</span>
           <span>1º: R$ 20</span>
           <span>•</span>
-          <span>2º: R$ 10</span>
+          <span>2º: R$ 12</span>
           <span>•</span>
-          <span>3º: R$ 7</span>
+          <span>3º: R$ 8</span>
           <span>•</span>
-          <span>4º: R$ 5</span>
+          <span>4º: R$ 6</span>
           <span>•</span>
-          <span>5º-10º: R$ 1,50</span>
+          <span>5º-10º: R$ 2,50</span>
         </p>
       </div>
     </div>
