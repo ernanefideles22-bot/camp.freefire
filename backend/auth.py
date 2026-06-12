@@ -4,8 +4,8 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import bcrypt
 from jose import jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -19,17 +19,16 @@ ALGORITHM = 'HS256'
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get('ACCESS_TOKEN_EXPIRE_MINUTES', 60 * 24))      # 24h
 REFRESH_TOKEN_EXPIRE_MINUTES = int(os.environ.get('REFRESH_TOKEN_EXPIRE_MINUTES', 60 * 24 * 30))  # 30d
 
-pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 security = HTTPBearer()
 
 
 def hash_senha(senha: str) -> str:
-    return pwd_context.hash(senha)
+    return bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
 def verificar_senha(senha_plana: str, hashed: str) -> bool:
     try:
-        return pwd_context.verify(senha_plana, hashed)
+        return bcrypt.checkpw(senha_plana.encode('utf-8'), hashed.encode('utf-8'))
     except Exception:
         return False
 

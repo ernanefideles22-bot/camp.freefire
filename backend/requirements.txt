@@ -1,13 +1,15 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-sqlalchemy==2.0.35
-pg8000==1.31.2
-pydantic==2.9.2
-python-multipart==0.0.12
-python-dotenv==1.0.1
-httpx==0.27.0
+# Dependencias da funcao serverless (Vercel, Python 3.14)
+# Versoes minimas com wheels para Python 3.14 — nada de compilar Rust no build
+fastapi>=0.118
+pydantic>=2.12
+sqlalchemy>=2.0.43
+pg8000>=1.31.2
+python-multipart>=0.0.20
+httpx>=0.27
+python-jose[cryptography]>=3.3.0
+bcrypt>=4.1
 
-# Autenticacao JWT + bcrypt
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
+# Apenas para rodar localmente
+uvicorn[standard]>=0.30
+python-dotenv>=1.0
+pytest>=8
