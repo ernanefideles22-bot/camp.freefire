@@ -111,3 +111,28 @@ CORA_KEY_B64 = (chave .key em base64)
 2. Veja STATUS GERAL — todas marcadas [x] significa que o codigo esta completo
 3. Se houver novo trabalho: criar nova secao NOVA SESSAO com as tarefas
 4. Commits com mensagem: tipo(escopo): descricao
+
+---
+
+## NOVA SESSAO — Jun 2026 (deploy Vercel + Supabase)
+
+- [x] Corrigir 7 erros TS que quebravam o build/deploy (Leaderboard, AuthContext)
+- [x] Webhook PIX: persistencia em cobrancas_pix + confirmacao via API Cora (mTLS) + idempotencia
+- [x] /pix/criar-cobranca agora exige JWT; CORA_CLIENT_ID removido do codigo
+- [x] Refresh token (/auth/refresh) + senha obrigatoria no cadastro + /auth/definir-senha
+- [x] SQLAlchemy 2.x nativo (Mapped/mapped_column, select())
+- [x] Gemini via REST (modelo configuravel, default gemini-2.5-flash)
+- [x] Backend convertido p/ Vercel serverless (api/index.py + vercel.json) — Railway aposentado
+- [x] Banco: Supabase (ref bbisshfqavavfhlpdanr), migration schema_inicial_camp_freefire aplicada
+- [x] 15 testes pytest (backend/tests/)
+
+### Variaveis de ambiente no Vercel (Settings > Environment Variables):
+SECRET_KEY        = (openssl rand -hex 32)
+DATABASE_URL      = postgresql://postgres.bbisshfqavavfhlpdanr:[SENHA]@aws-0-us-west-2.pooler.supabase.com:6543/postgres
+ALLOWED_ORIGINS   = https://camp-freefire.vercel.app
+GEMINI_API_KEY    = (https://aistudio.google.com/apikey)
+CORA_CLIENT_ID    = (painel Cora)
+CORA_CERT_B64     = (certificado .crt em base64)
+CORA_KEY_B64      = (chave .key em base64)
+
+### Webhook Cora: cadastrar endpoint https://camp-freefire.vercel.app/api/pix/webhook
