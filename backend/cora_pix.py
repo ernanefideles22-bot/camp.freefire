@@ -32,30 +32,43 @@ CORA_BASE = os.getenv('CORA_BASE_URL', 'https://matls-clients.api.cora.com.br')
 CORA_AUTH_URL = CORA_BASE + '/token'
 
 _token_cache: dict = {}
+_cert_paths: dict = {}
+_http_client = None
 PAID_STATUSES = {'PAID', 'COMPLETE', 'COMPLETED', 'SETTLED'}
 
 
 def _get_cert_files():
+    """Grava os certificados mTLS em arquivos temporarios UMA vez e reutiliza."""
     if not (CORA_CLIENT_ID and CORA_CERT_B64 and CORA_KEY_B64):
         raise HTTPException(503, 'Integracao Cora nao configurada (CORA_CLIENT_ID, CORA_CERT_B64, CORA_KEY_B64).')
+    if _cert_paths.get('cert') and os.path.exists(_cert_paths['cert']) and os.path.exists(_cert_paths['key']):
+        return _cert_paths['cert'], _cert_paths['key']
     cf = tempfile.NamedTemporaryFile(suffix='.crt', delete=False)
     kf = tempfile.NamedTemporaryFile(suffix='.key', delete=False)
-    cf.write(base64.b64decode(CORA_CERT_B64)); cf.flush()
-    kf.write(base64.b64decode(CORA_KEY_B64)); kf.flush()
+    cf.write(base64.b64decode(CORA_CERT_B64)); cf.flush(); cf.close()
+    kf.write(base64.b64decode(CORA_KEY_B64)); kf.flush(); kf.close()
+    _cert_paths['cert'], _cert_paths['key'] = cf.name, kf.name
     return cf.name, kf.name
+
+
+def _get_client():
+    """Reutiliza um unico AsyncClient mTLS (handshake mTLS e caro)."""
+    global _http_client
+    if _http_client is None:
+        _http_client = httpx.AsyncClient(cert=_get_cert_files(), verify=True, timeout=30)
+    return _http_client
 
 
 async def get_cora_token() -> str:
     now = datetime.now(timezone.utc)
     if _token_cache.get('token') and _token_cache.get('expires_at', now) > now:
         return _token_cache['token']
-    cert = _get_cert_files()
-    async with httpx.AsyncClient(cert=cert, verify=True, timeout=30) as c:
-        resp = await c.post(
-            CORA_AUTH_URL,
-            data={'grant_type': 'client_credentials', 'client_id': CORA_CLIENT_ID},
-            headers={'Content-Type': 'application/x-www-form-urlencoded'},
-        )
+    c = _get_client()
+    resp = await c.post(
+        CORA_AUTH_URL,
+        data={'grant_type': 'client_credentials', 'client_id': CORA_CLIENT_ID},
+        headers={'Content-Type': 'application/x-www-form-urlencoded'},
+    )
     if resp.status_code != 200:
         raise HTTPException(502, 'Erro de autenticacao na Cora: ' + resp.text[:300])
     data = resp.json()
@@ -67,10 +80,9 @@ async def get_cora_token() -> str:
 async def _cora_get_invoice(invoice_id: str) -> dict:
     """Busca a invoice direto na Cora (fonte de verdade, via mTLS)."""
     tkn = await get_cora_token()
-    cert = _get_cert_files()
-    async with httpx.AsyncClient(cert=cert, verify=True, timeout=30) as c:
-        resp = await c.get(CORA_BASE + '/v2/invoices/' + invoice_id,
-                           headers={'Authorization': 'Bearer ' + tkn})
+    c = _get_client()
+    resp = await c.get(CORA_BASE + '/v2/invoices/' + invoice_id,
+                       headers={'Authorization': 'Bearer ' + tkn})
     if resp.status_code != 200:
         raise HTTPException(404, 'Cobranca nao encontrada na Cora')
     return resp.json()
@@ -115,7 +127,7 @@ async def criar_cobranca_pix(
     if body.valor > 1000:
         raise HTTPException(400, 'Valor maximo por deposito: R$ 1.000,00')
     tkn = await get_cora_token()
-    cert = _get_cert_files()
+    c = _get_client()
     now = datetime.now(timezone.utc)
     code = f'DEP-{jogador.id}-{int(now.timestamp())}'
     payload = {
@@ -135,11 +147,12 @@ async def criar_cobranca_pix(
             },
         },
     }
-    async with httpx.AsyncClient(cert=cert, verify=True, timeout=30) as c:
-        resp = await c.post(
-            CORA_BASE + '/v2/invoices', json=payload,
-            headers={'Authorization': 'Bearer ' + tkn, 'Idempotency-Key': str(uuid.uuid4())},
-        )
+    # Idempotency-Key derivada do code: reenvio da MESMA transacao nao duplica fatura
+    idem_key = str(uuid.uuid5(uuid.NAMESPACE_URL, 'cora-invoice:' + code))
+    resp = await c.post(
+        CORA_BASE + '/v2/invoices', json=payload,
+        headers={'Authorization': 'Bearer ' + tkn, 'Idempotency-Key': idem_key},
+    )
     if resp.status_code not in (200, 201):
         raise HTTPException(502, f'Erro Cora ({resp.status_code}): {resp.text[:300]}')
     data = resp.json()
@@ -157,14 +170,16 @@ async def criar_cobranca_pix(
     qr_image = pix.get('image_base64') or pix.get('qr_code_image') or ''
     if not qr_code:
         import asyncio
-        await asyncio.sleep(2)
-        async with httpx.AsyncClient(cert=cert, verify=True, timeout=30) as c2:
-            r2 = await c2.get(CORA_BASE + f'/v2/invoices/{invoice_id}/pix',
-                              headers={'Authorization': 'Bearer ' + tkn})
-        if r2.status_code == 200:
-            p2 = r2.json()
-            qr_code = p2.get('emv') or p2.get('qr_code') or p2.get('copy_paste') or ''
-            qr_image = p2.get('image_base64') or p2.get('qr_code_image') or ''
+        for _ in range(3):  # tentativas curtas em vez de bloquear 2s
+            await asyncio.sleep(0.4)
+            r2 = await c.get(CORA_BASE + f'/v2/invoices/{invoice_id}/pix',
+                             headers={'Authorization': 'Bearer ' + tkn})
+            if r2.status_code == 200:
+                p2 = r2.json()
+                qr_code = p2.get('emv') or p2.get('qr_code') or p2.get('copy_paste') or ''
+                qr_image = p2.get('image_base64') or p2.get('qr_code_image') or ''
+            if qr_code:
+                break
     return CobrancaResponse(
         invoice_id=invoice_id, qr_code=qr_code, qr_code_image=qr_image,
         valor=body.valor, status=data.get('status', 'PENDING'),
@@ -182,7 +197,8 @@ async def pix_webhook(request: Request, db: Session = Depends(get_db)):
     except Exception:
         raise HTTPException(400, 'JSON invalido')
     data = body.get('data', body) if isinstance(body, dict) else {}
-    invoice_id = (data.get('id') or data.get('invoice_id')
+    invoice_id = (request.headers.get('webhook-resource-id')
+                  or data.get('id') or data.get('invoice_id')
                   or body.get('id') or body.get('invoice_id') or '')
     if not invoice_id:
         raise HTTPException(400, 'invoice_id ausente no webhook')
