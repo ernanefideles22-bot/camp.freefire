@@ -24,6 +24,7 @@ class JogadorModel(Base):
     resultados: Mapped[List['ResultadoQuedaModel']] = relationship(back_populates='jogador')
     depositos: Mapped[List['DepositoRequisicaoModel']] = relationship(back_populates='jogador')
     cobrancas_pix: Mapped[List['CobrancaPixModel']] = relationship(back_populates='jogador')
+    saques: Mapped[List['SaqueRequisicaoModel']] = relationship(back_populates='jogador')
 
 
 class QuedaModel(Base):
@@ -67,6 +68,21 @@ class DepositoRequisicaoModel(Base):
     status: Mapped[str] = mapped_column(String, default='pendente')
     data_hora: Mapped[str] = mapped_column(String, default=lambda: utcnow().strftime('%d/%m/%Y %H:%M'))
     jogador: Mapped['JogadorModel'] = relationship(back_populates='depositos')
+
+
+class SaqueRequisicaoModel(Base):
+    """Solicitacao de saque. O valor e debitado do saldo na criacao (reserva);
+    se rejeitada, o valor e devolvido."""
+    __tablename__ = 'saques_requisicao'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False)
+    valor: Mapped[float] = mapped_column(Float, nullable=False)
+    chave_pix: Mapped[str] = mapped_column(String, nullable=False)
+    tipo_chave: Mapped[str] = mapped_column(String, nullable=False, default='cpf')  # cpf|email|telefone|aleatoria
+    status: Mapped[str] = mapped_column(String, default='pendente', index=True)  # pendente|pago|rejeitado
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    processado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    jogador: Mapped['JogadorModel'] = relationship(back_populates='saques')
 
 
 class CobrancaPixModel(Base):

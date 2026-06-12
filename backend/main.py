@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from database import engine, get_db, Base
 from models import (JogadorModel, QuedaModel, InscricaoModel,
-                    ResultadoQuedaModel, DepositoRequisicaoModel)
+                    ResultadoQuedaModel, DepositoRequisicaoModel, SaqueRequisicaoModel)
 from auth import (hash_senha, verificar_senha, criar_access_token, criar_refresh_token,
                   decodificar_token, obter_usuario_atual, require_admin)
 
@@ -439,6 +439,95 @@ def solicitar_deposito(valor: Optional[float] = None,
     db.commit()
     db.refresh(dep)
     return {'message': 'Solicitacao de deposito registrada.', 'id': dep.id}
+
+
+# ====================== SAQUES (manuais, pagos pelo admin via Cora) ======================
+SAQUE_MINIMO = float(os.environ.get('SAQUE_MINIMO', '5.0'))
+TIPOS_CHAVE_PIX = {'cpf', 'email', 'telefone', 'aleatoria'}
+
+
+class SolicitarSaqueBody(BaseModel):
+    valor: float
+    chave_pix: str
+    tipo_chave: str = 'cpf'
+
+
+class ProcessarSaqueBody(BaseModel):
+    status: str  # pago | rejeitado
+
+
+def _saque_dict(s: SaqueRequisicaoModel) -> dict:
+    return {'id': s.id, 'jogador_id': s.jogador_id,
+            'jogador_nick': s.jogador.nick if s.jogador else None,
+            'valor': s.valor, 'chave_pix': s.chave_pix, 'tipo_chave': s.tipo_chave,
+            'status': s.status,
+            'criado_em': s.criado_em.strftime('%d/%m/%Y %H:%M') if s.criado_em else None}
+
+
+@app.post('/saques/solicitar')
+def solicitar_saque(body: SolicitarSaqueBody,
+                    jogador: JogadorModel = Depends(obter_usuario_atual),
+                    db: Session = Depends(get_db)):
+    if body.valor < SAQUE_MINIMO:
+        raise HTTPException(400, f'Saque minimo: R$ {SAQUE_MINIMO:.2f}')
+    if body.valor > jogador.saldo:
+        raise HTTPException(400, 'Saldo insuficiente')
+    chave = body.chave_pix.strip()
+    if not chave or len(chave) > 140:
+        raise HTTPException(400, 'Chave PIX invalida')
+    if body.tipo_chave not in TIPOS_CHAVE_PIX:
+        raise HTTPException(400, "Tipo de chave deve ser: cpf, email, telefone ou aleatoria")
+    pendente = db.scalar(select(SaqueRequisicaoModel).where(
+        SaqueRequisicaoModel.jogador_id == jogador.id,
+        SaqueRequisicaoModel.status == 'pendente'))
+    if pendente:
+        raise HTTPException(400, 'Voce ja tem um saque pendente. Aguarde o processamento.')
+    # Debita na solicitacao (reserva) para impedir gasto duplo do saldo
+    jogador.saldo -= body.valor
+    saque = SaqueRequisicaoModel(jogador_id=jogador.id, valor=body.valor,
+                                 chave_pix=chave, tipo_chave=body.tipo_chave, status='pendente')
+    db.add(saque)
+    db.commit()
+    db.refresh(saque)
+    return {'message': f'Saque de R$ {body.valor:.2f} solicitado. O valor foi reservado e sera pago via PIX.',
+            'id': saque.id, 'saldo_restante': jogador.saldo}
+
+
+@app.get('/saques/meus')
+def meus_saques(jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    saques = db.scalars(select(SaqueRequisicaoModel)
+                        .where(SaqueRequisicaoModel.jogador_id == jogador.id)
+                        .order_by(SaqueRequisicaoModel.id.desc())).all()
+    return [_saque_dict(s) for s in saques]
+
+
+@app.get('/saques/pendentes')
+def saques_pendentes(_admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    saques = db.scalars(select(SaqueRequisicaoModel)
+                        .where(SaqueRequisicaoModel.status == 'pendente')
+                        .order_by(SaqueRequisicaoModel.id)).all()
+    return [_saque_dict(s) for s in saques]
+
+
+@app.post('/saques/{saque_id}/processar')
+def processar_saque(saque_id: int, body: ProcessarSaqueBody,
+                    _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    if body.status not in ('pago', 'rejeitado'):
+        raise HTTPException(400, "Status deve ser 'pago' ou 'rejeitado'")
+    saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
+    if not saque:
+        raise HTTPException(404, 'Saque nao encontrado')
+    if saque.status != 'pendente':
+        raise HTTPException(400, 'Saque ja processado')
+    saque.status = body.status
+    from models import utcnow
+    saque.processado_em = utcnow()
+    if body.status == 'rejeitado':
+        jog = db.scalar(select(JogadorModel).where(JogadorModel.id == saque.jogador_id))
+        if jog:
+            jog.saldo += saque.valor  # devolve a reserva
+    db.commit()
+    return {'message': f'Saque {saque_id} marcado como {body.status}.'}
 
 
 # ====================== OCR + AGENTE IA ======================

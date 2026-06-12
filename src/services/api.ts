@@ -95,6 +95,17 @@ export interface ResultadoQuedaInput {
   abates: number;
 }
 
+export interface SaqueRequisicao {
+  id: number;
+  jogador_id: number;
+  jogador_nick?: string;
+  valor: number;
+  chave_pix: string;
+  tipo_chave: string;
+  status: string;
+  criado_em: string | null;
+}
+
 export interface DepositoRequisicao {
   id: number;
   jogador_id: number;
@@ -203,6 +214,27 @@ export const apiService = {
     const res = await api.post('/ocr/resultado', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return res.data;
+  },
+
+  // SAQUES
+  async solicitarSaque(valor: number, chavePix: string, tipoChave: string): Promise<any> {
+    const res = await api.post('/saques/solicitar', { valor, chave_pix: chavePix, tipo_chave: tipoChave });
+    return res.data;
+  },
+
+  async meusSaques(): Promise<SaqueRequisicao[]> {
+    const res = await api.get('/saques/meus');
+    return res.data as SaqueRequisicao[];
+  },
+
+  async obterSaquesPendentes(): Promise<SaqueRequisicao[]> {
+    const res = await api.get('/saques/pendentes');
+    return res.data as SaqueRequisicao[];
+  },
+
+  async processarSaque(id: number, status: 'pago' | 'rejeitado'): Promise<any> {
+    const res = await api.post(`/saques/${id}/processar`, { status });
     return res.data;
   },
 

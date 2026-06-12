@@ -255,3 +255,57 @@ def test_ocr_resultado(monkeypatch):
     assert res[0]['jogador_nick'] == 'player1'
     assert res[0]['colocacao'] == 2
     assert res[0]['jogador_id'] is not None
+
+
+# ====================== SAQUES ======================
+
+def test_saque_fluxo_completo():
+    tok = _login('player1', 'secret123')['access_token']
+    admin_tok = _login('admin1', 'secret123')['access_token']
+    saldo_inicial = client.get('/me', headers=_auth(tok)).json()['saldo']
+
+    # valor abaixo do minimo -> 400
+    r = client.post('/saques/solicitar', json={'valor': 1.0, 'chave_pix': '11999990000', 'tipo_chave': 'telefone'}, headers=_auth(tok))
+    assert r.status_code == 400
+
+    # acima do saldo -> 400
+    r = client.post('/saques/solicitar', json={'valor': saldo_inicial + 100, 'chave_pix': '11999990000', 'tipo_chave': 'telefone'}, headers=_auth(tok))
+    assert r.status_code == 400
+
+    # tipo de chave invalido -> 400
+    r = client.post('/saques/solicitar', json={'valor': 5.0, 'chave_pix': 'x', 'tipo_chave': 'cnpj'}, headers=_auth(tok))
+    assert r.status_code == 400
+
+    # solicitacao valida -> debita na hora (reserva)
+    r = client.post('/saques/solicitar', json={'valor': 10.0, 'chave_pix': '123.456.789-01', 'tipo_chave': 'cpf'}, headers=_auth(tok))
+    assert r.status_code == 200, r.text
+    saque_id = r.json()['id']
+    assert client.get('/me', headers=_auth(tok)).json()['saldo'] == saldo_inicial - 10.0
+
+    # segundo saque com um pendente -> 400
+    r = client.post('/saques/solicitar', json={'valor': 5.0, 'chave_pix': 'a@b.com', 'tipo_chave': 'email'}, headers=_auth(tok))
+    assert r.status_code == 400
+
+    # jogador ve o proprio saque
+    r = client.get('/saques/meus', headers=_auth(tok))
+    assert r.status_code == 200 and r.json()[0]['status'] == 'pendente'
+
+    # jogador comum nao ve pendentes nem processa
+    assert client.get('/saques/pendentes', headers=_auth(tok)).status_code == 403
+    assert client.post(f'/saques/{saque_id}/processar', json={'status': 'pago'}, headers=_auth(tok)).status_code == 403
+
+    # admin rejeita -> devolve o valor
+    r = client.post(f'/saques/{saque_id}/processar', json={'status': 'rejeitado'}, headers=_auth(admin_tok))
+    assert r.status_code == 200
+    assert client.get('/me', headers=_auth(tok)).json()['saldo'] == saldo_inicial
+
+    # novo saque, admin paga -> valor nao volta
+    r = client.post('/saques/solicitar', json={'valor': 8.0, 'chave_pix': 'a@b.com', 'tipo_chave': 'email'}, headers=_auth(tok))
+    saque2 = r.json()['id']
+    r = client.post(f'/saques/{saque2}/processar', json={'status': 'pago'}, headers=_auth(admin_tok))
+    assert r.status_code == 200
+    assert client.get('/me', headers=_auth(tok)).json()['saldo'] == saldo_inicial - 8.0
+
+    # reprocessar -> 400
+    r = client.post(f'/saques/{saque2}/processar', json={'status': 'rejeitado'}, headers=_auth(admin_tok))
+    assert r.status_code == 400

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserPlus, Calendar, Plus, Trash2, Send, Key, Lock, Check, X, Upload, AlertTriangle, RefreshCw, Landmark } from 'lucide-react';
 import { apiService, getPremioPorColocacao } from '../services/api';
-import type { Jogador, ResultadoQuedaInput, DepositoRequisicao } from '../services/api';
+import type { Jogador, ResultadoQuedaInput, DepositoRequisicao, SaqueRequisicao } from '../services/api';
 import { Spinner } from './Spinner';
 import { AdminAgentChat } from './AdminAgentChat';
 
@@ -36,6 +36,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [depositos, setDepositos] = useState<DepositoRequisicao[]>([]);
   const [loadingDepositos, setLoadingDepositos] = useState<boolean>(false);
+  const [saques, setSaques] = useState<SaqueRequisicao[]>([]);
+  const [loadingSaques, setLoadingSaques] = useState<boolean>(false);
   const [players, setPlayers] = useState<Jogador[]>([]);
   const [loadingPlayersList, setLoadingPlayersList] = useState<boolean>(false);
 
@@ -46,6 +48,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     finally { setLoadingPlayersList(false); }
   };
 
+  const fetchSaques = async () => {
+    setLoadingSaques(true);
+    try { const data = await apiService.obterSaquesPendentes(); setSaques(data); }
+    catch { /* silencioso */ }
+    finally { setLoadingSaques(false); }
+  };
+
   const fetchDepositos = async () => {
     setLoadingDepositos(true);
     try { const data = await apiService.obterDepositosPendentes(); setDepositos(data); }
@@ -54,8 +63,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   };
 
   useEffect(() => {
-    fetchPlayers(); fetchDepositos();
-    const interval = setInterval(fetchDepositos, 20000);
+    fetchPlayers(); fetchDepositos(); fetchSaques();
+    const interval = setInterval(() => { fetchDepositos(); fetchSaques(); }, 20000);
     return () => clearInterval(interval);
   }, []);
 
@@ -100,6 +109,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
       setQuedaParaCancelar(''); await fetchPlayers();
     } catch (err: any) { onAddToast('error', 'Falha ao Cancelar', err.message || 'Não foi possível cancelar e reembolsar.'); }
     finally { setLoadingCancelar(false); }
+  };
+
+  const handleProcessarSaque = async (saqueId: number, status: 'pago' | 'rejeitado') => {
+    try {
+      const res = await apiService.processarSaque(saqueId, status);
+      onAddToast(status === 'pago' ? 'success' : 'warning', status === 'pago' ? 'Saque Pago' : 'Saque Rejeitado', res.message || `Saque #${saqueId} ${status}.`);
+      await fetchSaques(); await fetchPlayers();
+    } catch (err: any) {
+      onAddToast('error', 'Erro ao Processar Saque', err.message);
+    }
   };
 
   const handleProcessarDeposito = async (depositoId: number, status: 'aprovado' | 'rejeitado') => {
@@ -180,7 +199,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
         <button onClick={() => setActiveTab('depositos')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap relative ${activeTab === 'depositos' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
           <Landmark className="w-4 h-4 text-primary" />
           Depósitos PIX
-          {depositos.length > 0 && (<span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span></span>)}
+          {(depositos.length > 0 || saques.length > 0) && (<span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span></span>)}
         </button>
       </div>
       <div className="p-5">
@@ -308,6 +327,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                 ))}
               </div>
             )}
+
+            <div className="border-t border-zinc-800 pt-5 space-y-4">
+              <div className="flex items-center justify-between gap-4">
+                <div><h2 className="text-sm font-bold text-white flex items-center gap-2 mb-1"><Landmark className="w-4 h-4 text-amber-400" />Saques Pendentes</h2><p className="text-xs text-zinc-400">O valor já foi reservado do saldo do jogador. Pague via PIX pela sua conta Cora e marque como pago — ou rejeite para devolver o valor.</p></div>
+                <button onClick={fetchSaques} disabled={loadingSaques} className="p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer" title="Atualizar"><RefreshCw className={`w-4 h-4 ${loadingSaques ? 'animate-spin' : ''}`} /></button>
+              </div>
+              {saques.length === 0 ? (
+                <div className="border border-dashed border-zinc-800 rounded-xl p-8 text-center text-zinc-500"><p className="text-sm font-bold text-zinc-400">Nenhum saque pendente</p></div>
+              ) : (
+                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+                  {saques.map((sq) => (
+                    <div key={sq.id} className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 transition-all">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-black text-white">{sq.jogador_nick || 'Jogador'}</span><span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">#{sq.jogador_id}</span></div>
+                        <p className="text-[10px] text-zinc-500">Chave PIX ({sq.tipo_chave}): <span className="font-mono text-zinc-300 select-all">{sq.chave_pix}</span></p>
+                        <p className="text-[10px] text-zinc-600">Solicitado em: {sq.criado_em}</p>
+                      </div>
+                      <div className="flex items-center gap-4 justify-between sm:justify-end border-t sm:border-none pt-3 sm:pt-0 border-zinc-800">
+                        <div className="text-left sm:text-right"><p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Valor do Saque</p><span className="text-base font-black text-amber-400">R$ {sq.valor.toFixed(2).replace('.', ',')}</span></div>
+                        <div className="flex items-center gap-1.5">
+                          <button onClick={() => handleProcessarSaque(sq.id, 'pago')} className="px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-zinc-950 border border-emerald-500/20 hover:border-emerald-500 transition-all cursor-pointer text-xs font-bold flex items-center gap-1" title="Marcar como pago (após fazer o PIX)"><Check className="w-4 h-4" />Pago</button>
+                          <button onClick={() => handleProcessarSaque(sq.id, 'rejeitado')} className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-zinc-950 border border-rose-500/20 hover:border-rose-500 transition-all cursor-pointer" title="Rejeitar (devolve o valor ao jogador)"><X className="w-4 h-4" /></button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@ import { apiService } from '../services/api';
 import type { Jogador, SalaData, StatusQueda } from '../services/api';
 import { Spinner } from './Spinner';
 import PixDeposito from './PixDeposito';
+import PixSaque from './PixSaque';
 
 interface PlayerPortalProps {
   currentUser: Jogador;
@@ -375,6 +376,8 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
             </div>
             <div className="border-t border-zinc-800" />
             <PixDeposito jogadorId={currentUser.id} />
+            <div className="border-t border-zinc-800" />
+            <PixSaque saldo={currentUser.saldo || 0} />
           </div>
         </div>
       </div>
