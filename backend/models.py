@@ -28,6 +28,7 @@ class JogadorModel(Base):
     titular_nome: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     titular_doc: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     chave_pix: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    asaas_customer_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     inscricoes: Mapped[List['InscricaoModel']] = relationship(back_populates='jogador')
     resultados: Mapped[List['ResultadoQuedaModel']] = relationship(back_populates='jogador')
     depositos: Mapped[List['DepositoRequisicaoModel']] = relationship(back_populates='jogador')

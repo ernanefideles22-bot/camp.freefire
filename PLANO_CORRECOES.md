@@ -136,3 +136,22 @@ CORA_CERT_B64     = (certificado .crt em base64)
 CORA_KEY_B64      = (chave .key em base64)
 
 ### Webhook Cora: cadastrar endpoint https://camp-freefire.vercel.app/api/pix/webhook
+
+
+---
+
+## TROCA DE PROVEDOR DE PAGAMENTOS — Cora -> Asaas (Jun 2026)
+
+Motivo: a conta Cora pertence a outro negocio do dono; alem disso o Asaas faz
+PIX de SAIDA por chave (a Cora so transfere por agencia/conta).
+
+- backend/asaas.py substitui cora_pix.py (removido)
+- Deposito: POST /payments (billingType PIX) + GET /payments/{id}/pixQrCode
+- Webhook: valida header asaas-access-token + reconsulta a cobranca na API antes de creditar
+- Saque: POST /transfers com pixAddressKey (chave PIX) — execucao instantanea
+- Variaveis no Vercel:
+  ASAAS_API_KEY       = (painel Asaas > Integracoes > API)
+  ASAAS_WEBHOOK_TOKEN = (token que voce define ao cadastrar o webhook no painel)
+  ASAAS_BASE_URL      = https://api-sandbox.asaas.com/v3 (apenas para sandbox; apague em producao)
+- Webhook a cadastrar no painel Asaas: https://camp-freefire.vercel.app/api/pix/webhook
+  (evento: cobrancas recebidas/confirmadas; token = ASAAS_WEBHOOK_TOKEN)

@@ -113,20 +113,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
 
   const handlePagarCora = async (saqueId: number) => {
     try {
-      const res = await apiService.pagarSaqueCora(saqueId);
-      onAddToast('info', 'Transferência Iniciada', res.message || 'Abra o app da Cora e aprove o pagamento.');
+      const res = await apiService.pagarSaque(saqueId);
+      onAddToast(res.status === 'pago' ? 'success' : 'info', res.status === 'pago' ? 'Saque Pago' : 'Transferência Iniciada', res.message);
       await fetchSaques();
     } catch (err: any) {
-      onAddToast('error', 'Erro na Cora', err.message);
+      onAddToast('error', 'Erro no Pagamento', err.message);
     }
   };
 
   const handleConferirCora = async (saqueId: number) => {
     try {
-      const res = await apiService.conferirSaqueCora(saqueId);
+      const res = await apiService.conferirSaque(saqueId);
       if (res.status === 'pago') onAddToast('success', 'Saque Pago', 'Transferência confirmada pela Cora.');
       else if (res.status === 'rejeitado') onAddToast('warning', 'Transferência Falhou', res.message || 'Valor devolvido ao jogador.');
-      else onAddToast('info', 'Aguardando', res.message || 'Aprove o pagamento no app da Cora.');
+      else onAddToast('info', 'Processando', res.message || 'Transferência em processamento.');
       await fetchSaques(); await fetchPlayers();
     } catch (err: any) {
       onAddToast('error', 'Erro ao Conferir', err.message);
@@ -352,7 +352,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
 
             <div className="border-t border-zinc-800 pt-5 space-y-4">
               <div className="flex items-center justify-between gap-4">
-                <div><h2 className="text-sm font-bold text-white flex items-center gap-2 mb-1"><Landmark className="w-4 h-4 text-amber-400" />Saques Pendentes</h2><p className="text-xs text-zinc-400">O valor já foi reservado do saldo do jogador. Clique em \"Pagar via Cora\" e aprove no app — ou pague manualmente pela chave PIX e marque como pago. Rejeitar devolve o valor.</p></div>
+                <div><h2 className="text-sm font-bold text-white flex items-center gap-2 mb-1"><Landmark className="w-4 h-4 text-amber-400" />Saques Pendentes</h2><p className="text-xs text-zinc-400">O valor já foi reservado do saldo do jogador. \"Pagar PIX\" envia automaticamente pela chave cadastrada — ou pague manualmente e marque como pago. Rejeitar devolve o valor.</p></div>
                 <button onClick={fetchSaques} disabled={loadingSaques} className="p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer" title="Atualizar"><RefreshCw className={`w-4 h-4 ${loadingSaques ? 'animate-spin' : ''}`} /></button>
               </div>
               {saques.length === 0 ? (
@@ -362,7 +362,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                   {saques.map((sq) => (
                     <div key={sq.id} className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-xl border border-zinc-800 bg-zinc-950/60 hover:border-zinc-700 transition-all">
                       <div className="space-y-1 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-black text-white">{sq.jogador_nick || 'Jogador'}</span><span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">#{sq.jogador_id}</span>{sq.status === 'processando' && (<span className="text-[9px] bg-sky-500/10 text-sky-400 border border-sky-500/20 px-1.5 py-0.5 rounded-full font-bold uppercase">Aguardando aprovação no app</span>)}</div>
+                        <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-black text-white">{sq.jogador_nick || 'Jogador'}</span><span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">#{sq.jogador_id}</span>{sq.status === 'processando' && (<span className="text-[9px] bg-sky-500/10 text-sky-400 border border-sky-500/20 px-1.5 py-0.5 rounded-full font-bold uppercase">Processando</span>)}</div>
                         {sq.banco_codigo && (<p className="text-[10px] text-zinc-500">Banco {sq.banco_codigo} · Ag {sq.agencia} · CC <span className="font-mono text-zinc-300">{sq.conta}</span> · {sq.titular_nome}</p>)}
                         <p className="text-[10px] text-zinc-500">Chave PIX ({sq.tipo_chave}): <span className="font-mono text-zinc-300 select-all">{sq.chave_pix}</span></p>
                         <p className="text-[10px] text-zinc-600">Solicitado em: {sq.criado_em}</p>
@@ -370,11 +370,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                       <div className="flex items-center gap-4 justify-between sm:justify-end border-t sm:border-none pt-3 sm:pt-0 border-zinc-800">
                         <div className="text-left sm:text-right"><p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Valor do Saque</p><span className="text-base font-black text-amber-400">R$ {sq.valor.toFixed(2).replace('.', ',')}</span></div>
                         <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                          {sq.status === 'pendente' && sq.banco_codigo && (
-                            <button onClick={() => handlePagarCora(sq.id)} className="px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary text-primary hover:text-white border border-primary/30 hover:border-primary transition-all cursor-pointer text-xs font-bold" title="Inicia a transferência — você só aprova no app da Cora">Pagar via Cora</button>
+                          {sq.status === 'pendente' && (
+                            <button onClick={() => handlePagarCora(sq.id)} className="px-3 py-2 rounded-xl bg-primary/10 hover:bg-primary text-primary hover:text-white border border-primary/30 hover:border-primary transition-all cursor-pointer text-xs font-bold" title="Envia o PIX automaticamente pela chave do jogador">Pagar PIX</button>
                           )}
                           {sq.status === 'processando' && (
-                            <button onClick={() => handleConferirCora(sq.id)} className="px-3 py-2 rounded-xl bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-zinc-950 border border-sky-500/20 hover:border-sky-500 transition-all cursor-pointer text-xs font-bold" title="Consulta o status na Cora">Conferir</button>
+                            <button onClick={() => handleConferirCora(sq.id)} className="px-3 py-2 rounded-xl bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-zinc-950 border border-sky-500/20 hover:border-sky-500 transition-all cursor-pointer text-xs font-bold" title="Consulta o status da transferência">Conferir</button>
                           )}
                           <button onClick={() => handleProcessarSaque(sq.id, 'pago')} className="px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-zinc-950 border border-emerald-500/20 hover:border-emerald-500 transition-all cursor-pointer text-xs font-bold flex items-center gap-1" title="Marcar como pago (se pagou manualmente)"><Check className="w-4 h-4" />Pago</button>
                           <button onClick={() => handleProcessarSaque(sq.id, 'rejeitado')} className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-zinc-950 border border-rose-500/20 hover:border-rose-500 transition-all cursor-pointer" title="Rejeitar (devolve o valor ao jogador)"><X className="w-4 h-4" /></button>

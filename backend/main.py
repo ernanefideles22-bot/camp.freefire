@@ -134,7 +134,7 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
-from cora_pix import router as pix_router
+from asaas import router as pix_router
 app.include_router(pix_router)
 
 
@@ -503,7 +503,7 @@ TIPOS_CHAVE_PIX = {'cpf', 'email', 'telefone', 'aleatoria'}
 
 class SolicitarSaqueBody(BaseModel):
     valor: float
-    chave_pix: Optional[str] = None
+    chave_pix: str
     tipo_chave: str = 'cpf'
 
 
@@ -532,10 +532,7 @@ def solicitar_saque(body: SolicitarSaqueBody,
         raise HTTPException(400, f'Saque minimo: R$ {SAQUE_MINIMO:.2f}')
     if body.valor > jogador.saldo:
         raise HTTPException(400, 'Saldo insuficiente')
-    if not (jogador.banco_codigo and jogador.agencia and jogador.conta
-            and jogador.titular_nome and jogador.titular_doc):
-        raise HTTPException(400, 'Cadastre seus dados bancarios antes de solicitar o saque.')
-    chave = (body.chave_pix or jogador.chave_pix or '').strip()
+    chave = (body.chave_pix or '').strip()
     if not chave or len(chave) > 140:
         raise HTTPException(400, 'Chave PIX invalida')
     if body.tipo_chave not in TIPOS_CHAVE_PIX:
@@ -593,49 +590,46 @@ def processar_saque(saque_id: int, body: ProcessarSaqueBody,
     return {'message': f'Saque {saque_id} marcado como {body.status}.'}
 
 
-@app.post('/saques/{saque_id}/pagar-cora')
-async def pagar_saque_via_cora(saque_id: int,
-                               _admin: JogadorModel = Depends(require_admin),
-                               db: Session = Depends(get_db)):
-    """Inicia a transferencia na Cora. O admin so precisa aprovar no app da Cora."""
-    from cora_pix import cora_iniciar_transferencia
+@app.post('/saques/{saque_id}/pagar')
+async def pagar_saque(saque_id: int,
+                      _admin: JogadorModel = Depends(require_admin),
+                      db: Session = Depends(get_db)):
+    """Paga o saque via transferencia PIX por chave (Asaas). Execucao instantanea."""
+    from asaas import asaas_transferir_pix
     saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
     if not saque:
         raise HTTPException(404, 'Saque nao encontrado')
     if saque.status not in ('pendente', 'processando'):
         raise HTTPException(400, 'Saque ja processado')
     if saque.status == 'processando' and saque.cora_transfer_id:
-        return {'message': 'Transferencia ja iniciada. Aprove no app da Cora.',
+        return {'message': 'Transferencia ja iniciada. Use Conferir para atualizar o status.',
                 'transfer_id': saque.cora_transfer_id}
     jog = db.scalar(select(JogadorModel).where(JogadorModel.id == saque.jogador_id))
-    if not jog or not (jog.banco_codigo and jog.agencia and jog.conta
-                       and jog.titular_nome and jog.titular_doc):
-        raise HTTPException(400, 'Jogador sem dados bancarios completos. Pague manualmente pela chave PIX.')
-    destination = {
-        'bank_code': jog.banco_codigo,
-        'branch_number': jog.agencia,
-        'account_number': jog.conta,
-        'account_type': jog.tipo_conta or 'CHECKING',
-        'holder': {'name': jog.titular_nome,
-                   'document': {'identity': jog.titular_doc,
-                                'type': 'CPF' if len(jog.titular_doc) == 11 else 'CNPJ'}},
-    }
-    data = await cora_iniciar_transferencia(destination, int(round(saque.valor * 100)),
-                                            code=f'SAQ-{saque.id}',
-                                            description=f'Saque Camp FreeFire - {jog.nick}')
+    data = await asaas_transferir_pix(saque.chave_pix, saque.tipo_chave, saque.valor,
+                                      code=f'SAQ-{saque.id}',
+                                      description=f'Saque Camp FreeFire - {jog.nick if jog else saque.jogador_id}')
     saque.cora_transfer_id = data.get('id')
-    saque.status = 'processando'
+    status_asaas = (data.get('status') or '').upper()
+    from models import utcnow
+    from asaas import TRANSFER_DONE
+    if status_asaas in TRANSFER_DONE:
+        saque.status = 'pago'
+        saque.processado_em = utcnow()
+    else:
+        saque.status = 'processando'
     db.commit()
-    return {'message': 'Transferencia iniciada! Abra o app da Cora e aprove o pagamento.',
-            'transfer_id': saque.cora_transfer_id, 'status_cora': data.get('status')}
+    return {'message': 'Transferencia PIX enviada!' if saque.status == 'pago'
+            else 'Transferencia iniciada. Use Conferir para confirmar.',
+            'transfer_id': saque.cora_transfer_id, 'status': saque.status,
+            'status_asaas': status_asaas}
 
 
-@app.post('/saques/{saque_id}/conferir-cora')
-async def conferir_saque_cora(saque_id: int,
-                              _admin: JogadorModel = Depends(require_admin),
-                              db: Session = Depends(get_db)):
-    """Consulta o status da transferencia na Cora e atualiza o saque."""
-    from cora_pix import cora_consultar_transferencia, TRANSFER_DONE, TRANSFER_FAIL
+@app.post('/saques/{saque_id}/conferir')
+async def conferir_saque(saque_id: int,
+                         _admin: JogadorModel = Depends(require_admin),
+                         db: Session = Depends(get_db)):
+    """Consulta o status da transferencia no Asaas e atualiza o saque."""
+    from asaas import asaas_consultar_transferencia, TRANSFER_DONE, TRANSFER_FAIL
     saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
     if not saque:
         raise HTTPException(404, 'Saque nao encontrado')
@@ -643,25 +637,25 @@ async def conferir_saque_cora(saque_id: int,
         return {'status': 'pago'}
     if not saque.cora_transfer_id:
         raise HTTPException(400, 'Saque sem transferencia iniciada')
-    data = await cora_consultar_transferencia(saque.cora_transfer_id)
-    status_cora = (data.get('status') or '').upper()
+    data = await asaas_consultar_transferencia(saque.cora_transfer_id)
+    status_asaas = (data.get('status') or '').upper()
     from models import utcnow
-    if status_cora in TRANSFER_DONE:
+    if status_asaas in TRANSFER_DONE:
         saque.status = 'pago'
         saque.processado_em = utcnow()
         db.commit()
-        return {'status': 'pago', 'status_cora': status_cora}
-    if status_cora in TRANSFER_FAIL:
+        return {'status': 'pago', 'status_asaas': status_asaas}
+    if status_asaas in TRANSFER_FAIL:
         jog = db.scalar(select(JogadorModel).where(JogadorModel.id == saque.jogador_id))
         if jog:
             jog.saldo += saque.valor
         saque.status = 'rejeitado'
         saque.processado_em = utcnow()
         db.commit()
-        return {'status': 'rejeitado', 'status_cora': status_cora,
-                'message': 'Transferencia cancelada/falhou na Cora. Valor devolvido ao jogador.'}
-    return {'status': saque.status, 'status_cora': status_cora,
-            'message': 'Aguardando aprovacao/processamento na Cora.'}
+        return {'status': 'rejeitado', 'status_asaas': status_asaas,
+                'message': 'Transferencia cancelada/falhou. Valor devolvido ao jogador.'}
+    return {'status': saque.status, 'status_asaas': status_asaas,
+            'message': 'Transferencia em processamento no Asaas.'}
 
 
 # ====================== OCR + AGENTE IA ======================

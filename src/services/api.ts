@@ -245,18 +245,18 @@ export const apiService = {
   },
 
   // SAQUES
-  async solicitarSaque(valor: number): Promise<any> {
-    const res = await api.post('/saques/solicitar', { valor });
+  async solicitarSaque(valor: number, chavePix: string, tipoChave: string): Promise<any> {
+    const res = await api.post('/saques/solicitar', { valor, chave_pix: chavePix, tipo_chave: tipoChave });
     return res.data;
   },
 
-  async pagarSaqueCora(id: number): Promise<any> {
-    const res = await api.post(`/saques/${id}/pagar-cora`);
+  async pagarSaque(id: number): Promise<any> {
+    const res = await api.post(`/saques/${id}/pagar`);
     return res.data;
   },
 
-  async conferirSaqueCora(id: number): Promise<any> {
-    const res = await api.post(`/saques/${id}/conferir-cora`);
+  async conferirSaque(id: number): Promise<any> {
+    const res = await api.post(`/saques/${id}/conferir`);
     return res.data;
   },
 
