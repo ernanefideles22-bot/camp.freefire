@@ -21,11 +21,31 @@ IS_SERVERLESS = bool(os.environ.get('VERCEL'))
 connect_args: dict = {}
 engine_kwargs: dict = {}
 
+def _criar_ssl_context() -> ssl.SSLContext:
+    """SSL para o Postgres do Supabase.
+
+    O pooler (Supavisor) usa certificado assinado pela CA propria do Supabase.
+    - Se SUPABASE_CA_B64 estiver definida (cert do painel em base64), valida a cadeia.
+    - Caso contrario, conexao TLS criptografada sem validacao de CA (necessario
+      porque a CA do Supabase nao esta no bundle padrao do sistema).
+    """
+    ca_b64 = os.environ.get('SUPABASE_CA_B64', '')
+    if ca_b64:
+        import base64
+        ctx = ssl.create_default_context(cadata=base64.b64decode(ca_b64).decode('utf-8'))
+        ctx.check_hostname = True
+        return ctx
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 if IS_SQLITE:
     connect_args['check_same_thread'] = False
 else:
     # Supabase exige SSL; pg8000 usa ssl_context
-    connect_args['ssl_context'] = ssl.create_default_context()
+    connect_args['ssl_context'] = _criar_ssl_context()
     if IS_SERVERLESS:
         # Em serverless, nao manter pool entre invocacoes
         engine_kwargs['poolclass'] = NullPool
