@@ -139,8 +139,17 @@ app.include_router(pix_router)
 
 
 @app.get('/health')
-def health():
-    return {'status': 'ok'}
+def health(db: bool = False):
+    if not db:
+        return {'status': 'ok'}
+    # /health?db=1 -> testa conexao com o banco
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            conn.execute(text('SELECT 1'))
+        return {'status': 'ok', 'db': 'ok'}
+    except Exception as exc:
+        return {'status': 'ok', 'db': 'erro', 'detail': f'{type(exc).__name__}: {str(exc)[:300]}'}
 
 
 # ====================== AUTH ======================
