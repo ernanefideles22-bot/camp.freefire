@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+const API_URL = (import.meta as any).env?.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -13,11 +13,37 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+let refreshing: Promise<string | null> | null = null;
+
+async function tryRefreshToken(): Promise<string | null> {
+  const refresh = localStorage.getItem('refresh_token');
+  if (!refresh) return null;
+  try {
+    const res = await axios.post(`${API_URL}/auth/refresh`, { refresh_token: refresh });
+    const { access_token, refresh_token } = res.data;
+    localStorage.setItem('access_token', access_token);
+    if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
+    return access_token as string;
+  } catch {
+    return null;
+  }
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
+  async (error) => {
+    const original = error.config;
+    if (error.response?.status === 401 && original && !original._retry) {
+      original._retry = true;
+      refreshing = refreshing ?? tryRefreshToken();
+      const newToken = await refreshing;
+      refreshing = null;
+      if (newToken) {
+        original.headers.Authorization = `Bearer ${newToken}`;
+        return api(original);
+      }
       localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
       localStorage.removeItem('currentUser');
     }
     const msg = error.response?.data?.detail || error.message || 'Erro desconhecido';
@@ -36,12 +62,17 @@ export interface Jogador {
 
 export interface ClassificacaoItem {
   id: number;
+  jogador_id: number;
+  posicao: number;
   nick: string;
   nome: string;
   saldo: number;
   total_premios: number;
+  ganhos_reais: number;
   total_abates: number;
   total_quedas: number;
+  quedas_jogadas: number;
+  total_pontos: number;
   melhor_colocacao: number | null;
 }
 
@@ -76,11 +107,10 @@ export interface DepositoRequisicao {
 // ====================== FUNCAO PREMIO ======================
 export function getPremioPorColocacao(colocacao: number): number {
   if (colocacao === 1) return 20;
-  if (colocacao === 2) return 10;
-  if (colocacao === 3) return 7;
-  if (colocacao >= 4 && colocacao <= 5) return 5;
-  if (colocacao >= 6 && colocacao <= 10) return 3;
-  if (colocacao >= 11 && colocacao <= 20) return 1;
+  if (colocacao === 2) return 12;
+  if (colocacao === 3) return 8;
+  if (colocacao === 4) return 6;
+  if (colocacao >= 5 && colocacao <= 10) return 2.5;
   return 0;
 }
 
@@ -89,8 +119,9 @@ export const apiService = {
   // AUTH
   async loginJogador(nick: string, senha: string): Promise<Jogador> {
     const res = await api.post('/auth/login', { nick, senha });
-    const { access_token, jogador } = res.data;
+    const { access_token, refresh_token, jogador } = res.data;
     localStorage.setItem('access_token', access_token);
+    if (refresh_token) localStorage.setItem('refresh_token', refresh_token);
     localStorage.setItem('currentUser', JSON.stringify(jogador));
     return jogador as Jogador;
   },
@@ -172,6 +203,17 @@ export const apiService = {
     const res = await api.post('/ocr/resultado', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+    return res.data;
+  },
+
+  // PIX (Cora)
+  async criarCobrancaPix(valor: number, cpf: string): Promise<any> {
+    const res = await api.post('/pix/criar-cobranca', { valor, cpf });
+    return res.data;
+  },
+
+  async statusCobrancaPix(invoiceId: string): Promise<any> {
+    const res = await api.get(`/pix/status/${encodeURIComponent(invoiceId)}`);
     return res.data;
   },
 

@@ -1,8 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { QrCode, ChevronLeft } from 'lucide-react';
-
-// FIX 1.8: usar apenas variavel de ambiente - sem URL hardcoded
-const API = import.meta.env.VITE_API_URL || "";
+import { apiService } from '../services/api';
 
 interface Props { jogadorId: number; }
 
@@ -15,6 +13,7 @@ function formatCpf(v: string) {
 }
 
 export default function PixDeposito({ jogadorId }: Props) {
+  void jogadorId; // autenticacao agora vem do token JWT
   const [valor, setValor] = useState("");
   const [cpf, setCpf] = useState("");
   const [loading, setLoading] = useState(false);
@@ -23,6 +22,7 @@ export default function PixDeposito({ jogadorId }: Props) {
   const [invoiceId, setInvoiceId] = useState("");
   const [erro, setErro] = useState("");
   const [copied, setCopied] = useState(false);
+  const [pago, setPago] = useState(false);
 
   const cpfDigits = cpf.replace(/\D/g, "");
 
@@ -34,22 +34,32 @@ export default function PixDeposito({ jogadorId }: Props) {
     if (cpfDigits.length !== 11) { setErro("CPF inválido — informe 11 dígitos"); return; }
     setLoading(true);
     try {
-      const r = await fetch(API + "/pix/criar-cobranca", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jogador_id: jogadorId, valor: parsedValor, cpf: cpfDigits }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.detail || "Erro ao gerar cobrança");
+      const data = await apiService.criarCobrancaPix(parsedValor, cpfDigits);
       setQrCode(data.qr_code || "");
       setQrError(false);
       setInvoiceId(data.invoice_id || "");
+      setPago(false);
     } catch (err: any) {
       setErro(err.message || "Erro desconhecido");
     } finally {
       setLoading(false);
     }
   }
+
+  // Polling: confirma automaticamente quando o PIX e pago
+  useEffect(() => {
+    if (!invoiceId || pago) return;
+    const timer = setInterval(async () => {
+      try {
+        const st = await apiService.statusCobrancaPix(invoiceId);
+        if (st.pago) {
+          setPago(true);
+          clearInterval(timer);
+        }
+      } catch { /* silencioso */ }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [invoiceId, pago]);
 
   const handleCopy = async () => {
     if (!qrCode) return;
@@ -73,7 +83,6 @@ export default function PixDeposito({ jogadorId }: Props) {
     ? "https://api.qrserver.com/v1/create-qr-code/?data=" + encodeURIComponent(qrCode) + "&size=220x220&margin=8"
     : "";
 
-  void invoiceId;
 
   return (
     <div>
@@ -110,6 +119,12 @@ export default function PixDeposito({ jogadorId }: Props) {
         </form>
       ) : (
         <div className="space-y-3">
+          {pago && (
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-center">
+              <p className="text-sm font-bold text-emerald-400">✅ Pagamento confirmado! Saldo creditado.</p>
+              <p className="text-[10px] text-zinc-500 mt-1">Atualize a página para ver o novo saldo.</p>
+            </div>
+          )}
           <p className="text-xs text-zinc-400 text-center">Escaneie o QR code ou copie o código:</p>
           <div className="flex justify-center">
             <img src={qrImageUrl} alt="QR Code PIX"

@@ -15,3 +15,9 @@ backend/*.pyc
 .DS_Store
 .vscode/
 test-auth.html
+# Python
+__pycache__/
+*.pyc
+*.db
+.venv/
+.pytest_cache/
