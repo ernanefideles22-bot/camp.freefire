@@ -264,6 +264,25 @@ def test_saque_fluxo_completo():
     admin_tok = _login('admin1', 'secret123')['access_token']
     saldo_inicial = client.get('/me', headers=_auth(tok)).json()['saldo']
 
+    # sem dados bancarios -> 400
+    r = client.post('/saques/solicitar', json={'valor': 10.0}, headers=_auth(tok))
+    assert r.status_code == 400 and 'bancarios' in r.json()['detail']
+
+    # cadastro de dados bancarios invalido -> 400
+    r = client.put('/me/dados-bancarios', json={'banco_codigo': 'abc', 'agencia': '0001',
+        'conta': '12345', 'titular_nome': 'P', 'titular_doc': '12345678901', 'chave_pix': 'x'},
+        headers=_auth(tok))
+    assert r.status_code == 400
+
+    # cadastro valido
+    r = client.put('/me/dados-bancarios', json={'banco_codigo': '260', 'agencia': '0001',
+        'conta': '1234567', 'tipo_conta': 'CHECKING', 'titular_nome': 'Player Um',
+        'titular_doc': '123.456.789-01', 'chave_pix': '11999990000'}, headers=_auth(tok))
+    assert r.status_code == 200, r.text
+    r = client.get('/me/dados-bancarios', headers=_auth(tok))
+    assert r.json()['completo'] is True
+    assert r.json()['banco_codigo'] == '260'
+
     # valor abaixo do minimo -> 400
     r = client.post('/saques/solicitar', json={'valor': 1.0, 'chave_pix': '11999990000', 'tipo_chave': 'telefone'}, headers=_auth(tok))
     assert r.status_code == 400
@@ -309,3 +328,72 @@ def test_saque_fluxo_completo():
     # reprocessar -> 400
     r = client.post(f'/saques/{saque2}/processar', json={'status': 'rejeitado'}, headers=_auth(admin_tok))
     assert r.status_code == 400
+
+
+
+def test_saque_pagar_via_cora(monkeypatch):
+    admin_tok = _login('admin1', 'secret123')['access_token']
+    # admin cadastra os proprios dados bancarios e cria um saque
+    client.put('/me/dados-bancarios', json={'banco_codigo': '001', 'agencia': '1234',
+        'conta': '9876543', 'titular_nome': 'Admin', 'titular_doc': '98765432100',
+        'chave_pix': 'admin@x.com'}, headers=_auth(admin_tok))
+    # da saldo ao admin via deposito
+    r = client.post('/depositos/solicitar', json={'valor': 30.0}, headers=_auth(admin_tok))
+    client.post(f"/depositos/{r.json()['id']}/processar", json={'status': 'aprovado'}, headers=_auth(admin_tok))
+    r = client.post('/saques/solicitar', json={'valor': 20.0}, headers=_auth(admin_tok))
+    assert r.status_code == 200, r.text
+    sid = r.json()['id']
+
+    TRANSFER_STATUS = {'value': 'INITIATED'}
+
+    async def fake_iniciar(destination, amount, code, description=''):
+        assert destination['bank_code'] == '001'
+        assert destination['holder']['document']['identity'] == '98765432100'
+        assert amount == 2000
+        return {'id': 'tr-001', 'status': 'INITIATED'}
+
+    async def fake_consultar(tid):
+        assert tid == 'tr-001'
+        return {'id': tid, 'status': TRANSFER_STATUS['value']}
+
+    import cora_pix as cp
+    monkeypatch.setattr(cp, 'cora_iniciar_transferencia', fake_iniciar)
+    monkeypatch.setattr(cp, 'cora_consultar_transferencia', fake_consultar)
+
+    # iniciar transferencia
+    r = client.post(f'/saques/{sid}/pagar-cora', headers=_auth(admin_tok))
+    assert r.status_code == 200, r.text
+    assert r.json()['transfer_id'] == 'tr-001'
+
+    # conferir: ainda aguardando aprovacao no app
+    r = client.post(f'/saques/{sid}/conferir-cora', headers=_auth(admin_tok))
+    assert r.json()['status'] == 'processando'
+
+    # apos aprovacao no app, Cora retorna COMPLETED -> saque pago
+    TRANSFER_STATUS['value'] = 'COMPLETED'
+    r = client.post(f'/saques/{sid}/conferir-cora', headers=_auth(admin_tok))
+    assert r.json()['status'] == 'pago'
+
+
+def test_saque_cora_falha_devolve(monkeypatch):
+    admin_tok = _login('admin1', 'secret123')['access_token']
+    saldo_antes = client.get('/me', headers=_auth(admin_tok)).json()['saldo']
+    r = client.post('/saques/solicitar', json={'valor': 5.0}, headers=_auth(admin_tok))
+    assert r.status_code == 200, r.text
+    sid = r.json()['id']
+
+    async def fake_iniciar(destination, amount, code, description=''):
+        return {'id': 'tr-002', 'status': 'INITIATED'}
+
+    async def fake_consultar(tid):
+        return {'id': tid, 'status': 'CANCELED'}
+
+    import cora_pix as cp
+    monkeypatch.setattr(cp, 'cora_iniciar_transferencia', fake_iniciar)
+    monkeypatch.setattr(cp, 'cora_consultar_transferencia', fake_consultar)
+
+    client.post(f'/saques/{sid}/pagar-cora', headers=_auth(admin_tok))
+    r = client.post(f'/saques/{sid}/conferir-cora', headers=_auth(admin_tok))
+    assert r.json()['status'] == 'rejeitado'
+    # valor devolvido
+    assert client.get('/me', headers=_auth(admin_tok)).json()['saldo'] == saldo_antes

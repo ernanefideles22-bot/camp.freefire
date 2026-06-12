@@ -441,6 +441,61 @@ def solicitar_deposito(valor: Optional[float] = None,
     return {'message': 'Solicitacao de deposito registrada.', 'id': dep.id}
 
 
+class DadosBancariosBody(BaseModel):
+    banco_codigo: str
+    agencia: str
+    conta: str
+    tipo_conta: str = 'CHECKING'
+    titular_nome: str
+    titular_doc: str
+    chave_pix: str
+
+
+def _dados_bancarios_dict(j: JogadorModel) -> dict:
+    return {'banco_codigo': j.banco_codigo, 'agencia': j.agencia, 'conta': j.conta,
+            'tipo_conta': j.tipo_conta, 'titular_nome': j.titular_nome,
+            'titular_doc': j.titular_doc, 'chave_pix': j.chave_pix,
+            'completo': bool(j.banco_codigo and j.agencia and j.conta and j.titular_nome and j.titular_doc)}
+
+
+@app.get('/me/dados-bancarios')
+def obter_dados_bancarios(jogador: JogadorModel = Depends(obter_usuario_atual)):
+    return _dados_bancarios_dict(jogador)
+
+
+@app.put('/me/dados-bancarios')
+def salvar_dados_bancarios(body: DadosBancariosBody,
+                           jogador: JogadorModel = Depends(obter_usuario_atual),
+                           db: Session = Depends(get_db)):
+    doc = body.titular_doc.replace('.', '').replace('-', '').replace('/', '').strip()
+    if len(doc) not in (11, 14) or not doc.isdigit():
+        raise HTTPException(400, 'CPF/CNPJ do titular invalido')
+    banco = body.banco_codigo.strip()
+    if not banco.isdigit() or len(banco) > 3:
+        raise HTTPException(400, 'Codigo do banco invalido (3 digitos, ex: 260)')
+    agencia = body.agencia.strip().replace('-', '')
+    conta = body.conta.strip()
+    if not agencia or len(agencia) > 4:
+        raise HTTPException(400, 'Agencia invalida (max 4 digitos, sem digito verificador)')
+    if not conta or len(conta) > 13:
+        raise HTTPException(400, 'Conta invalida (max 13 caracteres, com digito)')
+    if body.tipo_conta not in ('CHECKING', 'SAVINGS', 'PAYMENT'):
+        raise HTTPException(400, 'Tipo de conta deve ser CHECKING, SAVINGS ou PAYMENT')
+    if not body.titular_nome.strip():
+        raise HTTPException(400, 'Nome do titular obrigatorio')
+    if not body.chave_pix.strip():
+        raise HTTPException(400, 'Chave PIX obrigatoria')
+    jogador.banco_codigo = banco.zfill(3)
+    jogador.agencia = agencia
+    jogador.conta = conta
+    jogador.tipo_conta = body.tipo_conta
+    jogador.titular_nome = body.titular_nome.strip()
+    jogador.titular_doc = doc
+    jogador.chave_pix = body.chave_pix.strip()
+    db.commit()
+    return {'message': 'Dados bancarios salvos com sucesso.'}
+
+
 # ====================== SAQUES (manuais, pagos pelo admin via Cora) ======================
 SAQUE_MINIMO = float(os.environ.get('SAQUE_MINIMO', '5.0'))
 TIPOS_CHAVE_PIX = {'cpf', 'email', 'telefone', 'aleatoria'}
@@ -448,7 +503,7 @@ TIPOS_CHAVE_PIX = {'cpf', 'email', 'telefone', 'aleatoria'}
 
 class SolicitarSaqueBody(BaseModel):
     valor: float
-    chave_pix: str
+    chave_pix: Optional[str] = None
     tipo_chave: str = 'cpf'
 
 
@@ -457,10 +512,15 @@ class ProcessarSaqueBody(BaseModel):
 
 
 def _saque_dict(s: SaqueRequisicaoModel) -> dict:
+    j = s.jogador
     return {'id': s.id, 'jogador_id': s.jogador_id,
-            'jogador_nick': s.jogador.nick if s.jogador else None,
+            'jogador_nick': j.nick if j else None,
             'valor': s.valor, 'chave_pix': s.chave_pix, 'tipo_chave': s.tipo_chave,
-            'status': s.status,
+            'status': s.status, 'cora_transfer_id': s.cora_transfer_id,
+            'banco_codigo': j.banco_codigo if j else None,
+            'agencia': j.agencia if j else None,
+            'conta': j.conta if j else None,
+            'titular_nome': j.titular_nome if j else None,
             'criado_em': s.criado_em.strftime('%d/%m/%Y %H:%M') if s.criado_em else None}
 
 
@@ -472,7 +532,10 @@ def solicitar_saque(body: SolicitarSaqueBody,
         raise HTTPException(400, f'Saque minimo: R$ {SAQUE_MINIMO:.2f}')
     if body.valor > jogador.saldo:
         raise HTTPException(400, 'Saldo insuficiente')
-    chave = body.chave_pix.strip()
+    if not (jogador.banco_codigo and jogador.agencia and jogador.conta
+            and jogador.titular_nome and jogador.titular_doc):
+        raise HTTPException(400, 'Cadastre seus dados bancarios antes de solicitar o saque.')
+    chave = (body.chave_pix or jogador.chave_pix or '').strip()
     if not chave or len(chave) > 140:
         raise HTTPException(400, 'Chave PIX invalida')
     if body.tipo_chave not in TIPOS_CHAVE_PIX:
@@ -504,7 +567,7 @@ def meus_saques(jogador: JogadorModel = Depends(obter_usuario_atual), db: Sessio
 @app.get('/saques/pendentes')
 def saques_pendentes(_admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     saques = db.scalars(select(SaqueRequisicaoModel)
-                        .where(SaqueRequisicaoModel.status == 'pendente')
+                        .where(SaqueRequisicaoModel.status.in_(['pendente', 'processando']))
                         .order_by(SaqueRequisicaoModel.id)).all()
     return [_saque_dict(s) for s in saques]
 
@@ -517,7 +580,7 @@ def processar_saque(saque_id: int, body: ProcessarSaqueBody,
     saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
     if not saque:
         raise HTTPException(404, 'Saque nao encontrado')
-    if saque.status != 'pendente':
+    if saque.status not in ('pendente', 'processando'):
         raise HTTPException(400, 'Saque ja processado')
     saque.status = body.status
     from models import utcnow
@@ -528,6 +591,77 @@ def processar_saque(saque_id: int, body: ProcessarSaqueBody,
             jog.saldo += saque.valor  # devolve a reserva
     db.commit()
     return {'message': f'Saque {saque_id} marcado como {body.status}.'}
+
+
+@app.post('/saques/{saque_id}/pagar-cora')
+async def pagar_saque_via_cora(saque_id: int,
+                               _admin: JogadorModel = Depends(require_admin),
+                               db: Session = Depends(get_db)):
+    """Inicia a transferencia na Cora. O admin so precisa aprovar no app da Cora."""
+    from cora_pix import cora_iniciar_transferencia
+    saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
+    if not saque:
+        raise HTTPException(404, 'Saque nao encontrado')
+    if saque.status not in ('pendente', 'processando'):
+        raise HTTPException(400, 'Saque ja processado')
+    if saque.status == 'processando' and saque.cora_transfer_id:
+        return {'message': 'Transferencia ja iniciada. Aprove no app da Cora.',
+                'transfer_id': saque.cora_transfer_id}
+    jog = db.scalar(select(JogadorModel).where(JogadorModel.id == saque.jogador_id))
+    if not jog or not (jog.banco_codigo and jog.agencia and jog.conta
+                       and jog.titular_nome and jog.titular_doc):
+        raise HTTPException(400, 'Jogador sem dados bancarios completos. Pague manualmente pela chave PIX.')
+    destination = {
+        'bank_code': jog.banco_codigo,
+        'branch_number': jog.agencia,
+        'account_number': jog.conta,
+        'account_type': jog.tipo_conta or 'CHECKING',
+        'holder': {'name': jog.titular_nome,
+                   'document': {'identity': jog.titular_doc,
+                                'type': 'CPF' if len(jog.titular_doc) == 11 else 'CNPJ'}},
+    }
+    data = await cora_iniciar_transferencia(destination, int(round(saque.valor * 100)),
+                                            code=f'SAQ-{saque.id}',
+                                            description=f'Saque Camp FreeFire - {jog.nick}')
+    saque.cora_transfer_id = data.get('id')
+    saque.status = 'processando'
+    db.commit()
+    return {'message': 'Transferencia iniciada! Abra o app da Cora e aprove o pagamento.',
+            'transfer_id': saque.cora_transfer_id, 'status_cora': data.get('status')}
+
+
+@app.post('/saques/{saque_id}/conferir-cora')
+async def conferir_saque_cora(saque_id: int,
+                              _admin: JogadorModel = Depends(require_admin),
+                              db: Session = Depends(get_db)):
+    """Consulta o status da transferencia na Cora e atualiza o saque."""
+    from cora_pix import cora_consultar_transferencia, TRANSFER_DONE, TRANSFER_FAIL
+    saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
+    if not saque:
+        raise HTTPException(404, 'Saque nao encontrado')
+    if saque.status == 'pago':
+        return {'status': 'pago'}
+    if not saque.cora_transfer_id:
+        raise HTTPException(400, 'Saque sem transferencia iniciada')
+    data = await cora_consultar_transferencia(saque.cora_transfer_id)
+    status_cora = (data.get('status') or '').upper()
+    from models import utcnow
+    if status_cora in TRANSFER_DONE:
+        saque.status = 'pago'
+        saque.processado_em = utcnow()
+        db.commit()
+        return {'status': 'pago', 'status_cora': status_cora}
+    if status_cora in TRANSFER_FAIL:
+        jog = db.scalar(select(JogadorModel).where(JogadorModel.id == saque.jogador_id))
+        if jog:
+            jog.saldo += saque.valor
+        saque.status = 'rejeitado'
+        saque.processado_em = utcnow()
+        db.commit()
+        return {'status': 'rejeitado', 'status_cora': status_cora,
+                'message': 'Transferencia cancelada/falhou na Cora. Valor devolvido ao jogador.'}
+    return {'status': saque.status, 'status_cora': status_cora,
+            'message': 'Aguardando aprovacao/processamento na Cora.'}
 
 
 # ====================== OCR + AGENTE IA ======================

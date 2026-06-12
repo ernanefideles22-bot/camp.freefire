@@ -103,7 +103,23 @@ export interface SaqueRequisicao {
   chave_pix: string;
   tipo_chave: string;
   status: string;
+  cora_transfer_id?: string | null;
+  banco_codigo?: string | null;
+  agencia?: string | null;
+  conta?: string | null;
+  titular_nome?: string | null;
   criado_em: string | null;
+}
+
+export interface DadosBancarios {
+  banco_codigo: string | null;
+  agencia: string | null;
+  conta: string | null;
+  tipo_conta: string | null;
+  titular_nome: string | null;
+  titular_doc: string | null;
+  chave_pix: string | null;
+  completo: boolean;
 }
 
 export interface DepositoRequisicao {
@@ -217,9 +233,30 @@ export const apiService = {
     return res.data;
   },
 
+  // DADOS BANCARIOS
+  async obterDadosBancarios(): Promise<DadosBancarios> {
+    const res = await api.get('/me/dados-bancarios');
+    return res.data as DadosBancarios;
+  },
+
+  async salvarDadosBancarios(dados: Omit<DadosBancarios, 'completo'>): Promise<any> {
+    const res = await api.put('/me/dados-bancarios', dados);
+    return res.data;
+  },
+
   // SAQUES
-  async solicitarSaque(valor: number, chavePix: string, tipoChave: string): Promise<any> {
-    const res = await api.post('/saques/solicitar', { valor, chave_pix: chavePix, tipo_chave: tipoChave });
+  async solicitarSaque(valor: number): Promise<any> {
+    const res = await api.post('/saques/solicitar', { valor });
+    return res.data;
+  },
+
+  async pagarSaqueCora(id: number): Promise<any> {
+    const res = await api.post(`/saques/${id}/pagar-cora`);
+    return res.data;
+  },
+
+  async conferirSaqueCora(id: number): Promise<any> {
+    const res = await api.post(`/saques/${id}/conferir-cora`);
     return res.data;
   },
 

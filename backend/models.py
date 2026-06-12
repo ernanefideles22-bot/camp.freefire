@@ -20,6 +20,14 @@ class JogadorModel(Base):
     senha_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     saldo: Mapped[float] = mapped_column(Float, default=0.0)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Dados bancarios para saque via API Cora (transferencia exige conta, nao chave PIX)
+    banco_codigo: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    agencia: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    conta: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    tipo_conta: Mapped[Optional[str]] = mapped_column(String, nullable=True, default='CHECKING')
+    titular_nome: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    titular_doc: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    chave_pix: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     inscricoes: Mapped[List['InscricaoModel']] = relationship(back_populates='jogador')
     resultados: Mapped[List['ResultadoQuedaModel']] = relationship(back_populates='jogador')
     depositos: Mapped[List['DepositoRequisicaoModel']] = relationship(back_populates='jogador')
@@ -79,7 +87,8 @@ class SaqueRequisicaoModel(Base):
     valor: Mapped[float] = mapped_column(Float, nullable=False)
     chave_pix: Mapped[str] = mapped_column(String, nullable=False)
     tipo_chave: Mapped[str] = mapped_column(String, nullable=False, default='cpf')  # cpf|email|telefone|aleatoria
-    status: Mapped[str] = mapped_column(String, default='pendente', index=True)  # pendente|pago|rejeitado
+    status: Mapped[str] = mapped_column(String, default='pendente', index=True)  # pendente|processando|pago|rejeitado
+    cora_transfer_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     processado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     jogador: Mapped['JogadorModel'] = relationship(back_populates='saques')

@@ -242,3 +242,35 @@ async def status_cobranca(
     if pago:
         _confirmar_pagamento(db, cobranca)
     return {'invoice_id': invoice_id, 'status': status_cora, 'valor': cobranca.valor, 'pago': pago}
+
+
+# ====================== TRANSFERENCIAS (Pix Out via dados bancarios) ======================
+TRANSFER_DONE = {'COMPLETED', 'DONE', 'PAID', 'SETTLED', 'FINISHED', 'APPROVED', 'EXECUTED'}
+TRANSFER_FAIL = {'CANCELED', 'CANCELLED', 'REJECTED', 'FAILED', 'DENIED', 'EXPIRED'}
+
+
+async def cora_iniciar_transferencia(destination: dict, amount_centavos: int,
+                                     code: str, description: str = '') -> dict:
+    """Inicia uma transferencia na Cora. Ela so e efetivada apos aprovacao no app."""
+    tkn = await get_cora_token()
+    c = _get_client()
+    idem_key = str(uuid.uuid5(uuid.NAMESPACE_URL, 'cora-transfer:' + code))
+    resp = await c.post(
+        CORA_BASE + '/transfers/initiate',
+        json={'destination': destination, 'amount': amount_centavos,
+              'code': code, 'description': description or 'Saque Camp FreeFire'},
+        headers={'Authorization': 'Bearer ' + tkn, 'Idempotency-Key': idem_key},
+    )
+    if resp.status_code not in (200, 201):
+        raise HTTPException(502, f'Erro Cora ao iniciar transferencia ({resp.status_code}): {resp.text[:300]}')
+    return resp.json()
+
+
+async def cora_consultar_transferencia(transfer_id: str) -> dict:
+    tkn = await get_cora_token()
+    c = _get_client()
+    resp = await c.get(CORA_BASE + f'/transfers/{transfer_id}',
+                       headers={'Authorization': 'Bearer ' + tkn})
+    if resp.status_code != 200:
+        raise HTTPException(404, 'Transferencia nao encontrada na Cora')
+    return resp.json()
