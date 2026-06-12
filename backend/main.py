@@ -45,24 +45,35 @@ def calcular_pontos_lbff(colocacao: int, abates: int) -> int:
     return PONTOS_LBFF.get(colocacao, 0) + abates
 
 
-# ====================== GEMINI (REST, sem SDK pesado) ======================
-GEMINI_MODEL = os.environ.get('GEMINI_MODEL', 'gemini-2.5-flash')
+# ====================== IA — ANTHROPIC (Claude, REST) ======================
+ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-haiku-4-5-20251001')
 
-async def gemini_generate(parts: list) -> str:
-    key = os.environ.get('GEMINI_API_KEY')
+async def ia_generate(prompt: str, imagem_b64: str | None = None,
+                      mime: str = 'image/png') -> str:
+    """Chama a API da Anthropic (Messages). Suporta texto e imagem (visao)."""
+    key = os.environ.get('ANTHROPIC_API_KEY')
     if not key:
-        raise HTTPException(503, 'GEMINI_API_KEY nao configurada.')
-    url = f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent'
+        raise HTTPException(503, 'ANTHROPIC_API_KEY nao configurada.')
+    content: list = []
+    if imagem_b64:
+        content.append({'type': 'image',
+                        'source': {'type': 'base64', 'media_type': mime, 'data': imagem_b64}})
+    content.append({'type': 'text', 'text': prompt})
     async with httpx.AsyncClient(timeout=60) as c:
-        resp = await c.post(url, params={'key': key},
-                            json={'contents': [{'parts': parts}]})
+        resp = await c.post(
+            'https://api.anthropic.com/v1/messages',
+            headers={'x-api-key': key, 'anthropic-version': '2023-06-01',
+                     'content-type': 'application/json'},
+            json={'model': ANTHROPIC_MODEL, 'max_tokens': 2048,
+                  'messages': [{'role': 'user', 'content': content}]},
+        )
     if resp.status_code != 200:
-        raise HTTPException(502, f'Erro Gemini ({resp.status_code}): {resp.text[:300]}')
+        raise HTTPException(502, f'Erro Anthropic ({resp.status_code}): {resp.text[:300]}')
     data = resp.json()
     try:
-        return data['candidates'][0]['content']['parts'][0]['text']
-    except (KeyError, IndexError):
-        raise HTTPException(502, 'Gemini retornou resposta vazia.')
+        return ''.join(b.get('text', '') for b in data['content'] if b.get('type') == 'text')
+    except (KeyError, TypeError):
+        raise HTTPException(502, 'Anthropic retornou resposta vazia.')
 
 
 def extrair_json(texto: str):
@@ -667,6 +678,8 @@ async def ocr_resultado(numero_queda: int = Form(...), imagem: UploadFile = File
         raise HTTPException(413, 'Imagem muito grande (max 8 MB)')
     img_b64 = base64.b64encode(conteudo).decode('utf-8')
     mime = imagem.content_type or 'image/png'
+    if mime not in ('image/jpeg', 'image/png', 'image/gif', 'image/webp'):
+        mime = 'image/png'
     jogadores = db.scalars(select(JogadorModel)).all()
     lista_nicks = ', '.join(j.nick for j in jogadores)
     prompt = ('Analise este print de placar do Free Fire. '
@@ -674,12 +687,11 @@ async def ocr_resultado(numero_queda: int = Form(...), imagem: UploadFile = File
               'Para cada jogador no placar, retorne JSON: '
               '[{"nick_detectado": str, "nick_cadastrado": str_ou_null, "colocacao": int, "abates": int}]. '
               'Retorne APENAS o JSON.')
-    texto = await gemini_generate([{'inline_data': {'mime_type': mime, 'data': img_b64}},
-                                   {'text': prompt}])
+    texto = await ia_generate(prompt, imagem_b64=img_b64, mime=mime)
     try:
         dados_ocr = extrair_json(texto)
     except Exception:
-        raise HTTPException(422, 'Gemini nao retornou JSON valido.')
+        raise HTTPException(422, 'A IA nao retornou JSON valido.')
     resultados = []
     for item in dados_ocr:
         nick_cad = item.get('nick_cadastrado')
@@ -706,7 +718,7 @@ async def agente_comando(body: ComandoAgenteBody,
               'Para cadastrar_jogador dados={nome,nick}. Para liberar_sala dados={numero_queda,sala_id,sala_senha}. '
               'Para lancar_resultado dados={numero_queda, resultados:[{jogador_id,colocacao,abates}]}. '
               'Retorne APENAS o JSON.')
-    texto = await gemini_generate([{'text': prompt}])
+    texto = await ia_generate(prompt)
     try:
         r_ia = extrair_json(texto)
     except Exception:

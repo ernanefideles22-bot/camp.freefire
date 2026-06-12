@@ -155,3 +155,14 @@ PIX de SAIDA por chave (a Cora so transfere por agencia/conta).
   ASAAS_BASE_URL      = https://api-sandbox.asaas.com/v3 (apenas para sandbox; apague em producao)
 - Webhook a cadastrar no painel Asaas: https://camp-freefire.vercel.app/api/pix/webhook
   (evento: cobrancas recebidas/confirmadas; token = ASAAS_WEBHOOK_TOKEN)
+
+
+---
+
+## TROCA DE IA — Gemini -> Anthropic (Claude) (Jun 2026)
+
+- OCR de placar e agente de comandos agora usam a API da Anthropic (Messages, REST)
+- Variaveis no Vercel:
+  ANTHROPIC_API_KEY = (https://console.anthropic.com/ > API Keys)
+  ANTHROPIC_MODEL   = opcional (default claude-haiku-4-5-20251001)
+- GEMINI_API_KEY / GEMINI_MODEL nao sao mais usadas (podem ser removidas)

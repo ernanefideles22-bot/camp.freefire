@@ -239,10 +239,11 @@ def test_ocr_exige_admin():
 def test_ocr_resultado(monkeypatch):
     admin_tok = _login('admin1', 'secret123')['access_token']
 
-    async def fake_gemini(parts):
+    async def fake_ia(prompt, imagem_b64=None, mime='image/png'):
+        assert imagem_b64  # OCR deve enviar a imagem
         return '```json\n[{"nick_detectado": "PLAYER1", "nick_cadastrado": "player1", "colocacao": 2, "abates": 3}]\n```'
 
-    monkeypatch.setattr(main, 'gemini_generate', fake_gemini)
+    monkeypatch.setattr(main, 'ia_generate', fake_ia)
     r = client.post('/ocr/resultado', data={'numero_queda': 2},
                     files={'imagem': ('p.png', b'fake-image-bytes', 'image/png')},
                     headers=_auth(admin_tok))
