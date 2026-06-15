@@ -239,13 +239,15 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
         <p className="flex items-center gap-3">
           <span className="text-zinc-400 font-bold">Taxa: R$ 3,00</span>
           <span>•</span>
-          <span>1º: R$ 12</span>
+          <span>1º: R$ 15</span>
           <span>•</span>
-          <span>2º: R$ 8</span>
+          <span>2º: R$ 12</span>
           <span>•</span>
-          <span>3º: R$ 5</span>
+          <span>3º: R$ 8</span>
           <span>•</span>
-          <span>4º: R$ 3</span>
+          <span>4º: R$ 6</span>
+          <span>•</span>
+          <span>5º: R$ 4</span>
           <span>•</span>
           <span>+ R$ 0,25 por abate</span>
         </p>
