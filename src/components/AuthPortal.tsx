@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { apiService } from '../services/api';
 import type { Jogador } from '../services/api';
 import { Gamepad2, User, Lock, ChevronRight, LogIn, AlertCircle } from 'lucide-react';
+import Termos from './Termos';
 
 interface AuthPortalProps {
   onAuthSuccess: (user: Jogador) => void;
@@ -18,16 +19,19 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
   const [confirmSenha, setConfirmSenha] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [aceito, setAceito] = useState(false);
+  const [maior, setMaior] = useState(false);
+  const [termosOpen, setTermosOpen] = useState(false);
 
   // Fluxo Google: quando a conta e nova, o backend pede o nick do Free Fire.
   const [pendingGoogleToken, setPendingGoogleToken] = useState<string | null>(null);
   const [googleNick, setGoogleNick] = useState('');
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
-  const handleGoogle = async (idToken: string, ffNick?: string) => {
+  const handleGoogle = async (idToken: string, ffNick?: string, ac = false, mi = false) => {
     setLoading(true); setError('');
     try {
-      const data = await apiService.loginGoogle(idToken, ffNick);
+      const data = await apiService.loginGoogle(idToken, ffNick, ac, mi);
       if (data.precisa_nick) {
         setPendingGoogleToken(idToken);
         onAddToast('info', 'Quase la', 'Escolha seu nick do Free Fire para concluir o cadastro.');
@@ -84,6 +88,10 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
       setError('As senhas nao coincidem.');
       return;
     }
+    if (!isLogin && (!aceito || !maior)) {
+      setError('Voce precisa aceitar os Termos e confirmar que tem 18 anos ou mais.');
+      return;
+    }
     setLoading(true);
     try {
       if (isLogin) {
@@ -91,7 +99,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
         onAddToast('success', 'Bem-vindo!', `Bem-vindo de volta, ${user.nome}!`);
         onAuthSuccess(user);
       } else {
-        const user = await apiService.cadastrarJogador(nome.trim(), nick.trim(), senha);
+        const user = await apiService.cadastrarJogador(nome.trim(), nick.trim(), senha, aceito, maior);
         localStorage.setItem('currentUser', JSON.stringify(user));
         onAddToast('success', 'Conta Criada!', `Jogador ${user.nick} cadastrado com sucesso!`);
         onAuthSuccess(user);
@@ -109,13 +117,28 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
     e.preventDefault();
     if (!pendingGoogleToken) return;
     if (!googleNick.trim()) { setError('Informe seu nick do Free Fire.'); return; }
-    await handleGoogle(pendingGoogleToken, googleNick.trim());
+    if (!aceito || !maior) { setError('Voce precisa aceitar os Termos e confirmar que tem 18 anos ou mais.'); return; }
+    await handleGoogle(pendingGoogleToken, googleNick.trim(), aceito, maior);
   };
+
+  const aceiteBlock = (
+    <div className="space-y-2 pt-1">
+      <label className="flex items-start gap-2 text-xs text-zinc-300 cursor-pointer">
+        <input type="checkbox" checked={aceito} onChange={e => setAceito(e.target.checked)} className="mt-0.5 accent-primary w-4 h-4" />
+        <span>Li e aceito os <button type="button" onClick={() => setTermosOpen(true)} className="text-accent-cyan underline hover:text-cyan-300">Termos de Uso e Politica de Privacidade</button>.</span>
+      </label>
+      <label className="flex items-start gap-2 text-xs text-zinc-300 cursor-pointer">
+        <input type="checkbox" checked={maior} onChange={e => setMaior(e.target.checked)} className="mt-0.5 accent-primary w-4 h-4" />
+        <span>Confirmo que tenho <strong>18 anos ou mais</strong>.</span>
+      </label>
+    </div>
+  );
 
   return (
     <div className="flex items-center justify-center py-12 px-4 relative overflow-hidden" style={{ minHeight: 'calc(100vh - 12rem)' }}>
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-accent-cyan/10 blur-[120px] pointer-events-none" />
+      <Termos open={termosOpen} onClose={() => setTermosOpen(false)} />
 
       <div className="w-full max-w-md ff-card p-8 relative z-10 overflow-hidden">
         <div className={`absolute top-0 left-0 right-0 h-1 ff-topbar ${isLogin ? '' : 'opacity-90'}`} />
@@ -150,6 +173,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
                   className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-accent-cyan focus:outline-none transition-all" />
               </div>
             </div>
+            {aceiteBlock}
             <button type="submit" disabled={loading}
               className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-zinc-950 font-bold bg-accent-cyan hover:bg-cyan-400 transition-all disabled:opacity-60">
               {loading ? 'Concluindo...' : 'Concluir cadastro'}<ChevronRight className="w-4 h-4" />
@@ -214,6 +238,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
             </div>
           )}
 
+          {!isLogin && aceiteBlock}
           <button style={{ minHeight: '44px', touchAction: 'manipulation' }} type="submit" disabled={loading}
             className={`w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-white font-bold transition-all duration-300 select-none ${ loading ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : isLogin ? 'bg-primary hover:bg-primary-dark shadow-[0_4px_20px_rgba(139,92,246,0.25)]' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_4px_20px_rgba(0,240,255,0.25)]'}`}>
             {loading ? <span>Processando...</span> : (<><span>{isLogin ? 'Entrar' : 'Cadastrar'}</span>{isLogin ? <LogIn className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</>)}
