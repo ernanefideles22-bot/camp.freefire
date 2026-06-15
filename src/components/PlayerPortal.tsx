@@ -91,8 +91,8 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     setLoadingInscricao(true);
     try {
       await apiService.inscreverNaQueda(selectedQueda);
-      onAddToast('success', 'Inscricao Confirmada!', 'R$ 2,00 foram debitados do seu saldo.');
-      const updatedUser = { ...currentUser, saldo: (currentUser.saldo || 0) - 2.0 };
+      onAddToast('success', 'Inscricao Confirmada!', 'R$ 2300 foram debitados do seu saldo.');
+      const updatedUser = { ...currentUser, saldo: (currentUser.saldo || 0) - 2.3 };
       onUpdateUser(updatedUser);
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
       fetchQuedaStatus();
@@ -190,7 +190,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                         )}
                       </div>
                       <p className="text-xs text-zinc-400">
-                        {statusQueda.esta_inscrito ? 'Sua vaga esta garantida! Veja os detalhes da sala abaixo.' : 'Clique em Entrar na Sala: R$ 2,00 sao descontados e o ID + senha aparecem para copiar.'}
+                        {statusQueda.esta_inscrito ? 'Sua vaga esta garantida! Veja os detalhes da sala abaixo.' : 'Clique em Entrar na Sala: R$ 3,00 sao descontados e o ID + senha aparecem para copiar.'}
                       </p>
                     </div>
                     <div className="text-right">
@@ -211,15 +211,15 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                           <DollarSign className="w-5 h-5 text-accent-cyan" />
                         </div>
                         <div className="text-center sm:text-left">
-                          <p className="text-sm font-bold text-white">Entrar na Sala — R$ 2,00</p>
+                          <p className="text-sm font-bold text-white">Entrar na Sala — R$ 3,00</p>
                           <p className="text-xs text-zinc-500 font-semibold mt-0.5">Seu saldo atual: R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}</p>
                         </div>
                       </div>
                       <button onClick={handleInscricao}
-                        disabled={loadingInscricao || (currentUser.saldo || 0) < 2.0}
-                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 ${(currentUser.saldo || 0) < 2.0 ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]'}`}>
+                        disabled={loadingInscricao || (currentUser.saldo || 0) < 3.0}
+                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 ${(currentUser.saldo || 0) <32.0 ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]'}`}>
                         {loadingInscricao ? <Spinner size="sm" className="text-zinc-950" /> : <Gamepad2 className="w-4 h-4" />}
-                        {loadingInscricao ? 'Confirmando...' : (currentUser.saldo || 0) < 2.0 ? 'Saldo Insuficiente' : 'Entrar na Sala (R$ 2,00)'}
+                        {loadingInscricao ? 'Confirmando...' : (currentUser.saldo || 0) < 3.0 ? 'Saldo Insuficiente' : 'Entrar na Sala (R$ 3,00)'}
                       </button>
                     </div>
                   ) : (
