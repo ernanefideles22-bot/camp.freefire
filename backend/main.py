@@ -748,7 +748,7 @@ def _saque_dict(s: SaqueRequisicaoModel) -> dict:
     return {'id': s.id, 'jogador_id': s.jogador_id,
             'jogador_nick': j.nick if j else None,
             'valor': s.valor, 'chave_pix': s.chave_pix, 'tipo_chave': s.tipo_chave,
-            'status': s.status, 'cora_transfer_id': s.cora_transfer_id,
+            'status': s.status, 'cora_transfer_id': s.cora_transfer_id, 'titular_chave': s.titular_chave,
             'banco_codigo': j.banco_codigo if j else None,
             'agencia': j.agencia if j else None,
             'conta': j.conta if j else None,
@@ -760,44 +760,80 @@ def _normalizar_cpf(valor: str) -> str:
     return (valor or '').replace('.', '').replace('-', '').replace('/', '').strip()
 
 
+def _titular_da_chave(dados) -> tuple:
+    """Extrai (nome, cpf_cnpj_mascarado) da resposta de consulta de chave do Asaas.
+    Defensivo quanto aos nomes de campo."""
+    if not isinstance(dados, dict):
+        return '', ''
+    nome = dados.get('name') or dados.get('ownerName') or ''
+    cpf = dados.get('cpfCnpj') or dados.get('cpfCnpjMasked') or ''
+    if not (nome and cpf):
+        for k in ('account', 'owner', 'holder', 'pixKey'):
+            sub = dados.get(k)
+            if isinstance(sub, dict):
+                nome = nome or sub.get('name') or sub.get('ownerName') or ''
+                cpf = cpf or sub.get('cpfCnpj') or ''
+    return (nome or '').strip(), (cpf or '').strip()
+
+
+def _cpf_consistente(cpf_conta: str, cpf_mascarado: str) -> bool:
+    """True se os digitos visiveis do CPF mascarado retornado pelo Asaas aparecem
+    (contiguos) no CPF da conta. Bloqueia chave que pertence a outra pessoa."""
+    conta = ''.join(c for c in (cpf_conta or '') if c.isdigit())
+    visiveis = ''.join(c for c in (cpf_mascarado or '') if c.isdigit())
+    if len(conta) != 11 or len(visiveis) < 3:
+        return False
+    return visiveis in conta
+
+
 @app.post('/saques/solicitar')
-def solicitar_saque(body: SolicitarSaqueBody,
-                    jogador: JogadorModel = Depends(obter_usuario_atual),
-                    db: Session = Depends(get_db)):
-    jogador = _lock_jogador(db, jogador.id)  # trava a linha: evita corrida de saldo
+async def solicitar_saque(body: SolicitarSaqueBody,
+                          jogador: JogadorModel = Depends(obter_usuario_atual),
+                          db: Session = Depends(get_db)):
+    from asaas import asaas_consultar_chave
     if body.valor < SAQUE_MINIMO:
         raise HTTPException(400, f'Saque minimo: R$ {SAQUE_MINIMO:.2f}')
-    if body.valor > jogador.saldo_sacavel:
-        raise HTTPException(400, f'Saldo sacavel insuficiente. Disponivel para saque: R$ {jogador.saldo_sacavel:.2f} (apenas premios ganhos sao sacaveis).')
-    # ANTILAVAGEM: o saque so pode ir para a chave PIX tipo CPF do proprio titular,
-    # o mesmo CPF usado no deposito. Isso impede usar a plataforma como ponte de
-    # PIX entre estranhos (laranja/lavagem). A chave/tipo enviados pelo cliente sao
-    # ignorados de proposito.
+    chave = (body.chave_pix or '').strip()
+    tipo = body.tipo_chave
+    if tipo not in TIPOS_CHAVE_PIX:
+        raise HTTPException(400, 'Tipo de chave deve ser: cpf, email, telefone ou aleatoria')
+    if not chave or len(chave) > 140:
+        raise HTTPException(400, 'Chave PIX invalida')
     if not jogador.cpf:
-        raise HTTPException(400, 'Faca um deposito com CPF antes de sacar. '
-                                 'O saque so e liberado para a chave PIX-CPF do titular.')
-    # Se o cliente mandar um CPF, ele tem que bater com o do titular.
-    cpf_informado = _normalizar_cpf(body.chave_pix)
-    if cpf_informado and cpf_informado != jogador.cpf:
-        raise HTTPException(400, 'O saque so pode ir para a chave PIX-CPF do proprio titular '
-                                 '(mesmo CPF do deposito).')
-    chave = jogador.cpf
-    tipo_chave = 'cpf'
+        raise HTTPException(400, 'Faca um deposito com CPF antes de sacar '
+                                 '(precisamos do seu CPF para validar a chave).')
+
+    # ANTILAVAGEM: a chave PIX (qualquer tipo) precisa pertencer ao MESMO CPF da conta.
+    # Consultamos o titular no Asaas antes de reservar o saldo (limite: 5 consultas/min).
+    try:
+        dados_chave = await asaas_consultar_chave(tipo, chave)
+    except HTTPException:
+        raise HTTPException(400, 'Nao consegui validar essa chave PIX agora '
+                                 '(inexistente ou servico indisponivel). Confira e tente de novo.')
+    nome_titular, cpf_mascarado = _titular_da_chave(dados_chave)
+    if not _cpf_consistente(jogador.cpf, cpf_mascarado):
+        raise HTTPException(400, 'Essa chave PIX pertence a outra pessoa (CPF divergente do '
+                                 'titular da conta). Use uma chave de uma conta com o seu CPF.')
+
+    jogador = _lock_jogador(db, jogador.id)  # trava a linha: evita corrida de saldo
+    if body.valor > jogador.saldo_sacavel:
+        raise HTTPException(400, f'Saldo sacavel insuficiente. Disponivel para saque: '
+                                 f'R$ {jogador.saldo_sacavel:.2f} (apenas premios ganhos sao sacaveis).')
     pendente = db.scalar(select(SaqueRequisicaoModel).where(
         SaqueRequisicaoModel.jogador_id == jogador.id,
         SaqueRequisicaoModel.status == 'pendente'))
     if pendente:
         raise HTTPException(400, 'Voce ja tem um saque pendente. Aguarde o processamento.')
-    # Debita na solicitacao (reserva) para impedir gasto duplo do saldo
     registrar_transacao(db, jogador, tipo='saque_reserva', delta_saldo=-body.valor,
                         delta_sacavel=-body.valor, ref='saque:reserva')
     saque = SaqueRequisicaoModel(jogador_id=jogador.id, valor=body.valor,
-                                 chave_pix=chave, tipo_chave=tipo_chave, status='pendente')
+                                 chave_pix=chave, tipo_chave=tipo, status='pendente',
+                                 titular_chave=nome_titular or None)
     db.add(saque)
     db.commit()
     db.refresh(saque)
     return {'message': f'Saque de R$ {body.valor:.2f} solicitado. O valor foi reservado e sera pago via PIX.',
-            'id': saque.id, 'saldo_restante': jogador.saldo}
+            'id': saque.id, 'saldo_restante': jogador.saldo, 'titular_chave': nome_titular}
 
 
 @app.get('/saques/meus')

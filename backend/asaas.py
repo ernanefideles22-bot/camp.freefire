@@ -244,5 +244,17 @@ async def asaas_transferir_pix(chave: str, tipo_chave: str, valor: float,
     })
 
 
+async def asaas_consultar_chave(tipo_chave: str, chave: str) -> dict:
+    """Consulta o titular de uma chave PIX (qualquer tipo) no DICT via Asaas,
+    para validar o dono ANTES da transferencia. Limite Asaas: 5 req/min.
+    Retorna o dict bruto (inclui cpfCnpj mascarado e nome do titular)."""
+    from urllib.parse import urlencode
+    tipo = TIPO_CHAVE_ASAAS.get(tipo_chave)
+    if not tipo:
+        raise HTTPException(400, 'Tipo de chave invalido')
+    qs = urlencode({'type': tipo, 'key': chave})
+    return await _api('GET', f'/pix/addressKeys/external?{qs}')
+
+
 async def asaas_consultar_transferencia(transfer_id: str) -> dict:
     return await _api('GET', f'/transfers/{transfer_id}')

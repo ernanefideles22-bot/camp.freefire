@@ -104,6 +104,7 @@ class SaqueRequisicaoModel(Base):
     tipo_chave: Mapped[str] = mapped_column(String, nullable=False, default='cpf')  # cpf|email|telefone|aleatoria
     status: Mapped[str] = mapped_column(String, default='pendente', index=True)  # pendente|processando|pago|rejeitado
     cora_transfer_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    titular_chave: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # nome do dono da chave (Asaas)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     processado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     jogador: Mapped['JogadorModel'] = relationship(back_populates='saques')
