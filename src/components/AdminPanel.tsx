@@ -40,6 +40,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   const [loadingSaques, setLoadingSaques] = useState<boolean>(false);
   const [players, setPlayers] = useState<Jogador[]>([]);
   const [loadingPlayersList, setLoadingPlayersList] = useState<boolean>(false);
+  const [cmJogadorId, setCmJogadorId] = useState<string>('');
+  const [cmValor, setCmValor] = useState<string>('');
+  const [cmMotivo, setCmMotivo] = useState<string>('');
+  const [loadingCm, setLoadingCm] = useState<boolean>(false);
 
   const fetchPlayers = async () => {
     setLoadingPlayersList(true);
@@ -143,6 +147,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     }
   };
 
+  const handleCreditoManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const v = parseFloat(cmValor.replace(',', '.'));
+    if (!cmJogadorId) { onAddToast('warning', 'Selecione o jogador'); return; }
+    if (isNaN(v) || v <= 0) { onAddToast('warning', 'Valor invalido'); return; }
+    if (cmMotivo.trim().length < 3) { onAddToast('warning', 'Informe um motivo (auditoria)'); return; }
+    setLoadingCm(true);
+    try {
+      const r = await apiService.creditoManual(Number(cmJogadorId), v, cmMotivo.trim());
+      onAddToast('success', 'Credito manual aplicado', r.message);
+      setCmValor(''); setCmMotivo('');
+      await fetchPlayers();
+    } catch (err: any) {
+      onAddToast('error', 'Falha no credito manual', err.message);
+    } finally { setLoadingCm(false); }
+  };
+
   const handleProcessarDeposito = async (depositoId: number, status: 'aprovado' | 'rejeitado') => {
     try {
       const res = await apiService.processarDeposito(depositoId, status);
@@ -228,7 +249,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
         {activeTab === 'geral' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
             <div className="space-y-5">
-              <div className="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl">
+              <div className="ff-card p-5">
                 <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-4"><UserPlus className="w-4 h-4 text-primary" />Cadastrar Jogador</h2>
                 <form onSubmit={handleRegisterPlayer} className="space-y-4">
                   <div><label className={labelCls}>Nome Completo</label><input type="text" placeholder="Ex: Pedro Henrique" value={nome} onChange={(e) => setNome(e.target.value)} disabled={loadingPlayer} className={inputCls} /></div>
@@ -238,7 +259,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                   </button>
                 </form>
               </div>
-              <div className="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl">
+              <div className="ff-card p-5">
                 <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-4"><Key className="w-4 h-4 text-primary" />Liberar Sala e Senha</h2>
                 <form onSubmit={handleRegisterRoom} className="space-y-4">
                   <div><label className={labelCls}>Número da Queda</label><input type="number" min="1" value={salaQueda} onChange={(e) => setSalaQueda(e.target.value)} disabled={loadingSala} className={inputCls} /></div>
@@ -260,13 +281,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                 </form>
               </div>
             </div>
-            <div className="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800 shadow-xl h-full min-h-[600px]">
+            <div className="ff-card h-full min-h-[600px]">
               <AdminAgentChat onAddToast={onAddToast} onRefreshData={fetchPlayers} />
             </div>
           </div>
         )}
         {activeTab === 'lancar' && (
-          <div className="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-6">
+          <div className="ff-card p-5 space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-1"><Calendar className="w-4 h-4 text-primary" />Lançador de Resultados de Queda</h2>
@@ -324,7 +345,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
           </div>
         )}
         {activeTab === 'depositos' && (
-          <div className="bg-zinc-900/60 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-6">
+          <div className="ff-card p-5 space-y-6">
+            <form onSubmit={handleCreditoManual} className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <div>
+                <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-1"><Landmark className="w-4 h-4 text-primary" />Credito Manual de Saldo</h2>
+                <p className="text-xs text-zinc-400">Use para pagamento por fora, bonus ou correcao. Entra como saldo NAO sacavel e fica registrado no ledger com o motivo. O deposito normal do jogador e automatico via PIX.</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <select value={cmJogadorId} onChange={e => setCmJogadorId(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-800 px-3 py-2.5 rounded-xl text-sm text-white focus:border-primary focus:outline-none">
+                  <option value="">Selecione o jogador</option>
+                  {players.map(pl => (<option key={pl.id} value={pl.id}>{pl.nick} (#{pl.id})</option>))}
+                </select>
+                <input type="text" inputMode="decimal" placeholder="Valor R$" value={cmValor}
+                  onChange={e => setCmValor(e.target.value.replace(/[^0-9.,]/g, ''))}
+                  className="bg-zinc-950 border border-zinc-800 px-3 py-2.5 rounded-xl text-sm text-white focus:border-primary focus:outline-none font-mono" />
+                <input type="text" placeholder="Motivo (auditoria)" value={cmMotivo}
+                  onChange={e => setCmMotivo(e.target.value)}
+                  className="bg-zinc-950 border border-zinc-800 px-3 py-2.5 rounded-xl text-sm text-white focus:border-primary focus:outline-none" />
+              </div>
+              <button type="submit" disabled={loadingCm}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-primary text-white font-bold text-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50">
+                {loadingCm ? <Spinner size="sm" /> : <Plus className="w-4 h-4" />}Aplicar Credito
+              </button>
+            </form>
             <div className="flex items-center justify-between gap-4">
               <div><h2 className="text-sm font-bold text-white flex items-center gap-2 mb-1"><Landmark className="w-4 h-4 text-primary" />Depósitos PIX Pendentes</h2><p className="text-xs text-zinc-400">Valide a transação no extrato da sua conta bancária antes de aprovar e creditar o saldo na conta do competidor.</p></div>
               <button onClick={fetchDepositos} disabled={loadingDepositos} className="p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer" title="Atualizar"><RefreshCw className={`w-4 h-4 ${loadingDepositos ? 'animate-spin' : ''}`} /></button>
@@ -332,7 +376,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
             {loadingDepositos && depositos.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 space-y-3"><Spinner size="md" className="text-primary" /><p className="text-xs text-zinc-400">Carregando solicitações de recarga...</p></div>
             ) : depositos.length === 0 ? (
-              <div className="border border-dashed border-zinc-800 rounded-xl p-12 text-center text-zinc-500"><Landmark className="w-12 h-12 text-zinc-700 mx-auto mb-3" /><p className="text-sm font-bold text-zinc-400">Nenhum depósito pendente</p><p className="text-xs text-zinc-500 mt-1">Os depósitos solicitados pelos jogadores via PIX manual aparecerão aqui.</p></div>
+              <div className="border border-dashed border-zinc-800 rounded-xl p-12 text-center text-zinc-500"><Landmark className="w-12 h-12 text-zinc-700 mx-auto mb-3" /><p className="text-sm font-bold text-zinc-400">Nenhum depósito pendente</p><p className="text-xs text-zinc-500 mt-1">O depósito do jogador agora é automático via PIX (Asaas). Esta lista legada permanece vazia.</p></div>
             ) : (
               <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                 {depositos.map((dep) => (

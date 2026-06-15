@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiService } from '../services/api';
 import type { Jogador } from '../services/api';
 import { Gamepad2, User, Lock, ChevronRight, LogIn, AlertCircle } from 'lucide-react';
@@ -8,6 +8,8 @@ interface AuthPortalProps {
   onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void;
 }
 
+const GOOGLE_CLIENT_ID = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
 export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToast }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [nome, setNome] = useState('');
@@ -16,6 +18,56 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
   const [confirmSenha, setConfirmSenha] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Fluxo Google: quando a conta e nova, o backend pede o nick do Free Fire.
+  const [pendingGoogleToken, setPendingGoogleToken] = useState<string | null>(null);
+  const [googleNick, setGoogleNick] = useState('');
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+
+  const handleGoogle = async (idToken: string, ffNick?: string) => {
+    setLoading(true); setError('');
+    try {
+      const data = await apiService.loginGoogle(idToken, ffNick);
+      if (data.precisa_nick) {
+        setPendingGoogleToken(idToken);
+        onAddToast('info', 'Quase la', 'Escolha seu nick do Free Fire para concluir o cadastro.');
+      } else if (data.jogador) {
+        onAddToast('success', 'Bem-vindo!', `Ola, ${data.jogador.nome}!`);
+        onAuthSuccess(data.jogador);
+      }
+    } catch (err: any) {
+      const msg = err.message || 'Falha ao entrar com o Google.';
+      setError(msg); onAddToast('error', 'Erro no login Google', msg);
+    } finally { setLoading(false); }
+  };
+
+  // Carrega o Google Identity Services e renderiza o botao oficial.
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID || pendingGoogleToken) return;
+    const init = () => {
+      const g = (window as any).google;
+      if (!g?.accounts?.id || !googleBtnRef.current) return;
+      g.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: (resp: any) => handleGoogle(resp.credential),
+      });
+      g.accounts.id.renderButton(googleBtnRef.current, {
+        theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', width: 320,
+      });
+    };
+    if ((window as any).google?.accounts?.id) { init(); return; }
+    const SID = 'gsi-client';
+    let s = document.getElementById(SID) as HTMLScriptElement | null;
+    if (!s) {
+      s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client';
+      s.async = true; s.defer = true; s.id = SID;
+      document.body.appendChild(s);
+    }
+    s.addEventListener('load', init);
+    return () => s?.removeEventListener('load', init);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingGoogleToken, isLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,21 +105,28 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
     }
   };
 
+  const handleConcluirGoogle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pendingGoogleToken) return;
+    if (!googleNick.trim()) { setError('Informe seu nick do Free Fire.'); return; }
+    await handleGoogle(pendingGoogleToken, googleNick.trim());
+  };
+
   return (
     <div className="flex items-center justify-center py-12 px-4 relative overflow-hidden" style={{ minHeight: 'calc(100vh - 12rem)' }}>
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-accent-cyan/10 blur-[120px] pointer-events-none" />
 
-      <div className="w-full max-w-md bg-panel-bg rounded-2xl border border-zinc-800/80 p-8 shadow-2xl relative z-10 overflow-hidden">
-        <div className={`absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r ${isLogin ? 'from-primary to-accent-cyan' : 'from-accent-cyan to-accent-orange'}`} />
+      <div className="w-full max-w-md ff-card p-8 relative z-10 overflow-hidden">
+        <div className={`absolute top-0 left-0 right-0 h-1 ff-topbar ${isLogin ? '' : 'opacity-90'}`} />
 
         <div className="text-center mb-8 mt-2">
-          <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-primary mb-4">
-            <Gamepad2 className="w-8 h-8" />
+          <div className="inline-flex items-center justify-center mb-4 animate-float">
+            <img src="/flowfire-logo.png" alt="Flow Fire Champions" className="w-20 h-20 object-contain drop-shadow-[0_0_18px_rgba(139,92,246,0.45)]" />
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-white">Solo Championship</h2>
+          <h2 className="text-2xl font-black tracking-tight text-gradient-neon">Flow Fire Champions</h2>
           <p className="text-sm text-zinc-400 mt-1">
-            {isLogin ? 'Acesse sua conta para entrar nas salas' : 'Crie sua conta para comecar a jogar'}
+            {pendingGoogleToken ? 'Escolha seu nick para concluir' : isLogin ? 'Acesse sua conta para entrar nas salas' : 'Crie sua conta para comecar a jogar'}
           </p>
         </div>
 
@@ -78,6 +137,30 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
           </div>
         )}
 
+        {pendingGoogleToken ? (
+          <form onSubmit={handleConcluirGoogle} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Nickname do Jogo</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
+                  <Gamepad2 className="w-4 h-4" />
+                </div>
+                <input style={{ fontSize: '16px' }} type="text" required placeholder="Ex: Nobru" value={googleNick}
+                  onChange={(e) => setGoogleNick(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-accent-cyan focus:outline-none transition-all" />
+              </div>
+            </div>
+            <button type="submit" disabled={loading}
+              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-zinc-950 font-bold bg-accent-cyan hover:bg-cyan-400 transition-all disabled:opacity-60">
+              {loading ? 'Concluindo...' : 'Concluir cadastro'}<ChevronRight className="w-4 h-4" />
+            </button>
+            <button type="button" onClick={() => { setPendingGoogleToken(null); setGoogleNick(''); }}
+              className="w-full text-sm font-semibold text-zinc-400 hover:text-white transition-colors">
+              Cancelar
+            </button>
+          </form>
+        ) : (
+        <>
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div className="space-y-1.5">
@@ -111,7 +194,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
                 <Lock className="w-4 h-4" />
               </div>
-              <input style={{ fontSize: '16px' }} type="password" required placeholder="••••••••" value={senha}
+              <input style={{ fontSize: '16px' }} type="password" required placeholder="********" value={senha}
                 onChange={(e) => setSenha(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-primary focus:outline-none transition-all" />
             </div>
@@ -124,7 +207,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
                   <Lock className="w-4 h-4" />
                 </div>
-                <input style={{ fontSize: '16px' }} type="password" required placeholder="••••••••" value={confirmSenha}
+                <input style={{ fontSize: '16px' }} type="password" required placeholder="********" value={confirmSenha}
                   onChange={(e) => setConfirmSenha(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-primary focus:outline-none transition-all" />
               </div>
@@ -137,6 +220,17 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
           </button>
         </form>
 
+        {GOOGLE_CLIENT_ID && (
+          <div className="mt-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px bg-zinc-800" />
+              <span className="text-[10px] uppercase tracking-wider text-zinc-500 font-bold">ou</span>
+              <div className="flex-1 h-px bg-zinc-800" />
+            </div>
+            <div ref={googleBtnRef} className="flex justify-center" />
+          </div>
+        )}
+
         <div className="mt-8 text-center">
           <button style={{ minHeight: '44px', touchAction: 'manipulation' }}
             onClick={() => { setIsLogin(!isLogin); setError(''); }}
@@ -144,6 +238,8 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
             {isLogin ? 'Nao tem uma conta? Cadastre-se' : 'Ja tem uma conta? Faca Login'}
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

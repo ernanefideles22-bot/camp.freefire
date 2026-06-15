@@ -134,7 +134,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
   return (
     <div className="space-y-6">
       {/* Painel de boas-vindas */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-6 rounded-2xl border border-zinc-800 bg-panel-bg/40 backdrop-blur-md gap-4 shadow-xl">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-6 ff-card gap-4">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary-dark flex items-center justify-center text-white font-bold text-2xl shadow-md uppercase">
             {currentUser.nick.slice(0, 2)}
@@ -157,7 +157,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
         {/* Coluna esquerda */}
         <div className="lg:col-span-8 space-y-6">
           {/* Seletor de Queda */}
-          <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-4 shadow-xl">
+          <div className="ff-card p-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400 mb-3.5">Selecione a Queda</h3>
             <div className="grid grid-cols-3 gap-2">
               {[1, 2, 3].map((num) => (
@@ -170,7 +170,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
           </div>
 
           {/* Card da sala */}
-          <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-6 shadow-xl relative overflow-hidden">
+          <div className="ff-card p-6 relative overflow-hidden">
             {loadingStatus ? (
               <div className="py-12 flex flex-col items-center justify-center gap-3">
                 <Spinner size="lg" className="text-primary" />
@@ -319,7 +319,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
               <Award className="w-5 h-5 text-primary" />
               Suas Pontuacoes Anteriores
             </h3>
-            <div className="rounded-2xl border border-zinc-800 bg-panel-bg/40 backdrop-blur-md overflow-hidden shadow-xl">
+            <div className="ff-card overflow-hidden">
               {loadingHistory ? (
                 <div className="py-8 flex justify-center"><Spinner size="sm" /></div>
               ) : historyData && historyData.history.length > 0 ? (
@@ -360,7 +360,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
 
         {/* Coluna direita - Carteira */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-panel-bg/40 backdrop-blur-md rounded-2xl border border-zinc-800 p-5 shadow-xl space-y-4">
+          <div className="ff-card p-5 space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
                 <Wallet className="w-4 h-4 text-primary" />
@@ -368,16 +368,21 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
               </h4>
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             </div>
-            <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 text-center space-y-1">
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Saldo Disponivel</span>
-              <h3 className="text-3xl font-black text-white font-mono">
+            <div className="p-4 bg-zinc-950/80 rounded-xl border border-zinc-800 text-center space-y-1 relative overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-0.5 ff-topbar" />
+              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Saldo Total</span>
+              <h3 className="text-3xl font-black font-mono text-gradient-neon">
                 R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}
               </h3>
+              <p className="text-[11px] text-zinc-500">
+                Disponivel p/ saque:{' '}
+                <span className="text-emerald-400 font-bold font-mono">R$ {(currentUser.saldo_sacavel || 0).toFixed(2).replace('.', ',')}</span>
+              </p>
             </div>
             <div className="border-t border-zinc-800" />
             <PixDeposito jogadorId={currentUser.id} />
             <div className="border-t border-zinc-800" />
-            <PixSaque saldo={currentUser.saldo || 0} />
+            <PixSaque saldoSacavel={currentUser.saldo_sacavel || 0} />
           </div>
         </div>
       </div>

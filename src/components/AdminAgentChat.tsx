@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Sparkles, Send, HelpCircle, Bot, User, Trash2 } from 'lucide-react';
 import { apiService } from '../services/api';
+import type { AgenteResposta } from '../services/api';
 import { Spinner } from './Spinner';
 
 interface Message {
@@ -27,6 +28,7 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [proposta, setProposta] = useState<AgenteResposta | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -58,20 +60,23 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
     setLoading(true);
 
     try {
-      const response = await apiService.enviarComandoAgente(userText, undefined);
-      
+      const response = await apiService.enviarComandoAgente(userText);
+
+      let text = '';
+      if (response.tipo === 'proposta') {
+        text = `Proposta: ${response.resumo || response.acao}\n${response.aviso || ''}`.trim();
+        setProposta(response);
+      } else {
+        text = response.resposta || 'Sem resposta.';
+        setProposta(null);
+      }
       const agentMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'agent',
-        text: response.resposta,
+        text,
         timestamp: new Date()
       };
       setMessages(prev => [...prev, agentMsg]);
-      
-      // If action was successful, trigger a refresh of the leaderboard/dropdowns
-      if (response.resposta.toLowerCase().includes('sucesso') && onRefreshData) {
-        onRefreshData();
-      }
     } catch (err: any) {
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -84,6 +89,37 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirmarProposta = async () => {
+    if (!proposta || !proposta.acao || loading) return;
+    setLoading(true);
+    try {
+      const r = await apiService.executarAcaoAgente(proposta.acao, proposta.dados);
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(), sender: 'agent',
+        text: r.message || 'Acao executada com sucesso.', timestamp: new Date(),
+      }]);
+      onAddToast('success', 'Acao executada', r.message);
+      setProposta(null);
+      if (onRefreshData) onRefreshData();
+    } catch (err: any) {
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(), sender: 'agent',
+        text: `Erro ao executar: ${err.message || 'falha na execucao.'}`, timestamp: new Date(),
+      }]);
+      onAddToast('error', 'Falha ao executar', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelarProposta = () => {
+    setProposta(null);
+    setMessages(prev => [...prev, {
+      id: Date.now().toString(), sender: 'agent',
+      text: 'Proposta cancelada. Nada foi alterado.', timestamp: new Date(),
+    }]);
   };
 
   const handleClearHistory = () => {
@@ -102,7 +138,7 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
   };
 
   return (
-    <div className="p-6 rounded-2xl border border-zinc-800 bg-panel-bg/40 backdrop-blur-md shadow-xl flex flex-col h-[520px]">
+    <div className="p-6 ff-card flex flex-col h-[520px]">
       {/* Header */}
       <div className="flex items-center justify-between pb-4 border-b border-zinc-900">
         <div className="flex items-center gap-2">
@@ -216,6 +252,19 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
 
       {/* Input Field */}
       <div className="pt-3 border-t border-zinc-900 space-y-2">
+
+        {proposta && proposta.acao && (
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+            <p className="text-xs text-amber-300 font-bold">Confirmar acao do agente: {proposta.acao}</p>
+            <pre className="text-[10px] text-zinc-400 whitespace-pre-wrap break-words max-h-32 overflow-y-auto">{JSON.stringify(proposta.dados, null, 2)}</pre>
+            <div className="flex gap-2">
+              <button type="button" onClick={handleConfirmarProposta} disabled={loading}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold hover:bg-emerald-500 hover:text-zinc-950 cursor-pointer disabled:opacity-50">Confirmar e executar</button>
+              <button type="button" onClick={handleCancelarProposta} disabled={loading}
+                className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-300 border border-rose-500/30 text-xs font-bold hover:bg-rose-500 hover:text-zinc-950 cursor-pointer disabled:opacity-50">Cancelar</button>
+            </div>
+          </div>
+        )}
 
         {/* Chat submit form */}
         <form onSubmit={handleSendMessage} className="flex gap-2">

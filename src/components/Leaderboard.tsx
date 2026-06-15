@@ -151,7 +151,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
       </div>
 
       {/* Main Table */}
-      <div className="relative overflow-hidden rounded-2xl border border-zinc-800 bg-panel-bg/40 backdrop-blur-md shadow-xl">
+      <div className="relative overflow-hidden ff-card">
         <div className="overflow-x-auto">
           {data.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center">
