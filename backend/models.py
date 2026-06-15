@@ -30,6 +30,11 @@ class JogadorModel(Base):
     # Invariante: saldo_sacavel <= saldo, sempre.
     saldo_sacavel: Mapped[float] = mapped_column(Float, default=0.0)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Aceite de termos + maioridade (registro legal do consentimento)
+    aceitou_termos: Mapped[bool] = mapped_column(Boolean, default=False)
+    confirmou_idade: Mapped[bool] = mapped_column(Boolean, default=False)
+    termos_versao: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    termos_aceito_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     # Dados bancarios para saque via API Cora (transferencia exige conta, nao chave PIX)
     banco_codigo: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     agencia: Mapped[Optional[str]] = mapped_column(String, nullable=True)

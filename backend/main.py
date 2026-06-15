@@ -51,6 +51,7 @@ if not os.environ.get('SKIP_DB_INIT'):
         print(f'[WARN] promocao de admin falhou: {exc}')
 
 TAXA_INSCRICAO = 2.0
+TERMOS_VERSAO = '1.0'  # bump quando os termos mudarem (forca novo aceite no futuro)
 MAX_COLOCACAO = 52   # 52 jogadores por queda
 MAX_ABATES = 50      # teto plausivel de abates por partida
 
@@ -118,6 +119,8 @@ class JogadorCreate(BaseModel):
     nome: str
     nick: str
     senha: Optional[str] = None
+    aceitou_termos: bool = False
+    confirma_idade: bool = False
 
 class JogadorLogin(BaseModel):
     nick: str
@@ -221,9 +224,14 @@ def cadastrar(jogador: JogadorCreate, db: Session = Depends(get_db)):
         raise HTTPException(400, 'Senha obrigatoria (minimo 6 caracteres)')
     if db.scalar(select(JogadorModel).where(JogadorModel.nick == nick)):
         raise HTTPException(400, 'Nick ja existe')
+    if not jogador.aceitou_termos or not jogador.confirma_idade:
+        raise HTTPException(400, 'Voce precisa aceitar os Termos e confirmar que tem 18 anos ou mais.')
     eh_admin = nick in _admin_nicks()  # admin so por configuracao explicita (ADMIN_NICKS)
+    from models import utcnow
     novo = JogadorModel(nome=jogador.nome.strip(), nick=nick,
-                        senha_hash=hash_senha(jogador.senha), saldo=0.0, is_admin=eh_admin)
+                        senha_hash=hash_senha(jogador.senha), saldo=0.0, is_admin=eh_admin,
+                        aceitou_termos=True, confirmou_idade=True,
+                        termos_versao=TERMOS_VERSAO, termos_aceito_em=utcnow())
     db.add(novo)
     db.commit()
     db.refresh(novo)
@@ -323,6 +331,8 @@ async def _verificar_google_token(token: str) -> dict:
 class GoogleLoginBody(BaseModel):
     id_token: str
     nick: Optional[str] = None
+    aceitou_termos: bool = False
+    confirma_idade: bool = False
 
 
 @app.post('/auth/google')
@@ -348,9 +358,14 @@ async def auth_google(body: GoogleLoginBody, db: Session = Depends(get_db)):
         return {'precisa_nick': True, 'email': email, 'nome_sugerido': nome}
     if db.scalar(select(JogadorModel).where(JogadorModel.nick == nick)):
         raise HTTPException(400, 'Nick ja existe. Escolha outro.')
+    if not body.aceitou_termos or not body.confirma_idade:
+        raise HTTPException(400, 'Voce precisa aceitar os Termos e confirmar que tem 18 anos ou mais.')
+    from models import utcnow
     novo = JogadorModel(nome=nome, nick=nick, google_sub=google_sub, email=email,
                         senha_hash=None, saldo=0.0, saldo_sacavel=0.0,
-                        is_admin=(nick in _admin_nicks()))
+                        is_admin=(nick in _admin_nicks()),
+                        aceitou_termos=True, confirmou_idade=True,
+                        termos_versao=TERMOS_VERSAO, termos_aceito_em=utcnow())
     db.add(novo)
     db.commit()
     db.refresh(novo)
