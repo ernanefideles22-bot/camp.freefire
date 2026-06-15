@@ -154,11 +154,11 @@ export interface DepositoRequisicao {
 
 // ====================== FUNCAO PREMIO ======================
 export function getPremioPorColocacao(colocacao: number): number {
-  if (colocacao === 1) return 20;
+  if (colocacao === 1) return 15;
   if (colocacao === 2) return 12;
   if (colocacao === 3) return 8;
   if (colocacao === 4) return 6;
-  if (colocacao >= 5 && colocacao <= 10) return 2.5;
+  if (colocacao === 5) return 4;
   return 0;
 }
 
