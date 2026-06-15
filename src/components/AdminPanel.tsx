@@ -20,9 +20,6 @@ interface LinhaResultado {
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser: _currentUser }) => {
   const [activeTab, setActiveTab] = useState<'geral' | 'lancar' | 'depositos'>('geral');
-  const [nome, setNome] = useState<string>('');
-  const [nick, setNick] = useState<string>('');
-  const [loadingPlayer, setLoadingPlayer] = useState<boolean>(false);
   const [salaQueda, setSalaQueda] = useState<string>('1');
   const [salaId, setSalaId] = useState<string>('');
   const [salaSenha, setSalaSenha] = useState<string>('');
@@ -71,20 +68,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     const interval = setInterval(() => { fetchDepositos(); fetchSaques(); }, 20000);
     return () => clearInterval(interval);
   }, []);
-
-  const handleRegisterPlayer = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nome.trim() || !nick.trim()) { onAddToast('warning', 'Campos Obrigatórios', 'Preencha todos os campos para cadastrar o jogador.'); return; }
-    setLoadingPlayer(true);
-    try {
-      const newPlayer = await apiService.cadastrarJogador(nome.trim(), nick.trim());
-      onAddToast('success', 'Jogador Cadastrado', `Jogador "${newPlayer.nick}" adicionado com sucesso!`);
-      setNome(''); setNick(''); await fetchPlayers();
-    } catch (err: any) {
-      if (err.status === 400) { onAddToast('error', 'Nick Duplicado', err.message || 'Este nick de jogo já está sendo utilizado.'); }
-      else { onAddToast('error', 'Erro no Cadastro', 'Não foi possível cadastrar o jogador no momento.'); }
-    } finally { setLoadingPlayer(false); }
-  };
 
   const handleRegisterRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -249,16 +232,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
         {activeTab === 'geral' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
             <div className="space-y-5">
-              <div className="ff-card p-5">
-                <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-4"><UserPlus className="w-4 h-4 text-primary" />Cadastrar Jogador</h2>
-                <form onSubmit={handleRegisterPlayer} className="space-y-4">
-                  <div><label className={labelCls}>Nome Completo</label><input type="text" placeholder="Ex: Pedro Henrique" value={nome} onChange={(e) => setNome(e.target.value)} disabled={loadingPlayer} className={inputCls} /></div>
-                  <div><label className={labelCls}>Nickname do Jogo</label><input type="text" placeholder="Ex: PH" value={nick} onChange={(e) => setNick(e.target.value)} disabled={loadingPlayer} className={inputCls} /></div>
-                  <button type="submit" disabled={loadingPlayer || !nome.trim() || !nick.trim()} className="w-full py-3 rounded-xl bg-primary text-white font-bold text-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:pointer-events-none">
-                    {loadingPlayer ? <Spinner size="sm" /> : <Plus className="w-4 h-4" />}{loadingPlayer ? 'Cadastrando...' : 'Cadastrar Competidor'}
-                  </button>
-                </form>
-              </div>
               <div className="ff-card p-5">
                 <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-4"><Key className="w-4 h-4 text-primary" />Liberar Sala e Senha</h2>
                 <form onSubmit={handleRegisterRoom} className="space-y-4">
