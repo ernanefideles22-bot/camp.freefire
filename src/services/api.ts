@@ -174,15 +174,22 @@ export const apiService = {
     return jogador as Jogador;
   },
 
-  async cadastrarJogador(nome: string, nick: string, senha?: string): Promise<Jogador> {
-    const res = await api.post('/auth/cadastro', { nome, nick, senha: senha || undefined });
+  async cadastrarJogador(nome: string, nick: string, senha?: string,
+                         aceitouTermos = false, confirmaIdade = false): Promise<Jogador> {
+    const res = await api.post('/auth/cadastro', {
+      nome, nick, senha: senha || undefined,
+      aceitou_termos: aceitouTermos, confirma_idade: confirmaIdade,
+    });
     return res.data as Jogador;
   },
 
-  async loginGoogle(idToken: string, nick?: string): Promise<{
+  async loginGoogle(idToken: string, nick?: string,
+                    aceitouTermos = false, confirmaIdade = false): Promise<{
     jogador?: Jogador; precisa_nick?: boolean; email?: string; nome_sugerido?: string;
   }> {
-    const res = await api.post('/auth/google', { id_token: idToken, nick });
+    const res = await api.post('/auth/google', {
+      id_token: idToken, nick, aceitou_termos: aceitouTermos, confirma_idade: confirmaIdade,
+    });
     const data = res.data;
     if (data.access_token) {
       localStorage.setItem('access_token', data.access_token);
