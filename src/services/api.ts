@@ -57,7 +57,27 @@ export interface Jogador {
   nome: string;
   nick: string;
   saldo: number;
+  saldo_sacavel?: number;
   is_admin: boolean;
+}
+
+export interface AgenteResposta {
+  tipo: 'info' | 'proposta' | 'erro';
+  resposta?: string;
+  acao?: string;
+  dados?: any;
+  resumo?: string;
+  aviso?: string;
+}
+
+export interface TransacaoExtrato {
+  id: number;
+  tipo: string;
+  valor: number;
+  saldo_depois: number;
+  sacavel_depois: number;
+  ref?: string | null;
+  criado_em: string | null;
 }
 
 export interface ClassificacaoItem {
@@ -158,6 +178,19 @@ export const apiService = {
     return res.data as Jogador;
   },
 
+  async loginGoogle(idToken: string, nick?: string): Promise<{
+    jogador?: Jogador; precisa_nick?: boolean; email?: string; nome_sugerido?: string;
+  }> {
+    const res = await api.post('/auth/google', { id_token: idToken, nick });
+    const data = res.data;
+    if (data.access_token) {
+      localStorage.setItem('access_token', data.access_token);
+      if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token);
+      localStorage.setItem('currentUser', JSON.stringify(data.jogador));
+    }
+    return data;
+  },
+
   // CLASSIFICACAO
   async obterClassificacao(): Promise<ClassificacaoItem[]> {
     const res = await api.get('/classificacao');
@@ -217,8 +250,8 @@ export const apiService = {
     return res.data;
   },
 
-  async solicitarDeposito(valor: number): Promise<any> {
-    const res = await api.post('/depositos/solicitar', null, { params: { valor } });
+  async creditoManual(jogadorId: number, valor: number, motivo: string): Promise<any> {
+    const res = await api.post('/depositos/manual', { jogador_id: jogadorId, valor, motivo });
     return res.data;
   },
 
@@ -245,9 +278,15 @@ export const apiService = {
   },
 
   // SAQUES
-  async solicitarSaque(valor: number, chavePix: string, tipoChave: string): Promise<any> {
-    const res = await api.post('/saques/solicitar', { valor, chave_pix: chavePix, tipo_chave: tipoChave });
+  async solicitarSaque(valor: number): Promise<any> {
+    // O saque vai sempre para a chave PIX-CPF do titular (definido no backend).
+    const res = await api.post('/saques/solicitar', { valor });
     return res.data;
+  },
+
+  async meuExtrato(limite = 50): Promise<TransacaoExtrato[]> {
+    const res = await api.get('/me/extrato', { params: { limite } });
+    return res.data as TransacaoExtrato[];
   },
 
   async pagarSaque(id: number): Promise<any> {
@@ -287,9 +326,14 @@ export const apiService = {
   },
 
   // AGENTE IA
-  async enviarComandoAgente(comando: string, _contexto?: any): Promise<{ resposta: string }> {
+  async enviarComandoAgente(comando: string): Promise<AgenteResposta> {
     const res = await api.post('/agente/comando', { comando });
-    return res.data as { resposta: string };
+    return res.data as AgenteResposta;
+  },
+
+  async executarAcaoAgente(acao: string, dados: any): Promise<any> {
+    const res = await api.post('/agente/executar', { acao, dados });
+    return res.data;
   },
 };
 
