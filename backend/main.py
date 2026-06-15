@@ -359,6 +359,23 @@ async def auth_google(body: GoogleLoginBody, db: Session = Depends(get_db)):
             'token_type': 'bearer', 'jogador': _payload_jogador(novo)}
 
 
+@app.get('/diagnostico/asaas')
+async def diagnostico_asaas(tipo: str = 'cpf', chave: str = '47996515839',
+                            _admin: JogadorModel = Depends(require_admin)):
+    """Diagnostico (admin): consulta uma chave PIX no Asaas e devolve a resposta crua
+    + o que o parser extraiu. Verifica conexao e formato. NAO move dinheiro.
+    Em sandbox, so a chave de teste 47996515839 retorna dados."""
+    from asaas import asaas_consultar_chave, ASAAS_BASE
+    try:
+        dados = await asaas_consultar_chave(tipo, chave)
+    except HTTPException as exc:
+        return {'ok': False, 'base': ASAAS_BASE, 'erro': exc.detail}
+    nome, cpf = _titular_da_chave(dados)
+    return {'ok': True, 'base': ASAAS_BASE,
+            'parser_extraiu': {'nome': nome, 'cpf_mascarado': cpf},
+            'resposta_crua': dados}
+
+
 @app.get('/me', response_model=JogadorResponse)
 def me(jogador: JogadorModel = Depends(obter_usuario_atual)):
     return jogador
