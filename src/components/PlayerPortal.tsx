@@ -91,8 +91,8 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     setLoadingInscricao(true);
     try {
       await apiService.inscreverNaQueda(selectedQueda);
-      onAddToast('success', 'Inscricao Confirmada!', 'R$ 2300 foram debitados do seu saldo.');
-      const updatedUser = { ...currentUser, saldo: (currentUser.saldo || 0) - 2.3 };
+      onAddToast('success', 'Inscricao Confirmada!', 'R$ 3,00 foram debitados do seu saldo.');
+      const updatedUser = { ...currentUser, saldo: (currentUser.saldo || 0) - 3.0 };
       onUpdateUser(updatedUser);
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
       fetchQuedaStatus();
@@ -217,7 +217,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                       </div>
                       <button onClick={handleInscricao}
                         disabled={loadingInscricao || (currentUser.saldo || 0) < 3.0}
-                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 ${(currentUser.saldo || 0) <32.0 ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]'}`}>
+                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 ${(currentUser.saldo || 0) < 3.0 ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]'}`}>
                         {loadingInscricao ? <Spinner size="sm" className="text-zinc-950" /> : <Gamepad2 className="w-4 h-4" />}
                         {loadingInscricao ? 'Confirmando...' : (currentUser.saldo || 0) < 3.0 ? 'Saldo Insuficiente' : 'Entrar na Sala (R$ 3,00)'}
                       </button>
