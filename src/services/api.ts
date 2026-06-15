@@ -124,6 +124,7 @@ export interface SaqueRequisicao {
   tipo_chave: string;
   status: string;
   cora_transfer_id?: string | null;
+  titular_chave?: string | null;
   banco_codigo?: string | null;
   agencia?: string | null;
   conta?: string | null;
@@ -278,9 +279,9 @@ export const apiService = {
   },
 
   // SAQUES
-  async solicitarSaque(valor: number): Promise<any> {
-    // O saque vai sempre para a chave PIX-CPF do titular (definido no backend).
-    const res = await api.post('/saques/solicitar', { valor });
+  async solicitarSaque(valor: number, chavePix: string, tipoChave: string): Promise<any> {
+    // O backend valida que a chave pertence ao mesmo CPF da conta antes de pagar.
+    const res = await api.post('/saques/solicitar', { valor, chave_pix: chavePix, tipo_chave: tipoChave });
     return res.data;
   },
 
