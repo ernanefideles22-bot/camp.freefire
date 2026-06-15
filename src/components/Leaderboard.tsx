@@ -235,9 +235,9 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
 
       {/* Rules Footer Summary */}
       <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-900 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-zinc-500">
-        <p>🏆 Classificação prioritária por **Prêmio Acumulado**, seguido de **Pontos LBFF** (colocação + abates).</p>
+        <p>🏆 Classificação priorit�ria por **Prêmio Acumulado**, seguido de **Pontos LBFF** (colocação + abates).</p>
         <p className="flex items-center gap-3">
-          <span className="text-zinc-400 font-bold">Taxa: R$32,00</span>
+          <span className="text-zinc-400 font-bold">Taxa: R$ 3,00</span>
           <span>•</span>
           <span>1º: R$ 12</span>
           <span>•</span>
