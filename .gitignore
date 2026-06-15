@@ -21,3 +21,5 @@ __pycache__/
 *.db
 .venv/
 .pytest_cache/
+node_modules/
+dist/
