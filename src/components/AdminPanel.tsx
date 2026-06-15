@@ -245,7 +245,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
               </div>
               <div className="bg-rose-900/20 backdrop-blur-md rounded-2xl border border-rose-800 p-5 shadow-xl">
                 <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-4"><AlertTriangle className="w-4 h-4 text-primary" />Cancelar Queda e Reembolsar</h2>
-                <p className="text-xs text-zinc-400 mb-4">Cancele uma queda não lotada. Isso removerá as inscrições e devolverá automaticamente R$ 2300 para a carteira de todos os jogadores participantes.</p>
+                <p className="text-xs text-zinc-400 mb-4">Cancele uma queda não lotada. Isso removerá as inscrições e devolverá automaticamente R$ 3,00 para a carteira de todos os jogadores participantes.</p>
                 <form onSubmit={handleCancelQueda} className="space-y-4">
                   <div><label className={labelCls}>Número da Queda para Cancelar</label><input type="number" min="1" placeholder="Ex: 1" value={quedaParaCancelar} onChange={(e) => setQuedaParaCancelar(e.target.value)} disabled={loadingCancelar} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500 transition-all" /></div>
                   <button type="submit" disabled={loadingCancelar || !quedaParaCancelar.trim()} className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:pointer-events-none">
