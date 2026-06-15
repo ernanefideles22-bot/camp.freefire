@@ -59,10 +59,11 @@ MAX_ABATES = 50      # teto plausivel de abates por partida
 # ====================== REGRAS DE PREMIO / PONTOS ======================
 def calcular_premio(colocacao: int, abates: int) -> float:
     """Premio em R$ por queda. Tabela alinhada ao rodape do Leaderboard."""
-    if colocacao == 1: base = 12.0
-    elif colocacao == 2: base = 8.0
-    elif colocacao == 3: base = 5.0
-    elif colocacao == 4: base = 3.0
+    if colocacao == 1: base = 15.0
+    elif colocacao == 2: base = 12.0
+    elif colocacao == 3: base = 8.0
+    elif colocacao == 4: base = 6.0
+    elif colocacao == 5: base = 4.0
     else: base = 0.0
     return base + (abates * 0.25)
 
