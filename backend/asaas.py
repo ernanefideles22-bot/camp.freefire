@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import JogadorModel, CobrancaPixModel
+from models import JogadorModel, CobrancaPixModel, registrar_transacao
 from auth import obter_usuario_atual
 
 router = APIRouter(prefix='/pix', tags=['pix'])
@@ -30,6 +30,9 @@ ASAAS_BASE = os.getenv('ASAAS_BASE_URL', 'https://api.asaas.com/v3').rstrip('/')
 
 PAID_STATUSES = {'RECEIVED', 'CONFIRMED', 'RECEIVED_IN_CASH'}
 CANCEL_STATUSES = {'REFUNDED', 'REFUND_REQUESTED', 'CHARGEBACK_REQUESTED', 'OVERDUE', 'DELETED'}
+# Estornos que ocorrem APOS o pagamento ja ter sido creditado -> exigem reverter o saldo.
+REVERSAL_STATUSES = {'REFUNDED', 'CHARGEBACK_REQUESTED', 'CHARGEBACK_DISPUTE',
+                     'AWAITING_CHARGEBACK_REVERSAL'}
 TRANSFER_DONE = {'DONE'}
 TRANSFER_FAIL = {'CANCELLED', 'FAILED'}
 
@@ -60,6 +63,10 @@ async def _api(method: str, path: str, json: dict | None = None) -> dict:
 
 
 async def _garantir_customer(jogador: JogadorModel, cpf: str, db: Session) -> str:
+    # Grava o CPF do titular no 1o deposito (necessario para travar o saque).
+    if cpf and not jogador.cpf:
+        jogador.cpf = cpf
+        db.commit()
     if jogador.asaas_customer_id:
         return jogador.asaas_customer_id
     data = await _api('POST', '/customers', {
@@ -72,14 +79,37 @@ async def _garantir_customer(jogador: JogadorModel, cpf: str, db: Session) -> st
     return data['id']
 
 
+def _estornar_pagamento(db: Session, cobranca: CobrancaPixModel) -> bool:
+    """Reverte um deposito ja creditado quando o PIX e estornado/chargeback.
+    Idempotente (so estorna uma vez). O saldo PODE ficar negativo de proposito:
+    se o jogador ja gastou/sacou, o negativo registra a divida e fica auditado no ledger."""
+    if cobranca.status == 'estornado':
+        return False
+    stmt = select(JogadorModel).where(JogadorModel.id == cobranca.jogador_id)
+    if db.bind is not None and db.bind.dialect.name != 'sqlite':
+        stmt = stmt.with_for_update()
+    jogador = db.scalar(stmt)
+    if not jogador:
+        return False
+    registrar_transacao(db, jogador, tipo='estorno_deposito_asaas',
+                        delta_saldo=-cobranca.valor, ref=f'cobranca:{cobranca.invoice_id}')
+    cobranca.status = 'estornado'
+    db.commit()
+    return True
+
+
 def _confirmar_pagamento(db: Session, cobranca: CobrancaPixModel) -> bool:
     """Credita o saldo do jogador. Idempotente: so credita uma vez."""
     if cobranca.status == 'pago':
         return False
-    jogador = db.scalar(select(JogadorModel).where(JogadorModel.id == cobranca.jogador_id))
+    stmt = select(JogadorModel).where(JogadorModel.id == cobranca.jogador_id)
+    if db.bind is not None and db.bind.dialect.name != 'sqlite':
+        stmt = stmt.with_for_update()  # trava a linha: evita corrida de credito
+    jogador = db.scalar(stmt)
     if not jogador:
         return False
-    jogador.saldo += cobranca.valor
+    registrar_transacao(db, jogador, tipo='deposito_asaas', delta_saldo=cobranca.valor,
+                        ref=f'cobranca:{cobranca.invoice_id}')
     cobranca.status = 'pago'
     cobranca.pago_em = datetime.now(timezone.utc)
     db.commit()
@@ -157,11 +187,19 @@ async def pix_webhook(request: Request, db: Session = Depends(get_db)):
     cobranca = db.scalar(select(CobrancaPixModel).where(CobrancaPixModel.invoice_id == invoice_id))
     if not cobranca:
         return {'received': True, 'known': False}
-    if cobranca.status == 'pago':
-        return {'received': True, 'status': 'pago', 'creditado': False}
+    if cobranca.status == 'estornado':
+        return {'received': True, 'status': 'estornado', 'estornado': False}
 
     dados = await _api('GET', f'/payments/{invoice_id}')  # fonte de verdade
     status = (dados.get('status') or '').upper()
+
+    # Estorno/chargeback APOS pagamento ja creditado -> reverte o saldo.
+    if cobranca.status == 'pago':
+        if status in REVERSAL_STATUSES:
+            estornado = _estornar_pagamento(db, cobranca)
+            return {'received': True, 'status': 'estornado', 'estornado': estornado}
+        return {'received': True, 'status': 'pago', 'creditado': False}
+
     if status in PAID_STATUSES:
         creditado = _confirmar_pagamento(db, cobranca)
         return {'received': True, 'status': 'pago', 'creditado': creditado}
