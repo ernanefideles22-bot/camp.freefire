@@ -409,6 +409,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                         <div className="flex items-center gap-2 flex-wrap"><span className="text-sm font-black text-white">{sq.jogador_nick || 'Jogador'}</span><span className="text-[9px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-mono">#{sq.jogador_id}</span>{sq.status === 'processando' && (<span className="text-[9px] bg-sky-500/10 text-sky-400 border border-sky-500/20 px-1.5 py-0.5 rounded-full font-bold uppercase">Processando</span>)}</div>
                         {sq.banco_codigo && (<p className="text-[10px] text-zinc-500">Banco {sq.banco_codigo} · Ag {sq.agencia} · CC <span className="font-mono text-zinc-300">{sq.conta}</span> · {sq.titular_nome}</p>)}
                         <p className="text-[10px] text-zinc-500">Chave PIX ({sq.tipo_chave}): <span className="font-mono text-zinc-300 select-all">{sq.chave_pix}</span></p>
+                        {sq.titular_chave && (<p className="text-[10px] text-emerald-400/80">Titular (Asaas): {sq.titular_chave}</p>)}
                         <p className="text-[10px] text-zinc-600">Solicitado em: {sq.criado_em}</p>
                       </div>
                       <div className="flex items-center gap-4 justify-between sm:justify-end border-t sm:border-none pt-3 sm:pt-0 border-zinc-800">
