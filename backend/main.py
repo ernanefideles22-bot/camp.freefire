@@ -50,7 +50,7 @@ if not os.environ.get('SKIP_DB_INIT'):
     except Exception as exc:
         print(f'[WARN] promocao de admin falhou: {exc}')
 
-TAXA_INSCRICAO = 2.0
+TAXA_INSCRICAO = 3.0
 TERMOS_VERSAO = '1.0'  # bump quando os termos mudarem (forca novo aceite no futuro)
 LIMITE_QUEDA = 48    # jogadores por queda (Free Fire)
 MAX_COLOCACAO = LIMITE_QUEDA
