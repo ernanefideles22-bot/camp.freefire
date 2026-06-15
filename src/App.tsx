@@ -62,7 +62,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/flowfire-logo.png" alt="Flow Fire Champions"
-              className="w-11 h-11 object-contain drop-shadow-[0_0_12px_rgba(139,92,246,0.45)]" />
+              className="w-16 h-16 object-contain drop-shadow-[0_0_14px_rgba(139,92,246,0.5)]" />
             <div>
               <h1 className="text-lg font-black tracking-tight flex items-center gap-1.5 leading-none">
                 <span className="text-gradient-neon">Flow Fire Champions</span>
