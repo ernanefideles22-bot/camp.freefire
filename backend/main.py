@@ -52,7 +52,8 @@ if not os.environ.get('SKIP_DB_INIT'):
 
 TAXA_INSCRICAO = 2.0
 TERMOS_VERSAO = '1.0'  # bump quando os termos mudarem (forca novo aceite no futuro)
-MAX_COLOCACAO = 52   # 52 jogadores por queda
+LIMITE_QUEDA = 48    # jogadores por queda (Free Fire)
+MAX_COLOCACAO = LIMITE_QUEDA
 MAX_ABATES = 50      # teto plausivel de abates por partida
 
 # ====================== REGRAS DE PREMIO / PONTOS ======================
@@ -479,7 +480,7 @@ def status_queda(numero: int, jogador: JogadorModel = Depends(obter_usuario_atua
     inscritos = db.scalar(select(func.count()).select_from(InscricaoModel)
                           .where(InscricaoModel.numero_queda == numero)) or 0
     return {
-        'numero_queda': numero, 'inscritos_count': inscritos, 'limite': 52,
+        'numero_queda': numero, 'inscritos_count': inscritos, 'limite': LIMITE_QUEDA,
         'esta_inscrito': _get_inscricao(db, numero, jogador.id) is not None,
         'sala_liberada': queda is not None and queda.sala_id is not None,
     }
@@ -509,8 +510,8 @@ def inscrever(numero: int, jogador: JogadorModel = Depends(obter_usuario_atual),
         raise HTTPException(400, f'Queda {numero} nao esta aberta para inscricoes')
     inscritos = db.scalar(select(func.count()).select_from(InscricaoModel)
                           .where(InscricaoModel.numero_queda == numero)) or 0
-    if inscritos >= 52:
-        raise HTTPException(400, 'Queda lotada (52 jogadores)')
+    if inscritos >= LIMITE_QUEDA:
+        raise HTTPException(400, f'Queda lotada ({LIMITE_QUEDA} jogadores)')
     if not queda:
         queda = QuedaModel(numero_queda=numero, status='aberta')
         db.add(queda)
@@ -574,7 +575,7 @@ def _aplicar_resultados(db: Session, numero: int, lista: list) -> list:
                 ResultadoQuedaModel.numero_queda == numero,
                 ResultadoQuedaModel.jogador_id == jid)):
             raise HTTPException(400, f'Resultado ja lancado para {jogador.nick} na queda {numero}')
-        colocacao = int(res.get('colocacao', 52))
+        colocacao = int(res.get('colocacao', LIMITE_QUEDA))
         abates = int(res.get('abates', 0))
         premio = calcular_premio(colocacao, abates)
         db.add(ResultadoQuedaModel(jogador_id=jid, numero_queda=numero,
@@ -988,7 +989,7 @@ async def ocr_resultado(numero_queda: int = Form(...), imagem: UploadFile = File
         resultados.append({
             'jogador_id': jog.id if jog else None,
             'jogador_nick': nick_cad or item.get('nick_detectado'),
-            'colocacao': item.get('colocacao') or 52,
+            'colocacao': item.get('colocacao') or LIMITE_QUEDA,
             'abates': item.get('abates') or 0,
         })
     return {'resultados': resultados}
