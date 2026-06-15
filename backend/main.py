@@ -51,6 +51,8 @@ if not os.environ.get('SKIP_DB_INIT'):
         print(f'[WARN] promocao de admin falhou: {exc}')
 
 TAXA_INSCRICAO = 3.0
+BONUS_ABATE = 0.25
+PREMIOS = {1: 15.0, 2: 12.0, 3: 8.0, 4: 6.0, 5: 4.0}
 TERMOS_VERSAO = '1.0'  # bump quando os termos mudarem (forca novo aceite no futuro)
 LIMITE_QUEDA = 48    # jogadores por queda (Free Fire)
 MAX_COLOCACAO = LIMITE_QUEDA
@@ -58,14 +60,9 @@ MAX_ABATES = 50      # teto plausivel de abates por partida
 
 # ====================== REGRAS DE PREMIO / PONTOS ======================
 def calcular_premio(colocacao: int, abates: int) -> float:
-    """Premio em R$ por queda. Tabela alinhada ao rodape do Leaderboard."""
-    if colocacao == 1: base = 15.0
-    elif colocacao == 2: base = 12.0
-    elif colocacao == 3: base = 8.0
-    elif colocacao == 4: base = 6.0
-    elif colocacao == 5: base = 4.0
-    else: base = 0.0
-    return base + (abates * 0.25)
+    """Premio em R$ por queda. Tabela em PREMIOS (fonte unica)."""
+    base = PREMIOS.get(colocacao, 0.0)
+    return base + (abates * BONUS_ABATE)
 
 
 PONTOS_LBFF = {1: 12, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1}
@@ -411,6 +408,11 @@ def extrato_admin(jogador_id: int, limite: int = 100,
 
 
 # ====================== CLASSIFICACAO (PUBLICA) ======================
+@app.get('/config')
+def get_config():
+    return {'taxa_inscricao': TAXA_INSCRICAO, 'bonus_abate': BONUS_ABATE, 'premios': PREMIOS}
+
+
 @app.get('/classificacao')
 def classificacao(db: Session = Depends(get_db)):
     jogadores = db.scalars(select(JogadorModel)).all()
