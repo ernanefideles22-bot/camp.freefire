@@ -61,12 +61,11 @@ function App() {
       <header className="border-b border-zinc-900 bg-panel-bg/40 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-primary via-primary-dark to-accent-orange flex items-center justify-center text-white font-black text-xl shadow-[0_0_15px_rgba(139,92,246,0.4)] border border-primary/20">
-              FF
-            </div>
+            <img src="/flowfire-logo.png" alt="Flow Fire Champions"
+              className="w-11 h-11 object-contain drop-shadow-[0_0_12px_rgba(139,92,246,0.45)]" />
             <div>
-              <h1 className="text-lg font-black tracking-wider text-white uppercase flex items-center gap-1.5 leading-none">
-                CAMP. SOLO
+              <h1 className="text-lg font-black tracking-tight flex items-center gap-1.5 leading-none">
+                <span className="text-gradient-neon">Flow Fire Champions</span>
                 <span className="text-[10px] font-bold tracking-widest text-accent-orange bg-accent-orange/10 border border-accent-orange/20 px-1.5 py-0.5 rounded-md">
                   PRO
                 </span>
