@@ -168,9 +168,8 @@ export async function getConfig(): Promise<ConfigRegras> {
   return _configCache;
 }
 
-export function premioPorColocacao(cfg: ConfigRegras | null, colocacao: number): number {
-  if (!cfg) return 0;
-  return cfg.premios[String(colocacao)] ?? 0;
+export function premioPorColocacao(colocacao: number): number {
+  return _configCache?.premios[String(colocacao)] ?? 0;
 }
 
 // ====================== API SERVICE ======================
