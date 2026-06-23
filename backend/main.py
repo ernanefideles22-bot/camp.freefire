@@ -171,7 +171,7 @@ app.add_middleware(
     allow_headers=['*'],
 )
 
-from asaas import router as pix_router
+from efi import router as pix_router
 app.include_router(pix_router)
 
 
@@ -808,7 +808,7 @@ def _cpf_consistente(cpf_conta: str, cpf_mascarado: str) -> bool:
 async def solicitar_saque(body: SolicitarSaqueBody,
                           jogador: JogadorModel = Depends(obter_usuario_atual),
                           db: Session = Depends(get_db)):
-    from asaas import asaas_consultar_chave
+    from efi import asaas_consultar_chave
     if body.valor < SAQUE_MINIMO:
         raise HTTPException(400, f'Saque minimo: R$ {SAQUE_MINIMO:.2f}')
     chave = (body.chave_pix or '').strip()
@@ -821,17 +821,17 @@ async def solicitar_saque(body: SolicitarSaqueBody,
         raise HTTPException(400, 'Faca um deposito com CPF antes de sacar '
                                  '(precisamos do seu CPF para validar a chave).')
 
-    # ANTILAVAGEM: a chave PIX (qualquer tipo) precisa pertencer ao MESMO CPF da conta.
-    # Consultamos o titular no Asaas antes de reservar o saldo (limite: 5 consultas/min).
+    # ANTILAVAGEM (Efi): diferente do Asaas, a Efi NAO tem consulta DICT de titular
+    # standalone. Aqui so validamos o FORMATO da chave; a trava real de CPF (a chave
+    # tem que pertencer ao mesmo CPF da conta) e aplicada no momento do pagamento,
+    # em /saques/{id}/conferir, comparando favorecido.cpf retornado pela Efi com o
+    # CPF do jogador. Se divergir, o saque e rejeitado e o saldo devolvido.
     try:
-        dados_chave = await asaas_consultar_chave(tipo, chave)
+        await asaas_consultar_chave(tipo, chave)  # valida formato; nao retorna titular
     except HTTPException:
-        raise HTTPException(400, 'Nao consegui validar essa chave PIX agora '
-                                 '(inexistente ou servico indisponivel). Confira e tente de novo.')
-    nome_titular, cpf_mascarado = _titular_da_chave(dados_chave)
-    if not _cpf_consistente(jogador.cpf, cpf_mascarado):
-        raise HTTPException(400, 'Essa chave PIX pertence a outra pessoa (CPF divergente do '
-                                 'titular da conta). Use uma chave de uma conta com o seu CPF.')
+        raise HTTPException(400, 'Chave PIX em formato invalido para o tipo informado. '
+                                 'Confira e tente de novo.')
+    nome_titular = None  # titular so e conhecido apos o envio (vem no retorno/webhook)
 
     jogador = _lock_jogador(db, jogador.id)  # trava a linha: evita corrida de saldo
     if body.valor > jogador.saldo_sacavel:
@@ -897,7 +897,7 @@ async def pagar_saque(saque_id: int,
                       _admin: JogadorModel = Depends(require_admin),
                       db: Session = Depends(get_db)):
     """Paga o saque via transferencia PIX por chave (Asaas). Execucao instantanea."""
-    from asaas import asaas_transferir_pix
+    from efi import asaas_transferir_pix
     saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
     if not saque:
         raise HTTPException(404, 'Saque nao encontrado')
@@ -913,7 +913,7 @@ async def pagar_saque(saque_id: int,
     saque.cora_transfer_id = data.get('id')
     status_asaas = (data.get('status') or '').upper()
     from models import utcnow
-    from asaas import TRANSFER_DONE
+    from efi import TRANSFER_DONE
     if status_asaas in TRANSFER_DONE:
         saque.status = 'pago'
         saque.processado_em = utcnow()
@@ -931,7 +931,7 @@ async def conferir_saque(saque_id: int,
                          _admin: JogadorModel = Depends(require_admin),
                          db: Session = Depends(get_db)):
     """Consulta o status da transferencia no Asaas e atualiza o saque."""
-    from asaas import asaas_consultar_transferencia, TRANSFER_DONE, TRANSFER_FAIL
+    from efi import asaas_consultar_transferencia, TRANSFER_DONE, TRANSFER_FAIL
     saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
     if not saque:
         raise HTTPException(404, 'Saque nao encontrado')
@@ -942,8 +942,33 @@ async def conferir_saque(saque_id: int,
     data = await asaas_consultar_transferencia(saque.cora_transfer_id)
     status_asaas = (data.get('status') or '').upper()
     from models import utcnow
+
+    # ANTILAVAGEM (Efi): valida que o CPF do favorecido bate com o do jogador.
+    # A Efi retorna favorecido.cpf mascarado (ex.: ***.123.456-**) no envio concluido.
+    # Se divergir, NAO marcamos pago: revertemos o saldo e rejeitamos o saque.
+    jog_dono = db.scalar(select(JogadorModel).where(JogadorModel.id == saque.jogador_id))
+    favorecido = data.get('favorecido') or {}
+    cpf_favorecido = (favorecido.get('cpf')
+                      or (favorecido.get('contaBanco') or {}).get('cpf') or '')
+    if status_asaas in TRANSFER_DONE and cpf_favorecido and jog_dono:
+        if not _cpf_consistente(jog_dono.cpf, cpf_favorecido):
+            jog = _lock_jogador(db, saque.jogador_id)
+            if jog:
+                registrar_transacao(db, jog, tipo='saque_estorno', delta_saldo=saque.valor,
+                                    delta_sacavel=saque.valor, ref=f'saque:{saque.id}')
+            saque.status = 'rejeitado'
+            saque.processado_em = utcnow()
+            db.commit()
+            return {'status': 'rejeitado', 'status_asaas': status_asaas,
+                    'message': 'Chave PIX pertence a outra pessoa (CPF divergente). '
+                               'Pagamento bloqueado e valor devolvido ao jogador.'}
+
     if status_asaas in TRANSFER_DONE:
         saque.status = 'pago'
+        if favorecido:
+            saque.titular_chave = (favorecido.get('nome')
+                                   or (favorecido.get('contaBanco') or {}).get('nome')
+                                   or saque.titular_chave)
         saque.processado_em = utcnow()
         db.commit()
         return {'status': 'pago', 'status_asaas': status_asaas}
