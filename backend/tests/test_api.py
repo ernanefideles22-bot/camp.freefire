@@ -9,6 +9,7 @@ import tempfile
 _dbfile = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
 os.environ['DATABASE_URL'] = f'sqlite:///{_dbfile.name}'
 
+os.environ['ADMIN_NICKS'] = 'admin1'
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
@@ -16,7 +17,8 @@ from fastapi.testclient import TestClient
 
 import main
 import models
-import asaas
+import efi
+import asaas  # rollback deve continuar importavel
 from database import SessionLocal
 
 client = TestClient(main.app)
@@ -38,10 +40,35 @@ def _auth(token):
     return {'Authorization': f'Bearer {token}'}
 
 
+def _set_cpf(nick, cpf):
+    from sqlalchemy import select
+    db = SessionLocal()
+    try:
+        j = db.scalar(select(models.JogadorModel).where(models.JogadorModel.nick == nick))
+        if j is not None:
+            j.cpf = cpf
+            db.commit()
+    finally:
+        db.close()
+
+
+def _set_saldo(nick, saldo, sacavel=None):
+    from sqlalchemy import select
+    db = SessionLocal()
+    try:
+        j = db.scalar(select(models.JogadorModel).where(models.JogadorModel.nick == nick))
+        if j is not None:
+            j.saldo = saldo
+            j.saldo_sacavel = saldo if sacavel is None else sacavel
+            db.commit()
+    finally:
+        db.close()
+
+
 # ====================== AUTH ======================
 
 def test_cadastro_primeiro_usuario_e_admin():
-    r = client.post('/auth/cadastro', json={'nome': 'Admin', 'nick': 'admin1', 'senha': 'secret123'})
+    r = client.post('/auth/cadastro', json={'nome': 'Admin', 'nick': 'admin1', 'senha': 'secret123', 'aceitou_termos': True, 'confirma_idade': True})
     assert r.status_code == 200
     assert r.json()['is_admin'] is True
 
@@ -90,7 +117,7 @@ def test_refresh_token():
 # ====================== INSCRICAO ======================
 
 def test_inscricao_fluxo_completo():
-    client.post('/auth/cadastro', json={'nome': 'Player', 'nick': 'player1', 'senha': 'secret123'})
+    client.post('/auth/cadastro', json={'nome': 'Player', 'nick': 'player1', 'senha': 'secret123', 'aceitou_termos': True, 'confirma_idade': True})
     tok = _login('player1', 'secret123')['access_token']
     admin_tok = _login('admin1', 'secret123')['access_token']
 
@@ -98,17 +125,14 @@ def test_inscricao_fluxo_completo():
     r = client.post('/queda/1/inscrever', headers=_auth(tok))
     assert r.status_code == 400
 
-    # admin aprova um deposito manual de R$ 10
-    r = client.post('/depositos/solicitar', json={'valor': 10.0}, headers=_auth(tok))
-    assert r.status_code == 200, r.text
-    dep_id = r.json()['id']
-    r = client.post(f'/depositos/{dep_id}/processar', json={'status': 'aprovado'}, headers=_auth(admin_tok))
-    assert r.status_code == 200
+    pid = client.get('/me', headers=_auth(tok)).json()['id']
 
-    # jogador comum nao pode aprovar deposito
-    r = client.post('/depositos/solicitar', json={'valor': 5.0}, headers=_auth(tok))
-    dep2 = r.json()['id']
-    r = client.post(f'/depositos/{dep2}/processar', json={'status': 'aprovado'}, headers=_auth(tok))
+    # so admin credita (credito manual com motivo); R$ 10 nao-sacavel
+    r = client.post('/depositos/manual', json={'jogador_id': pid, 'valor': 10.0, 'motivo': 'credito teste'}, headers=_auth(admin_tok))
+    assert r.status_code == 200, r.text
+
+    # jogador comum nao pode creditar (endpoint e admin-only)
+    r = client.post('/depositos/manual', json={'jogador_id': pid, 'valor': 5.0, 'motivo': 'tentativa'}, headers=_auth(tok))
     assert r.status_code == 403
 
     # com saldo -> inscreve
@@ -118,9 +142,9 @@ def test_inscricao_fluxo_completo():
     r = client.post('/queda/1/inscrever', headers=_auth(tok))
     assert r.status_code == 400
 
-    # saldo debitado (10 - 2 = 8)
+    # saldo debitado (10 - 3 = 7; TAXA_INSCRICAO=3.0)
     me = client.get('/me', headers=_auth(tok)).json()
-    assert me['saldo'] == 8.0
+    assert me['saldo'] == 7.0
 
     # sala so visivel para inscrito apos liberacao
     r = client.get('/queda/1/sala', headers=_auth(tok))
@@ -144,7 +168,7 @@ def test_resultado_e_classificacao():
     r = client.get('/classificacao')
     assert r.status_code == 200
     item = next(i for i in r.json() if i['nick'] == 'player1')
-    assert item['total_premios'] == 22.0
+    assert item['total_premios'] == 16.0  # 15 base + 4*0.25
     assert item['total_pontos'] == 16
     assert item['posicao'] == 1
     # resultado duplicado -> 400
@@ -164,67 +188,68 @@ def test_pix_criar_cobranca_exige_auth():
 
 def test_pix_fluxo_webhook(monkeypatch):
     tok = _login('player1', 'secret123')['access_token']
+    monkeypatch.setattr(efi, 'EFI_PIX_KEY', 'chave-recebedora-test')
+    monkeypatch.setattr(efi, 'EFI_WEBHOOK_TOKEN', 'tok-webhook')
 
-    FAKE_STATUS = {'value': 'PENDING'}
+    COB = {'status': 'ATIVA'}
 
     async def fake_api(method, path, json=None):
-        if path == '/customers' and method == 'POST':
-            return {'id': 'cus-001'}
-        if path == '/payments' and method == 'POST':
-            assert json['billingType'] == 'PIX'
-            assert json['value'] == 15.0
-            return {'id': 'pay-123', 'status': 'PENDING'}
-        if path == '/payments/pay-123/pixQrCode':
-            return {'payload': '000201qrcode-emv', 'encodedImage': 'img64', 'expirationDate': '2026-12-31'}
-        if path == '/payments/pay-123':
-            return {'id': 'pay-123', 'status': FAKE_STATUS['value']}
+        if method == 'PUT' and path.startswith('/v2/cob/'):
+            txid = path.rsplit('/', 1)[-1]
+            return {'txid': txid, 'status': 'ATIVA', 'loc': {'id': 1},
+                    'calendario': {'criacao': '2026-01-01T00:00:00Z'}}
+        if method == 'GET' and path == '/v2/loc/1/qrcode':
+            return {'qrcode': '000201-efi-emv', 'imagemQrcode': 'data:image/png;base64,AAA'}
+        if method == 'GET' and path.startswith('/v2/cob/'):
+            return {'status': COB['status']}
         raise AssertionError(f'chamada inesperada: {method} {path}')
 
-    monkeypatch.setattr(asaas, '_api', fake_api)
-    monkeypatch.setattr(asaas, 'ASAAS_WEBHOOK_TOKEN', 'tok-webhook')
+    monkeypatch.setattr(efi, '_api', fake_api)
 
-    # cria cobranca de R$ 15
     r = client.post('/pix/criar-cobranca', json={'valor': 15.0, 'cpf': '123.456.789-01'},
                     headers=_auth(tok))
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data['invoice_id'] == 'pay-123'
-    assert data['qr_code'] == '000201qrcode-emv'
+    inv = data['invoice_id']
+    assert inv and data['qr_code'] == '000201-efi-emv'
+    assert data['qr_code_image'].startswith('data:image/png;base64,')
 
     saldo_antes = client.get('/me', headers=_auth(tok)).json()['saldo']
 
-    # webhook sem token correto -> 401
-    r = client.post('/pix/webhook', json={'event': 'PAYMENT_RECEIVED', 'payment': {'id': 'pay-123'}})
+    # webhook sem token -> 401
+    r = client.post('/pix/webhook', json={'pix': [{'txid': inv}]})
     assert r.status_code == 401
 
-    # webhook com token mas Asaas ainda diz PENDING -> NAO credita
-    H_wh = {'asaas-access-token': 'tok-webhook'}
-    r = client.post('/pix/webhook', json={'event': 'PAYMENT_RECEIVED', 'payment': {'id': 'pay-123'}}, headers=H_wh)
+    H = {'x-efi-webhook-token': 'tok-webhook'}
+    # cobranca ainda ATIVA -> nao credita
+    r = client.post('/pix/webhook', json={'pix': [{'txid': inv}]}, headers=H)
     assert r.status_code == 200
-    assert r.json()['creditado'] is False
     assert client.get('/me', headers=_auth(tok)).json()['saldo'] == saldo_antes
 
-    # Asaas confirma RECEIVED -> credita
-    FAKE_STATUS['value'] = 'RECEIVED'
-    r = client.post('/pix/webhook', json={'payment': {'id': 'pay-123'}}, headers=H_wh)
-    assert r.json()['creditado'] is True
+    # CONCLUIDA -> credita
+    COB['status'] = 'CONCLUIDA'
+    r = client.post('/pix/webhook', json={'pix': [{'txid': inv}]}, headers=H)
     assert client.get('/me', headers=_auth(tok)).json()['saldo'] == saldo_antes + 15.0
 
     # idempotencia
-    r = client.post('/pix/webhook', json={'payment': {'id': 'pay-123'}}, headers=H_wh)
-    assert r.json()['creditado'] is False
+    r = client.post('/pix/webhook', json={'pix': [{'txid': inv}]}, headers=H)
     assert client.get('/me', headers=_auth(tok)).json()['saldo'] == saldo_antes + 15.0
 
-    # polling
-    r = client.get('/pix/status/pay-123', headers=_auth(tok))
-    assert r.status_code == 200
-    assert r.json()['pago'] is True
+    r = client.get(f'/pix/status/{inv}', headers=_auth(tok))
+    assert r.status_code == 200 and r.json()['pago'] is True
 
 
 def test_pix_webhook_invoice_desconhecida():
-    r = client.post('/pix/webhook', json={'payment': {'id': 'inv-inexistente'}})
+    r = client.post('/pix/webhook', json={'pix': [{'txid': 'inexistente-xyz'}]})
     assert r.status_code == 200
-    assert r.json()['known'] is False
+    assert r.json()['itens'][0]['known'] is False
+
+
+def test_pix_webhook_sufixo_pix():
+    # a Efi POSTa em .../webhook/pix (acrescenta /pix). A rota precisa existir (200, nao 404).
+    r = client.post('/pix/webhook/pix', json={'pix': [{'txid': 'inexistente-xyz'}]})
+    assert r.status_code == 200, r.text
+    assert r.json()['itens'][0]['known'] is False
 
 
 # ====================== OCR (Gemini mockado) ======================
@@ -324,62 +349,93 @@ def test_saque_fluxo_completo():
 
 
 
-def test_saque_pagar_via_asaas(monkeypatch):
+def test_saque_pagar_via_efi(monkeypatch):
     admin_tok = _login('admin1', 'secret123')['access_token']
-    # da saldo ao admin via deposito manual
-    r = client.post('/depositos/solicitar', json={'valor': 30.0}, headers=_auth(admin_tok))
-    client.post(f"/depositos/{r.json()['id']}/processar", json={'status': 'aprovado'}, headers=_auth(admin_tok))
+    _set_cpf('admin1', '12345678901')
+    _set_saldo('admin1', 100.0)
     r = client.post('/saques/solicitar', json={'valor': 20.0, 'chave_pix': 'admin@x.com', 'tipo_chave': 'email'}, headers=_auth(admin_tok))
     assert r.status_code == 200, r.text
     sid = r.json()['id']
 
-    TRANSFER_STATUS = {'value': 'PENDING'}
+    STATUS = {'value': 'EM_PROCESSAMENTO'}
 
     async def fake_transferir(chave, tipo, valor, code, description=''):
-        assert chave == 'admin@x.com'
-        assert tipo == 'email'
-        assert valor == 20.0
-        return {'id': 'tra-001', 'status': 'PENDING'}
+        assert chave == 'admin@x.com' and tipo == 'email' and valor == 20.0
+        return {'id': 'idenv-001', 'status': 'EM_PROCESSAMENTO', 'favorecido': {}}
 
     async def fake_consultar(tid):
-        assert tid == 'tra-001'
-        return {'id': tid, 'status': TRANSFER_STATUS['value']}
+        assert tid == 'idenv-001'
+        return {'id': tid, 'status': STATUS['value'], 'favorecido': {}}
 
-    monkeypatch.setattr(asaas, 'asaas_transferir_pix', fake_transferir)
-    monkeypatch.setattr(asaas, 'asaas_consultar_transferencia', fake_consultar)
+    monkeypatch.setattr(efi, 'asaas_transferir_pix', fake_transferir)
+    monkeypatch.setattr(efi, 'asaas_consultar_transferencia', fake_consultar)
 
+    # EM_PROCESSAMENTO nao e mais tratado como pago
     r = client.post(f'/saques/{sid}/pagar', headers=_auth(admin_tok))
     assert r.status_code == 200, r.text
-    assert r.json()['transfer_id'] == 'tra-001'
+    assert r.json()['transfer_id'] == 'idenv-001'
     assert r.json()['status'] == 'processando'
 
-    # ainda processando
     r = client.post(f'/saques/{sid}/conferir', headers=_auth(admin_tok))
     assert r.json()['status'] == 'processando'
 
-    # concluida -> pago
-    TRANSFER_STATUS['value'] = 'DONE'
+    STATUS['value'] = 'REALIZADO'
     r = client.post(f'/saques/{sid}/conferir', headers=_auth(admin_tok))
     assert r.json()['status'] == 'pago'
 
 
-def test_saque_asaas_falha_devolve(monkeypatch):
+def test_saque_efi_falha_devolve(monkeypatch):
     admin_tok = _login('admin1', 'secret123')['access_token']
+    _set_cpf('admin1', '12345678901')
+    _set_saldo('admin1', 100.0)
     saldo_antes = client.get('/me', headers=_auth(admin_tok)).json()['saldo']
     r = client.post('/saques/solicitar', json={'valor': 5.0, 'chave_pix': 'admin@x.com', 'tipo_chave': 'email'}, headers=_auth(admin_tok))
     assert r.status_code == 200, r.text
     sid = r.json()['id']
+    assert client.get('/me', headers=_auth(admin_tok)).json()['saldo'] == saldo_antes - 5.0
 
     async def fake_transferir(chave, tipo, valor, code, description=''):
-        return {'id': 'tra-002', 'status': 'PENDING'}
+        return {'id': 'idenv-002', 'status': 'EM_PROCESSAMENTO', 'favorecido': {}}
 
     async def fake_consultar(tid):
-        return {'id': tid, 'status': 'FAILED'}
+        return {'id': tid, 'status': 'NAO_REALIZADO', 'favorecido': {}}
 
-    monkeypatch.setattr(asaas, 'asaas_transferir_pix', fake_transferir)
-    monkeypatch.setattr(asaas, 'asaas_consultar_transferencia', fake_consultar)
+    monkeypatch.setattr(efi, 'asaas_transferir_pix', fake_transferir)
+    monkeypatch.setattr(efi, 'asaas_consultar_transferencia', fake_consultar)
 
     client.post(f'/saques/{sid}/pagar', headers=_auth(admin_tok))
     r = client.post(f'/saques/{sid}/conferir', headers=_auth(admin_tok))
     assert r.json()['status'] == 'rejeitado'
     assert client.get('/me', headers=_auth(admin_tok)).json()['saldo'] == saldo_antes
+
+
+def test_saque_antilavagem_cpf_divergente(monkeypatch):
+    admin_tok = _login('admin1', 'secret123')['access_token']
+    _set_cpf('admin1', '11111111111')
+    _set_saldo('admin1', 100.0)
+    saldo_antes = client.get('/me', headers=_auth(admin_tok)).json()['saldo']
+    r = client.post('/saques/solicitar', json={'valor': 7.0, 'chave_pix': 'outro@x.com', 'tipo_chave': 'email'}, headers=_auth(admin_tok))
+    assert r.status_code == 200, r.text
+    sid = r.json()['id']
+
+    async def fake_transferir(chave, tipo, valor, code, description=''):
+        return {'id': 'idenv-003', 'status': 'EM_PROCESSAMENTO', 'favorecido': {}}
+
+    async def fake_consultar(tid):
+        # titular real da chave: CPF diverge do dono da conta -> deve bloquear e devolver
+        return {'id': tid, 'status': 'REALIZADO',
+                'favorecido': {'cpf': '***.999.999-**', 'nome': 'Outra Pessoa'}}
+
+    monkeypatch.setattr(efi, 'asaas_transferir_pix', fake_transferir)
+    monkeypatch.setattr(efi, 'asaas_consultar_transferencia', fake_consultar)
+
+    client.post(f'/saques/{sid}/pagar', headers=_auth(admin_tok))
+    r = client.post(f'/saques/{sid}/conferir', headers=_auth(admin_tok))
+    assert r.json()['status'] == 'rejeitado', r.text
+    assert client.get('/me', headers=_auth(admin_tok)).json()['saldo'] == saldo_antes
+
+
+def test_asaas_rollback_importavel():
+    import asaas
+    assert hasattr(asaas, 'asaas_transferir_pix')
+    assert hasattr(asaas, 'router')
