@@ -413,6 +413,22 @@ def get_config():
     return {'taxa_inscricao': TAXA_INSCRICAO, 'bonus_abate': BONUS_ABATE, 'premios': PREMIOS}
 
 
+# ====================== ADMIN: WEBHOOK EFI ======================
+@app.post('/admin/efi/webhook')
+async def admin_efi_registrar_webhook(url: str, _admin: JogadorModel = Depends(require_admin)):
+    """Registra o webhook PIX da Efi apontando para `url`
+    (ex.: https://<host>/api/pix/webhook). Admin-only; use a URL do ambiente atual."""
+    from efi import registrar_webhook
+    return await registrar_webhook(url)
+
+
+@app.get('/admin/efi/webhook')
+async def admin_efi_consultar_webhook(_admin: JogadorModel = Depends(require_admin)):
+    """Consulta o webhook PIX registrado na chave Efi."""
+    from efi import consultar_webhook
+    return await consultar_webhook()
+
+
 @app.get('/classificacao')
 def classificacao(db: Session = Depends(get_db)):
     jogadores = db.scalars(select(JogadorModel)).all()

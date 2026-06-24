@@ -459,3 +459,34 @@ async def asaas_consultar_transferencia(transfer_id: str) -> dict:
         'e2eid': data.get('endToEndId', ''),
         '_raw': data,
     }
+
+
+
+# ---------------------------------------------------------------------------
+# Webhook: registro/consulta. O Vercel nao valida cert de cliente na borda,
+# entao registramos com x-skip-mtls-checking; a seguranca real e a RECONSULTA
+# antes de creditar (ja feita em pix_webhook) + (opcional) checagem de IP.
+# ---------------------------------------------------------------------------
+async def registrar_webhook(url: str) -> dict:
+    """PUT /v2/webhook/{chave}: registra o webhook PIX na chave recebedora.
+    A Efi acrescenta /pix ao final; nossa rota /pix/webhook/pix trata. Requer
+    escopo webhook.write. Usa skip-mTLS (Vercel nao faz mTLS de entrada)."""
+    if not EFI_PIX_KEY:
+        raise HTTPException(503, 'Integracao Efi nao configurada (EFI_PIX_KEY).')
+    async with _make_client() as c:
+        token = await _get_token(client=c)
+        resp = await c.put(f'/v2/webhook/{EFI_PIX_KEY}',
+                           json={'webhookUrl': url},
+                           headers={'Authorization': f'Bearer {token}',
+                                    'Content-Type': 'application/json',
+                                    'x-skip-mtls-checking': 'true'})
+    if resp.status_code not in (200, 201):
+        raise HTTPException(502, f'Erro ao registrar webhook ({resp.status_code}): {resp.text[:300]}')
+    return resp.json() if resp.content else {'ok': True, 'webhookUrl': url}
+
+
+async def consultar_webhook() -> dict:
+    """GET /v2/webhook/{chave}: consulta o webhook registrado."""
+    if not EFI_PIX_KEY:
+        raise HTTPException(503, 'Integracao Efi nao configurada (EFI_PIX_KEY).')
+    return await _api('GET', f'/v2/webhook/{EFI_PIX_KEY}')
