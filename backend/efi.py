@@ -76,6 +76,7 @@ TIPOS_VALIDOS = {'cpf', 'email', 'telefone', 'aleatoria'}
 # Infra: certificado mTLS + OAuth2 com cache de token
 # ---------------------------------------------------------------------------
 _cert_paths: tuple[str, str] | None = None
+_ssl_ctx: "ssl.SSLContext | None" = None  # cache do contexto mTLS (evita reler o cert a cada chamada)
 _token: dict | None = None  # {'access_token': str, 'exp': datetime}
 
 
@@ -110,17 +111,22 @@ def _materializar_cert() -> tuple[str, str]:
 
 
 def _make_client() -> httpx.AsyncClient:
-    """Cria um AsyncClient com mTLS configurado. Cada chamada cria/fecha o client
-    (serverless-friendly; evita event-loop reuse entre invocacoes na Vercel)."""
-    cpath, kpath = _materializar_cert()
-    ctx = ssl.create_default_context()
-    ctx.load_cert_chain(certfile=cpath, keyfile=kpath)
-    return httpx.AsyncClient(base_url=EFI_BASE, verify=ctx, timeout=30,
+    """AsyncClient com mTLS. O SSLContext e cacheado no modulo (reusavel entre
+    requests, nao preso ao event-loop) p/ nao reler/reparsear o .p12 a cada chamada.
+    O client em si continua criado/fechado por chamada (serverless-friendly)."""
+    global _ssl_ctx
+    if _ssl_ctx is None:
+        cpath, kpath = _materializar_cert()
+        ctx = ssl.create_default_context()
+        ctx.load_cert_chain(certfile=cpath, keyfile=kpath)
+        _ssl_ctx = ctx
+    return httpx.AsyncClient(base_url=EFI_BASE, verify=_ssl_ctx, timeout=30,
                              headers={'User-Agent': 'camp-freefire'})
 
 
-async def _get_token() -> str:
-    """OAuth2 client_credentials com cache. Renova ~60s antes de expirar."""
+async def _get_token(client: "httpx.AsyncClient | None" = None) -> str:
+    """OAuth2 client_credentials com cache. Renova ~60s antes de expirar.
+    Se 'client' vier, reusa a MESMA conexao da chamada (1 handshake)."""
     global _token
     now = datetime.now(timezone.utc)
     if _token and _token['exp'] > now:
@@ -128,11 +134,13 @@ async def _get_token() -> str:
     if not (EFI_CLIENT_ID and EFI_CLIENT_SECRET):
         raise HTTPException(503, 'Integracao Efi nao configurada (EFI_CLIENT_ID/SECRET).')
     basic = base64.b64encode(f'{EFI_CLIENT_ID}:{EFI_CLIENT_SECRET}'.encode()).decode()
-    async with _make_client() as c:
-        resp = await c.post('/oauth/token',
-                            headers={'Authorization': f'Basic {basic}',
-                                     'Content-Type': 'application/json'},
-                            json={'grant_type': 'client_credentials'})
+    _hdr = {'Authorization': f'Basic {basic}', 'Content-Type': 'application/json'}
+    _body = {'grant_type': 'client_credentials'}
+    if client is not None:
+        resp = await client.post('/oauth/token', headers=_hdr, json=_body)
+    else:
+        async with _make_client() as c:
+            resp = await c.post('/oauth/token', headers=_hdr, json=_body)
     if resp.status_code != 200:
         raise HTTPException(502, f'Falha OAuth Efi ({resp.status_code}): {resp.text[:300]}')
     data = resp.json()
@@ -144,19 +152,18 @@ async def _get_token() -> str:
 
 
 async def _api(method: str, path: str, json: dict | None = None) -> dict:
-    """Chamada autenticada (Bearer + mTLS). Reautentica 1x em caso de 401."""
-    token = await _get_token()
+    """Chamada autenticada (Bearer + mTLS). UMA conexao serve token + request
+    (1 handshake em vez de 2). Reautentica 1x em caso de 401."""
     async with _make_client() as c:
-        resp = await c.request(method, path, json=json,
-                              headers={'Authorization': f'Bearer {token}',
-                                       'Content-Type': 'application/json'})
+        token = await _get_token(client=c)
+        def _h(t):
+            return {'Authorization': f'Bearer {t}', 'Content-Type': 'application/json'}
+        resp = await c.request(method, path, json=json, headers=_h(token))
         if resp.status_code == 401:
             global _token
             _token = None
-            token = await _get_token()
-            resp = await c.request(method, path, json=json,
-                                  headers={'Authorization': f'Bearer {token}',
-                                           'Content-Type': 'application/json'})
+            token = await _get_token(client=c)
+            resp = await c.request(method, path, json=json, headers=_h(token))
     if resp.status_code not in (200, 201):
         raise HTTPException(502, f'Erro Efi ({resp.status_code}) em {path}: {resp.text[:300]}')
     return resp.json() if resp.content else {}
