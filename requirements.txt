@@ -7,4 +7,5 @@ pg8000>=1.31.2
 python-multipart>=0.0.20
 httpx>=0.27
 python-jose[cryptography]>=3.3.0
+cryptography>=42.0          # mTLS Efi: abre o .p12 (PKCS#12) em runtime (Vercel usa este arquivo)
 bcrypt>=4.1
