@@ -18,6 +18,7 @@ export default function PixDeposito({ jogadorId }: Props) {
   const [cpf, setCpf] = useState("");
   const [loading, setLoading] = useState(false);
   const [qrCode, setQrCode] = useState("");
+  const [qrImage, setQrImage] = useState(""); // imagem base64 vinda da Efi (imagemQrcode)
   const [qrError, setQrError] = useState(false);
   const [invoiceId, setInvoiceId] = useState("");
   const [erro, setErro] = useState("");
@@ -28,7 +29,7 @@ export default function PixDeposito({ jogadorId }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setErro(""); setQrCode(""); setQrError(false); setInvoiceId(""); setCopied(false);
+    setErro(""); setQrCode(""); setQrImage(""); setQrError(false); setInvoiceId(""); setCopied(false);
     const parsedValor = parseFloat(valor.replace(",", "."));
     if (!valor || isNaN(parsedValor) || parsedValor < 1) { setErro("Valor mínimo: R$ 1,00"); return; }
     if (cpfDigits.length !== 11) { setErro("CPF inválido — informe 11 dígitos"); return; }
@@ -36,6 +37,7 @@ export default function PixDeposito({ jogadorId }: Props) {
     try {
       const data = await apiService.criarCobrancaPix(parsedValor, cpfDigits);
       setQrCode(data.qr_code || "");
+      setQrImage(data.qr_code_image || ""); // Efi ja manda o PNG; evita vazar payload pro qrserver
       setQrError(false);
       setInvoiceId(data.invoice_id || "");
       setPago(false);
@@ -79,9 +81,16 @@ export default function PixDeposito({ jogadorId }: Props) {
     }
   };
 
-  const qrImageUrl = qrCode
-    ? "https://api.qrserver.com/v1/create-qr-code/?data=" + encodeURIComponent(qrCode) + "&size=220x220&margin=8"
+  // Prioridade: imagem base64 que a Efi ja devolve (nao vaza o payload de pagamento
+  // para um terceiro). O qrserver fica so como fallback se a Efi nao mandar imagem.
+  const efiImg = qrImage
+    ? (qrImage.startsWith("data:") ? qrImage : "data:image/png;base64," + qrImage)
     : "";
+  const qrImageUrl = efiImg
+    ? efiImg
+    : (qrCode
+        ? "https://api.qrserver.com/v1/create-qr-code/?data=" + encodeURIComponent(qrCode) + "&size=220x220&margin=8"
+        : "");
 
 
   return (
