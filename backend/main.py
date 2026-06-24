@@ -666,7 +666,7 @@ def credito_manual(body: CreditoManualBody,
       - so o admin credita, com 'motivo' obrigatorio (auditoria);
       - entra como saldo NAO sacavel (nao vira rota de saque/lavagem);
       - a linha do jogador e travada (FOR UPDATE).
-    Deposito de verdade do jogador continua exclusivamente pelo Asaas (/pix/criar-cobranca)."""
+    Deposito de verdade do jogador continua exclusivamente pela Efi (/pix/criar-cobranca)."""
     if body.valor <= 0 or body.valor > 5000:
         raise HTTPException(400, 'Valor invalido (1 a 5000).')
     motivo = (body.motivo or '').strip()
@@ -896,7 +896,7 @@ def processar_saque(saque_id: int, body: ProcessarSaqueBody,
 async def pagar_saque(saque_id: int,
                       _admin: JogadorModel = Depends(require_admin),
                       db: Session = Depends(get_db)):
-    """Paga o saque via transferencia PIX por chave (Asaas). Execucao instantanea."""
+    """Paga o saque via transferencia PIX por chave (Efi). Execucao instantanea."""
     from efi import asaas_transferir_pix
     saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
     if not saque:
@@ -930,7 +930,7 @@ async def pagar_saque(saque_id: int,
 async def conferir_saque(saque_id: int,
                          _admin: JogadorModel = Depends(require_admin),
                          db: Session = Depends(get_db)):
-    """Consulta o status da transferencia no Asaas e atualiza o saque."""
+    """Consulta o status da transferencia na Efi e atualiza o saque."""
     from efi import asaas_consultar_transferencia, TRANSFER_DONE, TRANSFER_FAIL
     saque = db.scalar(select(SaqueRequisicaoModel).where(SaqueRequisicaoModel.id == saque_id))
     if not saque:
@@ -983,7 +983,7 @@ async def conferir_saque(saque_id: int,
         return {'status': 'rejeitado', 'status_asaas': status_asaas,
                 'message': 'Transferencia cancelada/falhou. Valor devolvido ao jogador.'}
     return {'status': saque.status, 'status_asaas': status_asaas,
-            'message': 'Transferencia em processamento no Asaas.'}
+            'message': 'Transferencia em processamento na Efi.'}
 
 
 # ====================== OCR + AGENTE IA ======================

@@ -64,7 +64,8 @@ CANCEL_STATUSES = {'REMOVIDA_PELO_USUARIO_RECEBEDOR', 'REMOVIDA_PELO_PSP'}
 # Tratamos devolucao como reversao quando o webhook traz o bloco 'devolucoes'.
 REVERSAL_STATUSES: set[str] = set()  # reversao detectada por presenca de devolucao (ver webhook)
 # PIX Envio (PUT /v3/gn/pix/{idEnvio}): REALIZADO / NAO_REALIZADO.
-TRANSFER_DONE = {'REALIZADO', 'EM_PROCESSAMENTO'}  # EM_PROCESSAMENTO conta como iniciado-ok
+TRANSFER_DONE = {'REALIZADO'}  # so REALIZADO = pago. EM_PROCESSAMENTO fica pendente
+TRANSFER_PENDING = {'EM_PROCESSAMENTO'}  # enviado, aguardando liquidacao/webhook
 TRANSFER_FAIL = {'NAO_REALIZADO', 'DEVOLVIDO', 'REJEITADO'}
 
 # Tipos de chave aceitos (a Efi infere o tipo pela propria chave, mas mantemos o
@@ -283,6 +284,7 @@ async def _consultar_cob(txid: str) -> dict:
 
 
 @router.post('/webhook')
+@router.post('/webhook/pix')  # a Efi acrescenta /pix ao fim da URL registrada (doc oficial)
 async def pix_webhook(request: Request, db: Session = Depends(get_db)):
     """Webhook da Efi. A Efi POSTa em /pix (ela acrescenta /pix ao final da URL
     cadastrada — por isso a rota efetiva costuma ser .../pix/webhook/pix; trate ambos
