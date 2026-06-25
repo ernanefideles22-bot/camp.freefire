@@ -938,7 +938,7 @@ async def pagar_saque(saque_id: int,
                 'transfer_id': saque.cora_transfer_id}
     jog = db.scalar(select(JogadorModel).where(JogadorModel.id == saque.jogador_id))
     data = await asaas_transferir_pix(saque.chave_pix, saque.tipo_chave, saque.valor,
-                                      code=f'SAQ-{saque.id}',
+                                      code=f'SAQ-{saque.id}', cpf=(jog.cpf if jog else ''),
                                       description=f'Saque Camp FreeFire - {jog.nick if jog else saque.jogador_id}')
     saque.cora_transfer_id = data.get('id')
     status_asaas = (data.get('status') or '').upper()
