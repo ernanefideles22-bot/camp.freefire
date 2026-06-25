@@ -5,7 +5,7 @@ import base64
 from typing import Optional, List
 
 import httpx
-from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Body
+from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select, func
@@ -19,6 +19,7 @@ from auth import (hash_senha, verificar_senha, criar_access_token, criar_refresh
                   decodificar_token, obter_usuario_atual, require_admin)
 from jose import jwt as jose_jwt
 import time as _time
+import gates
 
 # Cria tabelas se nao existirem (em producao o schema e gerido por migration no Supabase;
 # create_all e no-op quando as tabelas ja existem)
@@ -119,6 +120,7 @@ class JogadorCreate(BaseModel):
     senha: Optional[str] = None
     aceitou_termos: bool = False
     confirma_idade: bool = False
+    data_nascimento: Optional[str] = None
 
 class JogadorLogin(BaseModel):
     nick: str
@@ -214,7 +216,7 @@ def _payload_jogador(j: JogadorModel) -> dict:
 
 
 @app.post('/auth/cadastro', response_model=JogadorResponse)
-def cadastrar(jogador: JogadorCreate, db: Session = Depends(get_db)):
+def cadastrar(jogador: JogadorCreate, request: Request, db: Session = Depends(get_db)):
     nick = jogador.nick.strip()
     if not nick or not jogador.nome.strip():
         raise HTTPException(400, 'Nome e nick sao obrigatorios')
@@ -226,9 +228,12 @@ def cadastrar(jogador: JogadorCreate, db: Session = Depends(get_db)):
         raise HTTPException(400, 'Voce precisa aceitar os Termos e confirmar que tem 18 anos ou mais.')
     eh_admin = nick in _admin_nicks()  # admin so por configuracao explicita (ADMIN_NICKS)
     from models import utcnow
+    nasc = gates.validar_maioridade(jogador.data_nascimento)
+    ip = gates.extrair_ip(request)
     novo = JogadorModel(nome=jogador.nome.strip(), nick=nick,
                         senha_hash=hash_senha(jogador.senha), saldo=0.0, is_admin=eh_admin,
                         aceitou_termos=True, confirmou_idade=True,
+                        data_nascimento=nasc, registro_ip=ip, ultimo_ip=ip,
                         termos_versao=TERMOS_VERSAO, termos_aceito_em=utcnow())
     db.add(novo)
     db.commit()
@@ -331,10 +336,11 @@ class GoogleLoginBody(BaseModel):
     nick: Optional[str] = None
     aceitou_termos: bool = False
     confirma_idade: bool = False
+    data_nascimento: Optional[str] = None
 
 
 @app.post('/auth/google')
-async def auth_google(body: GoogleLoginBody, db: Session = Depends(get_db)):
+async def auth_google(body: GoogleLoginBody, request: Request, db: Session = Depends(get_db)):
     """Login/cadastro via Google (opcao adicional ao nick+senha).
     1o acesso: se a conta nao existe e nao veio nick, retorna precisa_nick=True
     para o frontend pedir o nick do Free Fire e reenviar."""
@@ -359,10 +365,13 @@ async def auth_google(body: GoogleLoginBody, db: Session = Depends(get_db)):
     if not body.aceitou_termos or not body.confirma_idade:
         raise HTTPException(400, 'Voce precisa aceitar os Termos e confirmar que tem 18 anos ou mais.')
     from models import utcnow
+    nasc = gates.validar_maioridade(body.data_nascimento)
+    ip = gates.extrair_ip(request)
     novo = JogadorModel(nome=nome, nick=nick, google_sub=google_sub, email=email,
                         senha_hash=None, saldo=0.0, saldo_sacavel=0.0,
                         is_admin=(nick in _admin_nicks()),
                         aceitou_termos=True, confirmou_idade=True,
+                        data_nascimento=nasc, registro_ip=ip, ultimo_ip=ip,
                         termos_versao=TERMOS_VERSAO, termos_aceito_em=utcnow())
     db.add(novo)
     db.commit()
@@ -516,11 +525,12 @@ def info_sala(numero: int, jogador: JogadorModel = Depends(obter_usuario_atual),
 
 
 @app.post('/queda/{numero}/inscrever')
-def inscrever(numero: int, jogador: JogadorModel = Depends(obter_usuario_atual),
+def inscrever(numero: int, request: Request, jogador: JogadorModel = Depends(obter_usuario_atual),
               db: Session = Depends(get_db)):
     if _get_inscricao(db, numero, jogador.id):
         raise HTTPException(400, 'Voce ja esta inscrito nesta queda')
     jogador = _lock_jogador(db, jogador.id)  # trava a linha: evita corrida de saldo
+    jogador.ultimo_ip = gates.extrair_ip(request) or jogador.ultimo_ip
     if jogador.saldo < TAXA_INSCRICAO:
         raise HTTPException(400, f'Saldo insuficiente. Necessario R$ {TAXA_INSCRICAO:.2f}')
     queda = _get_queda(db, numero)
@@ -584,6 +594,8 @@ def _aplicar_resultados(db: Session, numero: int, lista: list) -> list:
                                      '(cada posicao so pode ter um jogador).')
         vistos_colocacao.add(colocacao)
     # ---- Aplicacao ----
+    jogador_ids = [r.get('jogador_id') for r in lista]
+    suspeitos = gates.avaliar_suspeitos(db, numero, jogador_ids)
     for res in lista:
         jid = res.get('jogador_id')
         jogador = _lock_jogador(db, jid)
@@ -596,11 +608,12 @@ def _aplicar_resultados(db: Session, numero: int, lista: list) -> list:
         colocacao = int(res.get('colocacao', LIMITE_QUEDA))
         abates = int(res.get('abates', 0))
         premio = calcular_premio(colocacao, abates)
+        eh_suspeito = jid in suspeitos
         db.add(ResultadoQuedaModel(jogador_id=jid, numero_queda=numero,
-                                   colocacao=colocacao, abates=abates, premio=premio))
+                                   colocacao=colocacao, abates=abates, premio=premio, suspeito=eh_suspeito))
         registrar_transacao(db, jogador, tipo='premio', delta_saldo=premio,
-                            delta_sacavel=premio, ref=f'queda:{numero}')
-        msgs.append(f'{jogador.nick}: {colocacao}o, {abates} kills, R$ {premio:.2f}')
+                            delta_sacavel=(0.0 if eh_suspeito else premio), ref=f'queda:{numero}')
+        msgs.append(f'{jogador.nick}: {colocacao}o, {abates} kills, R$ {premio:.2f}' + (' (SACAVEL RETIDO p/ revisao)' if eh_suspeito else ''))
     queda = _get_queda(db, numero)
     if queda:
         queda.status = 'encerrada'
@@ -853,6 +866,7 @@ async def solicitar_saque(body: SolicitarSaqueBody,
     if body.valor > jogador.saldo_sacavel:
         raise HTTPException(400, f'Saldo sacavel insuficiente. Disponivel para saque: '
                                  f'R$ {jogador.saldo_sacavel:.2f} (apenas premios ganhos sao sacaveis).')
+    gates.checar_hold_saque(db, jogador, body.valor)
     pendente = db.scalar(select(SaqueRequisicaoModel).where(
         SaqueRequisicaoModel.jogador_id == jogador.id,
         SaqueRequisicaoModel.status == 'pendente'))
@@ -1147,3 +1161,36 @@ def agente_executar(body: ExecutarAcaoBody,
         db.commit()
         return {'message': f'Queda {num}: resultados lancados.', 'detalhes': msgs}
     raise HTTPException(400, f'Acao nao executavel: {acao}')
+
+
+@app.get('/admin/resultados/suspeitos')
+def admin_resultados_suspeitos(_admin: JogadorModel = Depends(require_admin),
+                               db: Session = Depends(get_db)):
+    return gates.listar_resultados_suspeitos(db)
+
+
+@app.post('/admin/resultados/{resultado_id}/liberar')
+def admin_liberar_resultado(resultado_id: int,
+                            _admin: JogadorModel = Depends(require_admin),
+                            db: Session = Depends(get_db)):
+    r = gates.liberar_resultado_sacavel(db, resultado_id, _lock_jogador)
+    db.commit()
+    return r
+
+
+@app.post('/admin/resultados/{resultado_id}/rejeitar')
+def admin_rejeitar_resultado(resultado_id: int,
+                             _admin: JogadorModel = Depends(require_admin),
+                             db: Session = Depends(get_db)):
+    r = gates.rejeitar_resultado_sacavel(db, resultado_id)
+    db.commit()
+    return r
+
+
+@app.get('/saques/disponivel')
+def saque_disponivel(jogador: JogadorModel = Depends(obter_usuario_atual),
+                     db: Session = Depends(get_db)):
+    disp, em_risco, lib = gates.disponivel_para_saque(db, jogador)
+    return {'disponivel': disp, 'em_risco_med': em_risco,
+            'libera_em': lib.strftime('%d/%m/%Y') if lib else None,
+            'saldo_sacavel': jogador.saldo_sacavel}
