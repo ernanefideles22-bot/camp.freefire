@@ -187,20 +187,20 @@ export const apiService = {
   },
 
   async cadastrarJogador(nome: string, nick: string, senha?: string,
-                         aceitouTermos = false, confirmaIdade = false): Promise<Jogador> {
+                         aceitouTermos = false, confirmaIdade = false, dataNascimento?: string): Promise<Jogador> {
     const res = await api.post('/auth/cadastro', {
       nome, nick, senha: senha || undefined,
-      aceitou_termos: aceitouTermos, confirma_idade: confirmaIdade,
+      aceitou_termos: aceitouTermos, confirma_idade: confirmaIdade, data_nascimento: dataNascimento,
     });
     return res.data as Jogador;
   },
 
   async loginGoogle(idToken: string, nick?: string,
-                    aceitouTermos = false, confirmaIdade = false): Promise<{
+                    aceitouTermos = false, confirmaIdade = false, dataNascimento?: string): Promise<{
     jogador?: Jogador; precisa_nick?: boolean; email?: string; nome_sugerido?: string;
   }> {
     const res = await api.post('/auth/google', {
-      id_token: idToken, nick, aceitou_termos: aceitouTermos, confirma_idade: confirmaIdade,
+      id_token: idToken, nick, aceitou_termos: aceitouTermos, confirma_idade: confirmaIdade, data_nascimento: dataNascimento,
     });
     const data = res.data;
     if (data.access_token) {

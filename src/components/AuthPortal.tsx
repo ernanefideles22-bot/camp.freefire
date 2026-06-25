@@ -21,6 +21,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
   const [error, setError] = useState('');
   const [aceito, setAceito] = useState(false);
   const [maior, setMaior] = useState(false);
+  const [dataNascimento, setDataNascimento] = useState('');
   const [termosOpen, setTermosOpen] = useState(false);
 
   // Fluxo Google: quando a conta e nova, o backend pede o nick do Free Fire.
@@ -28,10 +29,10 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
   const [googleNick, setGoogleNick] = useState('');
   const googleBtnRef = useRef<HTMLDivElement>(null);
 
-  const handleGoogle = async (idToken: string, ffNick?: string, ac = false, mi = false) => {
+  const handleGoogle = async (idToken: string, ffNick?: string, ac = false, mi = false, dn = '') => {
     setLoading(true); setError('');
     try {
-      const data = await apiService.loginGoogle(idToken, ffNick, ac, mi);
+      const data = await apiService.loginGoogle(idToken, ffNick, ac, mi, dn);
       if (data.precisa_nick) {
         setPendingGoogleToken(idToken);
         onAddToast('info', 'Quase la', 'Escolha seu nick do Free Fire para concluir o cadastro.');
@@ -99,7 +100,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
         onAddToast('success', 'Bem-vindo!', `Bem-vindo de volta, ${user.nome}!`);
         onAuthSuccess(user);
       } else {
-        const user = await apiService.cadastrarJogador(nome.trim(), nick.trim(), senha, aceito, maior);
+        const user = await apiService.cadastrarJogador(nome.trim(), nick.trim(), senha, aceito, maior, dataNascimento);
         localStorage.setItem('currentUser', JSON.stringify(user));
         onAddToast('success', 'Conta Criada!', `Jogador ${user.nick} cadastrado com sucesso!`);
         onAuthSuccess(user);
@@ -118,7 +119,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
     if (!pendingGoogleToken) return;
     if (!googleNick.trim()) { setError('Informe seu nick do Free Fire.'); return; }
     if (!aceito || !maior) { setError('Voce precisa aceitar os Termos e confirmar que tem 18 anos ou mais.'); return; }
-    await handleGoogle(pendingGoogleToken, googleNick.trim(), aceito, maior);
+    await handleGoogle(pendingGoogleToken, googleNick.trim(), aceito, maior, dataNascimento);
   };
 
   const aceiteBlock = (
@@ -173,7 +174,11 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
                   className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-accent-cyan focus:outline-none transition-all" />
               </div>
             </div>
-            {aceiteBlock}
+            <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Data de Nascimento</label>
+                  <input style={{ fontSize: '16px' }} type="date" required value={dataNascimento} onChange={(e) => setDataNascimento(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 text-white px-4 py-3 rounded-xl focus:border-accent-cyan focus:outline-none transition-all" />
+                </div>
+                {aceiteBlock}
             <button type="submit" disabled={loading}
               className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-zinc-950 font-bold bg-accent-cyan hover:bg-cyan-400 transition-all disabled:opacity-60">
               {loading ? 'Concluindo...' : 'Concluir cadastro'}<ChevronRight className="w-4 h-4" />
@@ -238,7 +243,13 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
             </div>
           )}
 
-          {!isLogin && aceiteBlock}
+          {!isLogin && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Data de Nascimento</label>
+                    <input style={{ fontSize: '16px' }} type="date" required value={dataNascimento} onChange={(e) => setDataNascimento(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 text-white px-4 py-3 rounded-xl focus:border-primary focus:outline-none transition-all" />
+                  </div>
+                )}
+                {!isLogin && aceiteBlock}
           <button style={{ minHeight: '44px', touchAction: 'manipulation' }} type="submit" disabled={loading}
             className={`w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-white font-bold transition-all duration-300 select-none ${ loading ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : isLogin ? 'bg-primary hover:bg-primary-dark shadow-[0_4px_20px_rgba(139,92,246,0.25)]' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_4px_20px_rgba(0,240,255,0.25)]'}`}>
             {loading ? <span>Processando...</span> : (<><span>{isLogin ? 'Entrar' : 'Cadastrar'}</span>{isLogin ? <LogIn className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</>)}

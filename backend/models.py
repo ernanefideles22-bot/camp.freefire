@@ -1,8 +1,8 @@
 """Modelos ORM (SQLAlchemy 2.x, estilo Mapped/mapped_column)."""
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from typing import Optional, List
 
-from sqlalchemy import String, Integer, Float, Boolean, ForeignKey, DateTime
+from sqlalchemy import String, Integer, Float, Boolean, ForeignKey, DateTime, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -35,6 +35,9 @@ class JogadorModel(Base):
     confirmou_idade: Mapped[bool] = mapped_column(Boolean, default=False)
     termos_versao: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     termos_aceito_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    data_nascimento: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    registro_ip: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ultimo_ip: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     # Dados bancarios para saque via API Cora (transferencia exige conta, nao chave PIX)
     banco_codigo: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     agencia: Mapped[Optional[str]] = mapped_column(String, nullable=True)
@@ -81,6 +84,8 @@ class ResultadoQuedaModel(Base):
     colocacao: Mapped[int] = mapped_column(Integer, nullable=False)
     abates: Mapped[int] = mapped_column(Integer, default=0)
     premio: Mapped[float] = mapped_column(Float, default=0.0)
+    suspeito: Mapped[bool] = mapped_column(Boolean, default=False)
+    revisado: Mapped[bool] = mapped_column(Boolean, default=False)
     jogador: Mapped['JogadorModel'] = relationship(back_populates='resultados')
     queda: Mapped['QuedaModel'] = relationship(back_populates='resultados')
 
