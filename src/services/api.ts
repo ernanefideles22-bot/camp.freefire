@@ -155,8 +155,11 @@ export interface DepositoRequisicao {
 // ====================== FUNCAO PREMIO ======================
 export interface ConfigRegras {
   taxa_inscricao: number;
-  bonus_abate: number;
-  premios: Record<string, number>;
+  rake: number;
+  share_colocacao: number;
+  share_abate: number;
+  pesos_colocacao: Record<string, number>;
+  lobby_cheio: number;
 }
 
 let _configCache: ConfigRegras | null = null;
@@ -168,9 +171,18 @@ export async function getConfig(): Promise<ConfigRegras> {
   return _configCache;
 }
 
+// Premiacao agora e PROPORCIONAL ao arrecadado. Esta funcao devolve uma ESTIMATIVA
+// por colocacao assumindo LOBBY CHEIO (so para preview do admin). O valor real e
+// calculado no backend conforme inscritos e abates de cada queda.
 export function premioPorColocacao(colocacao: number): number {
-  if (!_configCache) { getConfig().catch(() => {}); return 0; }
-  return _configCache.premios[String(colocacao)] ?? 0;
+  const c = _configCache;
+  if (!c) { getConfig().catch(() => {}); return 0; }
+  const peso = c.pesos_colocacao?.[String(colocacao)];
+  if (!peso) return 0;
+  const somaPesos = Object.values(c.pesos_colocacao).reduce((a, b) => a + b, 0);
+  const arrecadado = c.lobby_cheio * c.taxa_inscricao;
+  const boloColoc = arrecadado * (1 - c.rake) * c.share_colocacao;
+  return boloColoc * (peso / somaPesos);
 }
 export const getPremioPorColocacao = premioPorColocacao;
 
