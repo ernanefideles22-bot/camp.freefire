@@ -52,18 +52,47 @@ if not os.environ.get('SKIP_DB_INIT'):
         print(f'[WARN] promocao de admin falhou: {exc}')
 
 TAXA_INSCRICAO = 3.0
-BONUS_ABATE = 0.25
-PREMIOS = {1: 15.0, 2: 12.0, 3: 8.0, 4: 6.0, 5: 4.0}
+# ---- Premiacao PROPORCIONAL ao arrecadado (fonte unica) ----
+# Arrecadado da queda = nº de inscritos x TAXA_INSCRICAO.
+# A casa fica com RAKE; o restante (premiacao) e dividido entre colocacao e abates.
+RAKE = 1.0 / 3.0                 # 33,33% casa | 66,67% premiacao
+SHARE_COLOCACAO = 0.85           # 85% da premiacao -> top 5
+SHARE_ABATE = 0.15               # 15% da premiacao -> bolo de abates (rateado pelos kills)
+PESOS_COLOCACAO = {1: 15.0, 2: 12.0, 3: 8.0, 4: 6.0, 5: 4.0}  # pesos relativos do top 5
+SOMA_PESOS = sum(PESOS_COLOCACAO.values())                    # 45.0
+BONUS_ABATE = 0.0                # compat; premio nao usa mais valor fixo por abate
 TERMOS_VERSAO = '1.0'  # bump quando os termos mudarem (forca novo aceite no futuro)
 LIMITE_QUEDA = 48    # jogadores por queda (Free Fire)
 MAX_COLOCACAO = LIMITE_QUEDA
 MAX_ABATES = 50      # teto plausivel de abates por partida
 
 # ====================== REGRAS DE PREMIO / PONTOS ======================
-def calcular_premio(colocacao: int, abates: int) -> float:
-    """Premio em R$ por queda. Tabela em PREMIOS (fonte unica)."""
-    base = PREMIOS.get(colocacao, 0.0)
-    return base + (abates * BONUS_ABATE)
+def distribuir_premios(arrecadado: float, resultados: list, abates_previos: int = 0) -> dict:
+    """Premiacao PROPORCIONAL de uma queda. Retorna {jogador_id: premio_em_reais}.
+    arrecadado = inscritos x TAXA_INSCRICAO. resultados = [{jogador_id,colocacao,abates}].
+    Colocacao: cada posicao do top 5 recebe (peso/SOMA_PESOS) do bolo de colocacao.
+    Abate: bolo de abate rateado por (abates_do_jogador / total_abates_da_queda).
+    Proporcional => nunca paga mais do que arrecada (sem risco de prejuizo)."""
+    premiacao = arrecadado * (1.0 - RAKE)
+    bolo_coloc = premiacao * SHARE_COLOCACAO
+    bolo_abate = premiacao * SHARE_ABATE
+    total_abates = abates_previos + sum(int(r.get('abates', 0) or 0) for r in resultados)
+    out: dict = {}
+    for r in resultados:
+        jid = r.get('jogador_id')
+        try:
+            coloc = int(r.get('colocacao', LIMITE_QUEDA))
+            ab = int(r.get('abates', 0) or 0)
+        except (TypeError, ValueError):
+            coloc, ab = LIMITE_QUEDA, 0
+        premio = 0.0
+        peso = PESOS_COLOCACAO.get(coloc)
+        if peso:
+            premio += bolo_coloc * (peso / SOMA_PESOS)
+        if total_abates > 0 and ab > 0:
+            premio += bolo_abate * (ab / total_abates)
+        out[jid] = round(premio, 2)
+    return out
 
 
 PONTOS_LBFF = {1: 12, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1}
@@ -419,7 +448,14 @@ def extrato_admin(jogador_id: int, limite: int = 100,
 # ====================== CLASSIFICACAO (PUBLICA) ======================
 @app.get('/config')
 def get_config():
-    return {'taxa_inscricao': TAXA_INSCRICAO, 'bonus_abate': BONUS_ABATE, 'premios': PREMIOS}
+    return {
+        'taxa_inscricao': TAXA_INSCRICAO,
+        'rake': RAKE,
+        'share_colocacao': SHARE_COLOCACAO,
+        'share_abate': SHARE_ABATE,
+        'pesos_colocacao': PESOS_COLOCACAO,
+        'lobby_cheio': LIMITE_QUEDA,
+    }
 
 
 # ====================== ADMIN: WEBHOOK EFI ======================
@@ -596,6 +632,13 @@ def _aplicar_resultados(db: Session, numero: int, lista: list) -> list:
     # ---- Aplicacao ----
     jogador_ids = [r.get('jogador_id') for r in lista]
     suspeitos = gates.avaliar_suspeitos(db, numero, jogador_ids)
+    # ---- Premiacao proporcional: arrecadado e total de abates da queda ----
+    inscritos = db.scalar(select(func.count()).select_from(InscricaoModel)
+                          .where(InscricaoModel.numero_queda == numero)) or 0
+    arrecadado = inscritos * TAXA_INSCRICAO
+    abates_previos = db.scalar(select(func.coalesce(func.sum(ResultadoQuedaModel.abates), 0))
+                               .where(ResultadoQuedaModel.numero_queda == numero)) or 0
+    premios_calc = distribuir_premios(arrecadado, lista, abates_previos=int(abates_previos))
     for res in lista:
         jid = res.get('jogador_id')
         jogador = _lock_jogador(db, jid)
@@ -607,7 +650,7 @@ def _aplicar_resultados(db: Session, numero: int, lista: list) -> list:
             raise HTTPException(400, f'Resultado ja lancado para {jogador.nick} na queda {numero}')
         colocacao = int(res.get('colocacao', LIMITE_QUEDA))
         abates = int(res.get('abates', 0))
-        premio = calcular_premio(colocacao, abates)
+        premio = premios_calc.get(jid, 0.0)
         eh_suspeito = jid in suspeitos
         db.add(ResultadoQuedaModel(jogador_id=jid, numero_queda=numero,
                                    colocacao=colocacao, abates=abates, premio=premio, suspeito=eh_suspeito))
