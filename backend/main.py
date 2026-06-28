@@ -876,6 +876,17 @@ def _cpf_consistente(cpf_conta: str, cpf_mascarado: str) -> bool:
     return visiveis in conta
 
 
+def _estorno_delta_sacavel(jog, saque) -> float:
+    """Quanto de SACAVEL devolver ao estornar um saque.
+    - Saque pro proprio CPF pode ter consumido DEPOSITO (nao-sacavel): ao estornar
+      NAO recriamos sacavel de deposito (devolve saldo; sacavel ajusta pelo clamp).
+    - Saque por outra chave consumiu so premio: devolve o sacavel cheio."""
+    if (saque.tipo_chave == 'cpf'
+            and _normalizar_cpf(saque.chave_pix or '') == _normalizar_cpf(jog.cpf or '')):
+        return 0.0
+    return saque.valor
+
+
 @app.post('/saques/solicitar')
 async def solicitar_saque(body: SolicitarSaqueBody,
                           jogador: JogadorModel = Depends(obter_usuario_atual),
@@ -906,17 +917,36 @@ async def solicitar_saque(body: SolicitarSaqueBody,
     nome_titular = None  # titular so e conhecido apos o envio (vem no retorno/webhook)
 
     jogador = _lock_jogador(db, jogador.id)  # trava a linha: evita corrida de saldo
-    if body.valor > jogador.saldo_sacavel:
-        raise HTTPException(400, f'Saldo sacavel insuficiente. Disponivel para saque: '
-                                 f'R$ {jogador.saldo_sacavel:.2f} (apenas premios ganhos sao sacaveis).')
-    gates.checar_hold_saque(db, jogador, body.valor)
+    # Trava de ORIGEM do dinheiro:
+    #  - chave PIX do tipo CPF igual ao CPF do jogador -> saca TUDO (deposito + premio)
+    #  - qualquer outra chave                          -> saca SO premio (saldo_sacavel)
+    # Deposito so volta pro proprio CPF (anti-lavagem); premio vai pra qualquer chave.
+    cpf_chave = _normalizar_cpf(chave)
+    eh_cpf_proprio = (tipo == 'cpf' and len(cpf_chave) == 11
+                      and cpf_chave == _normalizar_cpf(jogador.cpf))
+    base = jogador.saldo if eh_cpf_proprio else jogador.saldo_sacavel
+    # Hold MED: segura o equivalente a depositos recentes (anti deposito->saque->estorno).
+    em_risco, liberacao = gates.valor_em_risco_med(db, jogador.id)
+    disponivel = max(0.0, round(base - em_risco, 2))
+    if body.valor > disponivel + 0.001:
+        if em_risco > 0.001 and body.valor <= base + 0.001:
+            quando = liberacao.strftime('%d/%m/%Y') if liberacao else 'em breve'
+            raise HTTPException(400,
+                f'Saque retido: voce tem R$ {em_risco:.2f} em depositos recentes que ainda '
+                f'podem ser estornados (MED). Disponivel agora: R$ {disponivel:.2f}. '
+                f'O restante libera a partir de {quando}.')
+        if eh_cpf_proprio:
+            raise HTTPException(400, f'Saldo insuficiente. Disponivel para saque: R$ {disponivel:.2f}.')
+        raise HTTPException(400,
+            f'Por uma chave que nao e o seu CPF voce so saca os premios ganhos: '
+            f'R$ {jogador.saldo_sacavel:.2f}. Para sacar o deposito tambem, use sua chave PIX CPF.')
     pendente = db.scalar(select(SaqueRequisicaoModel).where(
         SaqueRequisicaoModel.jogador_id == jogador.id,
         SaqueRequisicaoModel.status == 'pendente'))
     if pendente:
         raise HTTPException(400, 'Voce ja tem um saque pendente. Aguarde o processamento.')
     registrar_transacao(db, jogador, tipo='saque_reserva', delta_saldo=-body.valor,
-                        delta_sacavel=-body.valor, ref='saque:reserva')
+                        delta_sacavel=(0.0 if eh_cpf_proprio else -body.valor), ref='saque:reserva')
     saque = SaqueRequisicaoModel(jogador_id=jogador.id, valor=body.valor,
                                  chave_pix=chave, tipo_chave=tipo, status='pendente',
                                  titular_chave=nome_titular or None)
@@ -960,7 +990,7 @@ def processar_saque(saque_id: int, body: ProcessarSaqueBody,
         jog = _lock_jogador(db, saque.jogador_id)
         if jog:
             registrar_transacao(db, jog, tipo='saque_estorno', delta_saldo=saque.valor,
-                                delta_sacavel=saque.valor, ref=f'saque:{saque.id}')  # devolve a reserva
+                                delta_sacavel=_estorno_delta_sacavel(jog, saque), ref=f'saque:{saque.id}')  # devolve a reserva
     db.commit()
     return {'message': f'Saque {saque_id} marcado como {body.status}.'}
 
@@ -1050,7 +1080,7 @@ async def conferir_saque(saque_id: int,
         jog = _lock_jogador(db, saque.jogador_id)
         if jog:
             registrar_transacao(db, jog, tipo='saque_estorno', delta_saldo=saque.valor,
-                                delta_sacavel=saque.valor, ref=f'saque:{saque.id}')
+                                delta_sacavel=_estorno_delta_sacavel(jog, saque), ref=f'saque:{saque.id}')
         saque.status = 'rejeitado'
         saque.processado_em = utcnow()
         db.commit()
