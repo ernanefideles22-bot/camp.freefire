@@ -341,6 +341,22 @@ export const apiService = {
     return res.data as SaqueRequisicao[];
   },
 
+  // PREMIOS RETIDOS (revisao antifraude)
+  async obterResultadosSuspeitos(): Promise<any[]> {
+    const res = await api.get('/admin/resultados/suspeitos');
+    return res.data as any[];
+  },
+
+  async liberarResultado(resultadoId: number): Promise<any> {
+    const res = await api.post(`/admin/resultados/${resultadoId}/liberar`);
+    return res.data;
+  },
+
+  async rejeitarResultado(resultadoId: number): Promise<any> {
+    const res = await api.post(`/admin/resultados/${resultadoId}/rejeitar`);
+    return res.data;
+  },
+
   async processarSaque(id: number, status: 'pago' | 'rejeitado'): Promise<any> {
     const res = await api.post(`/saques/${id}/processar`, { status });
     return res.data;
