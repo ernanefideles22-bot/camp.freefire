@@ -10,7 +10,9 @@ const TIPOS = [
   { v: 'aleatoria', label: 'Aleatoria' },
 ];
 
-export default function PixSaque({ saldoSacavel }: { saldoSacavel: number }) {
+const brl = (n: number) => `R$ ${n.toFixed(2).replace('.', ',')}`;
+
+export default function PixSaque({ saldoSacavel, saldo = 0 }: { saldoSacavel: number; saldo?: number }) {
   const [valor, setValor] = useState('');
   const [chave, setChave] = useState('');
   const [tipo, setTipo] = useState('cpf');
@@ -18,6 +20,9 @@ export default function PixSaque({ saldoSacavel }: { saldoSacavel: number }) {
   const [erro, setErro] = useState('');
   const [ok, setOk] = useState('');
   const [saques, setSaques] = useState<SaqueRequisicao[]>([]);
+
+  // Pela propria chave CPF saca TUDO (deposito + premio); por outras chaves, so o premio.
+  const limite = tipo === 'cpf' ? saldo : saldoSacavel;
 
   const carregar = useCallback(async () => {
     try { setSaques(await apiService.meusSaques()); } catch { /* silencioso */ }
@@ -30,8 +35,13 @@ export default function PixSaque({ saldoSacavel }: { saldoSacavel: number }) {
     setErro(''); setOk('');
     const v = parseFloat(valor.replace(',', '.'));
     if (!valor || isNaN(v) || v < 5) { setErro('Saque minimo: R$ 5,00'); return; }
-    if (v > saldoSacavel) { setErro('Valor acima do saldo disponivel para saque'); return; }
     if (!chave.trim()) { setErro('Informe sua chave PIX'); return; }
+    if (v > limite) {
+      setErro(tipo === 'cpf'
+        ? `Valor acima do seu saldo (${brl(saldo)}).`
+        : `Por essa chave voce so saca premios: ${brl(saldoSacavel)}. Use sua chave CPF para sacar o deposito.`);
+      return;
+    }
     setLoading(true);
     try {
       const r = await apiService.solicitarSaque(v, chave.trim(), tipo);
@@ -53,11 +63,11 @@ export default function PixSaque({ saldoSacavel }: { saldoSacavel: number }) {
 
   return (
     <div>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Sacar Ganhos via PIX</p>
-      <p className="text-[10px] text-zinc-500 mb-3">
-        Disponivel para saque (apenas premios):{' '}
-        <span className="font-mono font-bold text-emerald-400">R$ {saldoSacavel.toFixed(2).replace('.', ',')}</span>
-      </p>
+      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Sacar via PIX</p>
+      <div className="text-[10px] text-zinc-500 mb-3 space-y-0.5">
+        <p>Premios (qualquer chave): <span className="font-mono font-bold text-emerald-400">{brl(saldoSacavel)}</span></p>
+        <p>Total incl. deposito (so pra sua chave CPF): <span className="font-mono font-bold text-emerald-400">{brl(saldo)}</span></p>
+      </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         <input type="text" inputMode="decimal" placeholder="Valor (min. R$ 5,00)" value={valor}
           onChange={e => setValor(e.target.value.replace(/[^0-9.,]/g, ''))}
@@ -74,7 +84,7 @@ export default function PixSaque({ saldoSacavel }: { saldoSacavel: number }) {
           className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2.5 rounded-xl text-sm text-white focus:border-primary focus:outline-none placeholder:text-zinc-600" />
         {erro && <p className="text-xs text-rose-400 font-semibold">{erro}</p>}
         {ok && <p className="text-xs text-emerald-400 font-semibold">{ok}</p>}
-        <button type="submit" disabled={loading || saldoSacavel < 5}
+        <button type="submit" disabled={loading || limite < 5}
           className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 border border-zinc-700">
           {loading ? (
             <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />Enviando...</>
@@ -83,9 +93,9 @@ export default function PixSaque({ saldoSacavel }: { saldoSacavel: number }) {
           )}
         </button>
         <p className="text-[10px] text-zinc-600">
-          <strong>Chave CPF (a sua):</strong> saca tudo, inclusive o que voce depositou.{' '}
-          <strong>Outras chaves:</strong> saca so os premios ganhos. Deposito recente pode
-          ficar retido alguns dias por seguranca (anti-estorno).
+          <strong>Chave CPF (a sua):</strong> saca tudo, inclusive o deposito.{' '}
+          <strong>Outras chaves:</strong> so os premios ganhos. Deposito recente pode ficar
+          retido alguns dias por seguranca (anti-estorno).
         </p>
       </form>
       {saques.length > 0 && (
@@ -94,7 +104,7 @@ export default function PixSaque({ saldoSacavel }: { saldoSacavel: number }) {
           {saques.slice(0, 3).map(s => (
             <div key={s.id} className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-950 border border-zinc-800">
               <div>
-                <span className="text-xs font-bold text-white font-mono">R$ {s.valor.toFixed(2).replace('.', ',')}</span>
+                <span className="text-xs font-bold text-white font-mono">{brl(s.valor)}</span>
                 <p className="text-[9px] text-zinc-600">{s.criado_em}</p>
               </div>
               <span className={`text-[9px] font-bold uppercase px-2 py-1 rounded-full border ${statusBadge(s.status)}`}>{s.status}</span>
