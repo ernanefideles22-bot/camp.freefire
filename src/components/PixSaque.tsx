@@ -83,10 +83,8 @@ export default function PixSaque({ saldoSacavel }: { saldoSacavel: number }) {
           )}
         </button>
         <p className="text-[10px] text-zinc-600">
-          Pode ser qualquer tipo de chave, mas ela precisa pertencer a uma conta com o
-          <strong> seu CPF</strong> (o mesmo do depósito). Conferimos o titular no momento
-          do pagamento: se a chave for de outra pessoa, o saque é recusado e o valor volta
-          ao seu saldo.
+          Use uma chave PIX da <strong>sua propria conta</strong> (mesmo CPF do deposito).
+          Saque para chave de terceiros e sinalizado para revisao e pode ser contestado.
         </p>
       </form>
       {saques.length > 0 && (
