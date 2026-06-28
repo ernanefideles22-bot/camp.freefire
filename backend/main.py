@@ -898,11 +898,16 @@ async def solicitar_saque(body: SolicitarSaqueBody,
     tipo = body.tipo_chave
     if tipo not in TIPOS_CHAVE_PIX:
         raise HTTPException(400, 'Tipo de chave deve ser: cpf, email, telefone ou aleatoria')
-    if not chave or len(chave) > 140:
-        raise HTTPException(400, 'Chave PIX invalida')
     if not jogador.cpf:
         raise HTTPException(400, 'Faca um deposito com CPF antes de sacar '
                                  '(precisamos do seu CPF para validar a chave).')
+    if tipo == 'cpf':
+        # Saque pro titular: o destino e SEMPRE o CPF cadastrado (o do deposito),
+        # nao o que for digitado -- assim nunca da 'CPF nao confere' e o jogador
+        # nem precisa digitar de novo.
+        chave = _normalizar_cpf(jogador.cpf)
+    if not chave or len(chave) > 140:
+        raise HTTPException(400, 'Chave PIX invalida')
 
     # ANTILAVAGEM (Efi): diferente do Asaas, a Efi NAO tem consulta DICT de titular
     # standalone. Aqui so validamos o FORMATO da chave; a trava real de CPF (a chave
