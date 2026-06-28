@@ -19,7 +19,7 @@ interface LinhaResultado {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser: _currentUser }) => {
-  const [activeTab, setActiveTab] = useState<'geral' | 'lancar' | 'depositos'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'lancar' | 'depositos' | 'retidos'>('geral');
   const [salaQueda, setSalaQueda] = useState<string>('1');
   const [salaId, setSalaId] = useState<string>('');
   const [salaSenha, setSalaSenha] = useState<string>('');
@@ -35,6 +35,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   const [loadingDepositos, setLoadingDepositos] = useState<boolean>(false);
   const [saques, setSaques] = useState<SaqueRequisicao[]>([]);
   const [loadingSaques, setLoadingSaques] = useState<boolean>(false);
+  const [retidos, setRetidos] = useState<any[]>([]);
+  const [loadingRetidos, setLoadingRetidos] = useState<boolean>(false);
   const [players, setPlayers] = useState<Jogador[]>([]);
   const [loadingPlayersList, setLoadingPlayersList] = useState<boolean>(false);
   const [cmJogadorId, setCmJogadorId] = useState<string>('');
@@ -63,9 +65,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     finally { setLoadingDepositos(false); }
   };
 
+  const fetchRetidos = async () => {
+    setLoadingRetidos(true);
+    try { const data = await apiService.obterResultadosSuspeitos(); setRetidos(data); }
+    catch { /* silencioso */ }
+    finally { setLoadingRetidos(false); }
+  };
+
+  const handleLiberarRetido = async (id: number) => {
+    if (!window.confirm('Liberar este prêmio para saque? O valor vira sacável para o jogador.')) return;
+    try {
+      const res = await apiService.liberarResultado(id);
+      onAddToast('success', 'Prêmio Liberado', `R$ ${(res.premio_liberado ?? 0).toFixed(2)} liberado para saque.`);
+      await fetchRetidos();
+    } catch (err: any) { onAddToast('error', 'Falha ao Liberar', err.message || 'Não foi possível liberar.'); }
+  };
+
+  const handleRejeitarRetido = async (id: number) => {
+    if (!window.confirm('Rejeitar este prêmio? O valor fica retido (não sacável) permanentemente.')) return;
+    try {
+      await apiService.rejeitarResultado(id);
+      onAddToast('info', 'Prêmio Rejeitado', 'O prêmio permanece retido e saiu da fila de revisão.');
+      await fetchRetidos();
+    } catch (err: any) { onAddToast('error', 'Falha ao Rejeitar', err.message || 'Não foi possível rejeitar.'); }
+  };
+
   useEffect(() => {
-    fetchPlayers(); fetchDepositos(); fetchSaques();
-    const interval = setInterval(() => { fetchDepositos(); fetchSaques(); }, 20000);
+    fetchPlayers(); fetchDepositos(); fetchSaques(); fetchRetidos();
+    const interval = setInterval(() => { fetchDepositos(); fetchSaques(); fetchRetidos(); }, 20000);
     return () => clearInterval(interval);
   }, []);
 
@@ -226,6 +253,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
           <Landmark className="w-4 h-4 text-primary" />
           Depósitos PIX
           {(depositos.length > 0 || saques.length > 0) && (<span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span></span>)}
+        </button>
+        <button onClick={() => setActiveTab('retidos')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap relative ${activeTab === 'retidos' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
+          <AlertTriangle className="w-4 h-4 text-amber-400" />
+          Prêmios Retidos
+          {retidos.length > 0 && (<span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span></span>)}
         </button>
       </div>
       <div className="p-5">
@@ -403,6 +435,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                 </div>
               )}
             </div>
+          </div>
+        )}
+        {activeTab === 'retidos' && (
+          <div className="max-w-3xl mx-auto space-y-4">
+            <div>
+              <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4 text-amber-400" />Prêmios Retidos (revisão antifraude)</h2>
+              <p className="text-xs text-zinc-400">Prêmios de quedas com lobby pequeno (&lt; 6 jogadores) ou mesmo IP ficam retidos até revisão. Liberar credita como sacável; rejeitar mantém retido.</p>
+            </div>
+            {loadingRetidos && retidos.length === 0 ? (
+              <div className="flex justify-center py-8"><Spinner /></div>
+            ) : retidos.length === 0 ? (
+              <p className="text-xs text-zinc-500 text-center py-8 border border-dashed border-zinc-800 rounded-xl">Nenhum prêmio retido no momento.</p>
+            ) : (
+              <div className="space-y-2">
+                {retidos.map((r: any) => (
+                  <div key={r.resultado_id} className="flex items-center justify-between p-4 rounded-xl border border-amber-500/20 bg-amber-500/5">
+                    <div className="text-xs">
+                      <p className="font-bold text-white">{r.jogador_nick || `Jogador ${r.jogador_id}`}</p>
+                      <p className="text-zinc-400">Queda {r.numero_queda} · {r.colocacao}º lugar · {r.abates} abates</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-amber-400 font-mono">R$ {(r.premio ?? 0).toFixed(2).replace('.', ',')}</span>
+                      <button onClick={() => handleLiberarRetido(r.resultado_id)} className="px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-zinc-950 border border-emerald-500/20 hover:border-emerald-500 transition-all cursor-pointer text-xs font-bold flex items-center gap-1"><Check className="w-4 h-4" />Liberar</button>
+                      <button onClick={() => handleRejeitarRetido(r.resultado_id)} className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-zinc-950 border border-rose-500/20 hover:border-rose-500 transition-all cursor-pointer" title="Manter retido"><X className="w-4 h-4" /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
