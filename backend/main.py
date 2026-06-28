@@ -1025,16 +1025,17 @@ async def conferir_saque(saque_id: int,
                       or (favorecido.get('contaBanco') or {}).get('cpf') or '')
     if status_asaas in TRANSFER_DONE and cpf_favorecido and jog_dono:
         if not _cpf_consistente(jog_dono.cpf, cpf_favorecido):
-            jog = _lock_jogador(db, saque.jogador_id)
-            if jog:
-                registrar_transacao(db, jog, tipo='saque_estorno', delta_saldo=saque.valor,
-                                    delta_sacavel=saque.valor, ref=f'saque:{saque.id}')
-            saque.status = 'rejeitado'
+            # O PIX JA foi liquidado (REALIZADO) e e irreversivel. NAO estornar o saldo:
+            # o dinheiro ja saiu; estornar pagaria pra fora E devolveria (prejuizo dobrado).
+            # Marca como pago e SINALIZA para revisao manual (possivel fraude/conta invadida).
+            saque.status = 'pago'
+            saque.titular_chave = ('REVISAR CPF DIVERGENTE: '
+                                   + (favorecido.get('nome') or '?'))
             saque.processado_em = utcnow()
             db.commit()
-            return {'status': 'rejeitado', 'status_asaas': status_asaas,
-                    'message': 'Chave PIX pertence a outra pessoa (CPF divergente). '
-                               'Pagamento bloqueado e valor devolvido ao jogador.'}
+            return {'status': 'pago', 'revisar': True, 'status_asaas': status_asaas,
+                    'message': 'PIX enviado, mas o CPF do recebedor diverge do titular. '
+                               'Saque SINALIZADO para revisao manual (possivel fraude).'}
 
     if status_asaas in TRANSFER_DONE:
         saque.status = 'pago'
