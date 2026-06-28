@@ -68,7 +68,7 @@ def _set_saldo(nick, saldo, sacavel=None):
 # ====================== AUTH ======================
 
 def test_cadastro_primeiro_usuario_e_admin():
-    r = client.post('/auth/cadastro', json={'nome': 'Admin', 'nick': 'admin1', 'senha': 'secret123', 'aceitou_termos': True, 'confirma_idade': True})
+    r = client.post('/auth/cadastro', json={'nome': 'Admin', 'nick': 'admin1', 'senha': 'secret123', 'data_nascimento': '2000-01-01', 'aceitou_termos': True, 'confirma_idade': True})
     assert r.status_code == 200
     assert r.json()['is_admin'] is True
 
@@ -117,7 +117,7 @@ def test_refresh_token():
 # ====================== INSCRICAO ======================
 
 def test_inscricao_fluxo_completo():
-    client.post('/auth/cadastro', json={'nome': 'Player', 'nick': 'player1', 'senha': 'secret123', 'aceitou_termos': True, 'confirma_idade': True})
+    client.post('/auth/cadastro', json={'nome': 'Player', 'nick': 'player1', 'senha': 'secret123', 'data_nascimento': '2000-01-01', 'aceitou_termos': True, 'confirma_idade': True})
     tok = _login('player1', 'secret123')['access_token']
     admin_tok = _login('admin1', 'secret123')['access_token']
 
@@ -164,11 +164,12 @@ def test_resultado_e_classificacao():
         'resultados': [{'jogador_id': me['id'], 'colocacao': 1, 'abates': 4}],
     }, headers=_auth(admin_tok))
     assert r.status_code == 200
-    # premio: 20 + 4*0.5 = 22; pontos LBFF: 12 + 4 = 16
+    # Premiacao PROPORCIONAL: queda 1 tem 1 inscrito -> arrecadado=3; premiacao=2.00;
+    # 1o (15/45)*1.70=0.567 + abate(4/4)*0.30=0.30 => 0.87
     r = client.get('/classificacao')
     assert r.status_code == 200
     item = next(i for i in r.json() if i['nick'] == 'player1')
-    assert item['total_premios'] == 16.0  # 15 base + 4*0.25
+    assert item['total_premios'] == 0.87
     assert item['total_pontos'] == 16
     assert item['posicao'] == 1
     # resultado duplicado -> 400
@@ -301,6 +302,10 @@ def test_saque_fluxo_completo():
     assert r.json()['completo'] is True
     assert r.json()['banco_codigo'] == '260'
 
+    _set_cpf('player1', '12345678901')
+    _set_saldo('player1', 100.0)
+    saldo_inicial = client.get('/me', headers=_auth(tok)).json()['saldo']
+
     # valor abaixo do minimo -> 400
     r = client.post('/saques/solicitar', json={'valor': 1.0, 'chave_pix': '11999990000', 'tipo_chave': 'telefone'}, headers=_auth(tok))
     assert r.status_code == 400
@@ -431,8 +436,11 @@ def test_saque_antilavagem_cpf_divergente(monkeypatch):
 
     client.post(f'/saques/{sid}/pagar', headers=_auth(admin_tok))
     r = client.post(f'/saques/{sid}/conferir', headers=_auth(admin_tok))
-    assert r.json()['status'] == 'rejeitado', r.text
-    assert client.get('/me', headers=_auth(admin_tok)).json()['saldo'] == saldo_antes
+    # PIX ja saiu (REALIZADO) + CPF divergente: NAO estorna (sem prejuizo dobrado);
+    # marca como pago e sinaliza para revisao manual.
+    assert r.json()['status'] == 'pago', r.text
+    assert r.json().get('revisar') is True
+    assert client.get('/me', headers=_auth(admin_tok)).json()['saldo'] == saldo_antes - 7.0
 
 
 def test_asaas_rollback_importavel():
