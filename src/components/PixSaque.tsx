@@ -35,7 +35,7 @@ export default function PixSaque({ saldoSacavel, saldo = 0 }: { saldoSacavel: nu
     setErro(''); setOk('');
     const v = parseFloat(valor.replace(',', '.'));
     if (!valor || isNaN(v) || v < 5) { setErro('Saque minimo: R$ 5,00'); return; }
-    if (!chave.trim()) { setErro('Informe sua chave PIX'); return; }
+    if (tipo !== 'cpf' && !chave.trim()) { setErro('Informe sua chave PIX'); return; }
     if (v > limite) {
       setErro(tipo === 'cpf'
         ? `Valor acima do seu saldo (${brl(saldo)}).`
@@ -44,7 +44,7 @@ export default function PixSaque({ saldoSacavel, saldo = 0 }: { saldoSacavel: nu
     }
     setLoading(true);
     try {
-      const r = await apiService.solicitarSaque(v, chave.trim(), tipo);
+      const r = await apiService.solicitarSaque(v, tipo === 'cpf' ? '' : chave.trim(), tipo);
       setOk(r.message || 'Saque solicitado!');
       setValor(''); setChave('');
       await carregar();
@@ -80,8 +80,14 @@ export default function PixSaque({ saldoSacavel, saldo = 0 }: { saldoSacavel: nu
               }`}>{t.label}</button>
           ))}
         </div>
-        <input type="text" placeholder="Sua chave PIX" value={chave} onChange={e => setChave(e.target.value)}
-          className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2.5 rounded-xl text-sm text-white focus:border-primary focus:outline-none placeholder:text-zinc-600" />
+        {tipo === 'cpf' ? (
+          <div className="text-[10px] text-emerald-400/90 bg-emerald-500/5 border border-emerald-500/15 rounded-xl px-3 py-2">
+            Vai direto pro seu CPF cadastrado (o do deposito). Nao precisa digitar.
+          </div>
+        ) : (
+          <input type="text" placeholder="Sua chave PIX" value={chave} onChange={e => setChave(e.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2.5 rounded-xl text-sm text-white focus:border-primary focus:outline-none placeholder:text-zinc-600" />
+        )}
         {erro && <p className="text-xs text-rose-400 font-semibold">{erro}</p>}
         {ok && <p className="text-xs text-emerald-400 font-semibold">{ok}</p>}
         <button type="submit" disabled={loading || limite < 5}
