@@ -83,8 +83,9 @@ export default function PixSaque({ saldoSacavel }: { saldoSacavel: number }) {
           )}
         </button>
         <p className="text-[10px] text-zinc-600">
-          Use uma chave PIX da <strong>sua propria conta</strong> (mesmo CPF do deposito).
-          Saque para chave de terceiros e sinalizado para revisao e pode ser contestado.
+          <strong>Chave CPF (a sua):</strong> saca tudo, inclusive o que voce depositou.{' '}
+          <strong>Outras chaves:</strong> saca so os premios ganhos. Deposito recente pode
+          ficar retido alguns dias por seguranca (anti-estorno).
         </p>
       </form>
       {saques.length > 0 && (
