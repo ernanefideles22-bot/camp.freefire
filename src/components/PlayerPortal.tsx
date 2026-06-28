@@ -382,7 +382,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
             <div className="border-t border-zinc-800" />
             <PixDeposito jogadorId={currentUser.id} />
             <div className="border-t border-zinc-800" />
-            <PixSaque saldoSacavel={currentUser.saldo_sacavel || 0} />
+            <PixSaque saldoSacavel={currentUser.saldo_sacavel || 0} saldo={currentUser.saldo || 0} />
           </div>
         </div>
       </div>
