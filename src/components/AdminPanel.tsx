@@ -234,6 +234,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
       selectedPlayers.add(pId);
       formattedResultados.push({ jogador_id: pId, colocacao: place, abates: kills });
     }
+    const porPosicao: Record<number, string[]> = {};
+    formattedResultados.forEach(r => { (porPosicao[r.colocacao] = porPosicao[r.colocacao] || []).push(players.find(p => p.id === r.jogador_id)?.nick || `id ${r.jogador_id}`); });
+    const posDuplicadas = Object.keys(porPosicao).filter(k => porPosicao[parseInt(k)].length > 1);
+    if (posDuplicadas.length > 0) {
+      const detalhe = posDuplicadas.sort((a, b) => parseInt(a) - parseInt(b)).map(k => `posição ${k} (${porPosicao[parseInt(k)].join(', ')})`).join('; ');
+      onAddToast('error', 'Colocações duplicadas', `Corrija antes de salvar — ${detalhe}. Você pode usar o botão "Corrigir colocações automaticamente".`);
+      return;
+    }
     setLoadingResults(true);
     try {
       await apiService.lancarResultadoQueda({ numero_queda: quedaNum, resultados: formattedResultados });
@@ -245,6 +253,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
 
   const inputCls = 'w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary transition-all';
   const labelCls = 'block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1.5';
+
+  // Detecta colocacoes repetidas entre as linhas (e o que causa o erro ao salvar)
+  const ocorrenciasPorColocacao: Record<string, string[]> = {};
+  linhas.forEach((l, i) => {
+    const c = (l.colocacao || '').trim();
+    if (!c) return;
+    const nick = players.find(p => String(p.id) === l.jogadorId)?.nick || l.jogadorDetectadoNick || `linha #${i + 1}`;
+    (ocorrenciasPorColocacao[c] = ocorrenciasPorColocacao[c] || []).push(nick);
+  });
+  const colocacoesDuplicadas = new Set(Object.keys(ocorrenciasPorColocacao).filter(c => ocorrenciasPorColocacao[c].length > 1));
+  const posicoesUsadas = new Set(linhas.map(l => parseInt(l.colocacao)).filter(n => !isNaN(n)));
+  const posicoesLivres: number[] = [];
+  for (let p = 1; p <= linhas.length; p++) if (!posicoesUsadas.has(p)) posicoesLivres.push(p);
+
+  const handleCorrigirColocacoes = () => {
+    const usadas = new Set<number>();
+    const marcadas = linhas.map(l => {
+      const p = parseInt(l.colocacao);
+      const valido = !isNaN(p) && p >= 1 && !usadas.has(p);
+      if (valido) usadas.add(p);
+      return { l, p: valido ? p : null };
+    });
+    let next = 1;
+    const proxLivre = () => { while (usadas.has(next)) next++; usadas.add(next); return next; };
+    setLinhas(marcadas.map(m => ({ ...m.l, colocacao: String(m.p ?? proxLivre()) })));
+    onAddToast('success', 'Colocações corrigidas', 'Duplicadas remanejadas para as vagas livres. Revise os números antes de salvar.');
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -323,8 +358,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                 {linhas.map((linha, index) => {
                   const placeNum = parseInt(linha.colocacao);
                   const cashPrize = !isNaN(placeNum) ? getPremioPorColocacao(placeNum) : 0;
+                  const colDuplicada = colocacoesDuplicadas.has((linha.colocacao || '').trim());
                   return (
-                    <div key={linha.tempId} className="flex flex-col md:flex-row items-stretch md:items-center gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-950/40">
+                    <div key={linha.tempId} className={`flex flex-col md:flex-row items-stretch md:items-center gap-3 p-4 rounded-xl border bg-zinc-950/40 ${colDuplicada ? 'border-rose-500/70 ring-1 ring-rose-500/40' : 'border-zinc-800'}`}>
                       <div className="flex items-center gap-2 md:w-8 text-xs font-bold text-zinc-600">#{index + 1}</div>
                       <div className="flex-1 min-w-[180px]">
                         <label className={`${labelCls} md:hidden`}>Jogador</label>
@@ -334,7 +370,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                         </select>
                         {linha.jogadorDetectadoNick && (<div className="flex items-center gap-1 mt-1"><span className="text-[9px] font-extrabold text-amber-500/80 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded">OCR: "{linha.jogadorDetectadoNick}"</span>{!linha.jogadorId && <span className="text-[9px] text-zinc-500 italic">(Não vinculado automaticamente)</span>}</div>)}
                       </div>
-                      <div className="w-full md:w-32"><label className={`${labelCls} md:hidden`}>Colocação</label><input type="number" min="1" max="52" placeholder="Posição (1-52)" value={linha.colocacao} onChange={(e) => handleUpdateLinha(linha.tempId, 'colocacao', e.target.value)} disabled={loadingResults || loadingOcr} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm focus:border-primary focus:outline-none" /></div>
+                      <div className="w-full md:w-32"><label className={`${labelCls} md:hidden`}>Colocação</label><input type="number" min="1" max="52" placeholder="Posição (1-52)" value={linha.colocacao} onChange={(e) => handleUpdateLinha(linha.tempId, 'colocacao', e.target.value)} disabled={loadingResults || loadingOcr} className={`w-full px-3 py-2 rounded-lg bg-zinc-950 border text-zinc-200 text-sm focus:outline-none ${colDuplicada ? 'border-rose-500/70 focus:border-rose-500' : 'border-zinc-800 focus:border-primary'}`} />{colDuplicada && (<span className="text-[9px] font-bold text-rose-400 mt-1 inline-block">posição repetida</span>)}</div>
                       <div className="w-full md:w-24"><label className={`${labelCls} md:hidden`}>Kills</label><input type="number" min="0" placeholder="Kills" value={linha.abates} onChange={(e) => handleUpdateLinha(linha.tempId, 'abates', e.target.value)} disabled={loadingResults || loadingOcr} className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm focus:border-primary focus:outline-none" /></div>
                       <div className="w-full md:w-32 flex items-center gap-1.5 md:justify-end px-1">
                         <span className="text-zinc-500 text-xs md:hidden">Prêmio: </span>
@@ -345,6 +381,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                   );
                 })}
               </div>
+              {colocacoesDuplicadas.size > 0 && (
+                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 space-y-2">
+                  <div className="flex items-center gap-2 text-rose-300 text-xs font-bold"><AlertTriangle className="w-4 h-4" />Colocações duplicadas — corrija antes de salvar</div>
+                  <ul className="text-[11px] text-rose-200/90 space-y-0.5 list-disc list-inside">
+                    {[...colocacoesDuplicadas].sort((a, b) => parseInt(a) - parseInt(b)).map(c => (
+                      <li key={c}>Posição <b>{c}</b>: {ocorrenciasPorColocacao[c].join(', ')}</li>
+                    ))}
+                  </ul>
+                  {posicoesLivres.length > 0 && (<div className="text-[11px] text-zinc-400">Posições livres: {posicoesLivres.slice(0, 20).join(', ')}{posicoesLivres.length > 20 ? '…' : ''}</div>)}
+                  <button type="button" onClick={handleCorrigirColocacoes} disabled={loadingResults || loadingOcr} className="mt-1 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-500/20 border border-rose-500/40 text-rose-100 text-xs font-bold hover:bg-rose-500/30 transition-all cursor-pointer disabled:opacity-50"><RefreshCw className="w-3.5 h-3.5" />Corrigir colocações automaticamente</button>
+                </div>
+              )}
               <div className="border-t border-zinc-800 my-4" />
               <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <button type="button" onClick={handleAddLinha} disabled={loadingResults || loadingOcr || players.length === 0} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-dashed border-zinc-700 text-zinc-300 hover:text-white hover:border-primary transition-all cursor-pointer text-xs font-bold uppercase tracking-wider disabled:opacity-50 disabled:pointer-events-none"><Plus className="w-4 h-4" />Adicionar Linha</button>
