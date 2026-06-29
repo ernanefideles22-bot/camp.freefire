@@ -120,7 +120,7 @@ async def ia_generate(prompt: str, imagem_b64: str | None = None,
             'https://api.anthropic.com/v1/messages',
             headers={'x-api-key': key, 'anthropic-version': '2023-06-01',
                      'content-type': 'application/json'},
-            json={'model': ANTHROPIC_MODEL, 'max_tokens': 2048,
+            json={'model': ANTHROPIC_MODEL, 'max_tokens': 4096,
                   'messages': [{'role': 'user', 'content': content}]},
         )
     if resp.status_code != 200:
@@ -133,13 +133,24 @@ async def ia_generate(prompt: str, imagem_b64: str | None = None,
 
 
 def extrair_json(texto: str):
-    texto = texto.strip()
+    texto = (texto or '').strip()
     if '```' in texto:
         partes = texto.split('```')
-        texto = partes[1] if len(partes) > 1 else texto
+        bloco = max((p for p in partes[1:] if p.strip()), key=len, default=texto)
+        texto = bloco.lstrip()
         if texto.startswith('json'):
             texto = texto[4:]
-    return json.loads(texto.strip())
+    texto = texto.strip()
+    try:
+        return json.loads(texto)
+    except json.JSONDecodeError:
+        pass
+    abre = [i for i in (texto.find('['), texto.find('{')) if i != -1]
+    inicio = min(abre) if abre else -1
+    fim = max(texto.rfind(']'), texto.rfind('}'))
+    if inicio != -1 and fim > inicio:
+        return json.loads(texto[inicio:fim + 1])
+    return json.loads(texto)
 
 
 # ====================== SCHEMAS ======================
@@ -1139,16 +1150,25 @@ async def ocr_resultado(numero_queda: int = Form(...), imagem: UploadFile = File
     lista_nicks = ', '.join(j.nick for j in jogadores)
     prompt = ('Analise este print de placar do Free Fire. '
               f'Jogadores cadastrados: {lista_nicks}. '
-              'Para cada jogador no placar, retorne JSON: '
-              '[{"nick_detectado": str, "nick_cadastrado": str_ou_null, "colocacao": int, "abates": int}]. '
-              'Retorne APENAS o JSON.')
+              'Para cada linha do placar, gere um objeto. '
+              'Responda em UMA linha, APENAS o array JSON, sem markdown e sem texto antes ou depois: '
+              '[{"nick_detectado": str, "nick_cadastrado": str_ou_null, "colocacao": int, "abates": int}]')
     texto = await ia_generate(prompt, imagem_b64=img_b64, mime=mime)
     try:
         dados_ocr = extrair_json(texto)
     except Exception:
-        raise HTTPException(422, 'A IA nao retornou JSON valido.')
+        raise HTTPException(422, f'A IA nao retornou JSON valido. Resposta: {(texto or "")[:200]}')
+    if isinstance(dados_ocr, dict):
+        for _v in dados_ocr.values():
+            if isinstance(_v, list):
+                dados_ocr = _v
+                break
+    if not isinstance(dados_ocr, list):
+        raise HTTPException(422, 'A IA nao retornou uma lista de resultados.')
     resultados = []
     for item in dados_ocr:
+        if not isinstance(item, dict):
+            continue
         nick_cad = item.get('nick_cadastrado')
         jog = db.scalar(select(JogadorModel).where(JogadorModel.nick == nick_cad)) if nick_cad else None
         resultados.append({
