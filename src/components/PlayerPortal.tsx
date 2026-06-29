@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { DollarSign, Wallet, Clock, Gamepad2, Copy, Check, RefreshCw, Award } from 'lucide-react';
+import { Clock, Gamepad2, Copy, Check, RefreshCw, Award } from 'lucide-react';
 import { apiService } from '../services/api';
 import type { Jogador, SalaData, StatusQueda } from '../services/api';
 import { Spinner } from './Spinner';
-import PixDeposito from './PixDeposito';
-import PixSaque from './PixSaque';
 
 interface PlayerPortalProps {
   currentUser: Jogador;
@@ -91,8 +89,8 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     setLoadingInscricao(true);
     try {
       await apiService.inscreverNaQueda(selectedQueda);
-      onAddToast('success', 'Inscricao Confirmada!', 'R$ 3,00 foram debitados do seu saldo.');
-      const updatedUser = { ...currentUser, saldo: (currentUser.saldo || 0) - 3.0 };
+      onAddToast('success', 'Inscricao Confirmada!', 'Voce entrou na queda. Boa sorte!');
+      const updatedUser = { ...currentUser };
       onUpdateUser(updatedUser);
       localStorage.setItem('currentUser', JSON.stringify(updatedUser));
       fetchQuedaStatus();
@@ -146,10 +144,10 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
             </p>
           </div>
         </div>
-        <button onClick={() => { fetchPlayerStats(); fetchQuedaStatus(); onAddToast('info', 'Atualizando Dados', 'Sincronizando saldo e status com o servidor...'); }}
+        <button onClick={() => { fetchPlayerStats(); fetchQuedaStatus(); onAddToast('info', 'Atualizando Dados', 'Sincronizando seus dados com o servidor...'); }}
           className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 active:scale-95 transition-all cursor-pointer">
           <RefreshCw className="w-4 h-4" />
-          Sincronizar Saldo
+          Sincronizar
         </button>
       </div>
 
@@ -190,7 +188,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                         )}
                       </div>
                       <p className="text-xs text-zinc-400">
-                        {statusQueda.esta_inscrito ? 'Sua vaga esta garantida! Veja os detalhes da sala abaixo.' : 'Clique em Entrar na Sala: R$ 3,00 sao descontados e o ID + senha aparecem para copiar.'}
+                        {statusQueda.esta_inscrito ? 'Sua vaga esta garantida! Veja os detalhes da sala abaixo.' : 'Clique em Entrar na Sala (gratis) e o ID + senha aparecem para copiar.'}
                       </p>
                     </div>
                     <div className="text-right">
@@ -208,18 +206,18 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                     <div className="p-5 bg-zinc-950/40 rounded-xl border border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
                       <div className="flex items-center gap-3.5">
                         <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400">
-                          <DollarSign className="w-5 h-5 text-accent-cyan" />
+                          <Gamepad2 className="w-5 h-5 text-accent-cyan" />
                         </div>
                         <div className="text-center sm:text-left">
-                          <p className="text-sm font-bold text-white">Entrar na Sala — R$ 3,00</p>
-                          <p className="text-xs text-zinc-500 font-semibold mt-0.5">Seu saldo atual: R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}</p>
+                          <p className="text-sm font-bold text-white">Entrar na Sala — Gratis</p>
+                          <p className="text-xs text-zinc-500 font-semibold mt-0.5">Participacao gratuita nesta copa</p>
                         </div>
                       </div>
                       <button onClick={handleInscricao}
-                        disabled={loadingInscricao || (currentUser.saldo || 0) < 3.0}
-                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 ${(currentUser.saldo || 0) < 3.0 ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]'}`}>
+                        disabled={loadingInscricao}
+                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]`}>
                         {loadingInscricao ? <Spinner size="sm" className="text-zinc-950" /> : <Gamepad2 className="w-4 h-4" />}
-                        {loadingInscricao ? 'Confirmando...' : (currentUser.saldo || 0) < 3.0 ? 'Saldo Insuficiente' : 'Entrar na Sala (R$ 3,00)'}
+                        {loadingInscricao ? 'Confirmando...' : 'Entrar na Sala'}
                       </button>
                     </div>
                   ) : (
@@ -288,12 +286,6 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="p-4 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900/40 to-zinc-950/40 flex items-center justify-between shadow-md">
                 <div className="space-y-0.5">
-                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Ganhos Acumulados</span>
-                  <h4 className="text-lg font-black text-accent-cyan font-mono">R$ {historyData.totalEarnings.toFixed(2).replace('.', ',')}</h4>
-                </div>
-              </div>
-              <div className="p-4 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900/40 to-zinc-950/40 flex items-center justify-between shadow-md">
-                <div className="space-y-0.5">
                   <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Kills de Carreira</span>
                   <h4 className="text-lg font-black text-accent-orange font-mono">{historyData.totalKills}</h4>
                 </div>
@@ -330,7 +322,6 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                         <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Queda #</th>
                         <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400">Colocacao</th>
                         <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 text-right">Abates</th>
-                        <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-zinc-400 text-right">Premiacao</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-900">
@@ -341,9 +332,6 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                             <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${getPlacementBadge(h.colocacao)}`}>{h.colocacao}o lugar</span>
                           </td>
                           <td className="px-5 py-3 text-right text-xs text-zinc-300">{h.abates}</td>
-                          <td className={`px-5 py-3 text-right font-bold text-xs font-mono ${h.premio > 0 ? 'text-accent-cyan' : 'text-zinc-500'}`}>
-                            {h.premio > 0 ? `+ R$ ${h.premio.toFixed(2).replace('.', ',')}` : 'R$ 0,00'}
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -360,29 +348,15 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
 
         {/* Coluna direita - Carteira */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="ff-card p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-2">
-                <Wallet className="w-4 h-4 text-primary" />
-                Carteira Digital
-              </h4>
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+          <div className="ff-card p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Award className="w-4 h-4 text-primary" />
+              <h4 className="text-sm font-bold text-white tracking-tight">Copa da Semana</h4>
             </div>
-            <div className="p-4 bg-zinc-950/80 rounded-xl border border-zinc-800 text-center space-y-1 relative overflow-hidden">
-              <div className="absolute top-0 left-0 right-0 h-0.5 ff-topbar" />
-              <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Saldo Total</span>
-              <h3 className="text-3xl font-black font-mono text-gradient-neon">
-                R$ {(currentUser.saldo || 0).toFixed(2).replace('.', ',')}
-              </h3>
-              <p className="text-[11px] text-zinc-500">
-                Disponivel p/ saque:{' '}
-                <span className="text-emerald-400 font-bold font-mono">R$ {(currentUser.saldo_sacavel || 0).toFixed(2).replace('.', ',')}</span>
-              </p>
-            </div>
-            <div className="border-t border-zinc-800" />
-            <PixDeposito jogadorId={currentUser.id} />
-            <div className="border-t border-zinc-800" />
-            <PixSaque saldoSacavel={currentUser.saldo_sacavel || 0} saldo={currentUser.saldo || 0} />
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Participacao <span className="text-accent-cyan font-bold">gratuita</span>. Entre na sala, jogue as quedas e some pontos (colocacao + abates). Os melhores da semana levam o titulo de Campeao.
+            </p>
+            <p className="text-[11px] text-zinc-500">Fair play obrigatorio — nada de hack ou mod. Boa sorte! 🔥</p>
           </div>
         </div>
       </div>
