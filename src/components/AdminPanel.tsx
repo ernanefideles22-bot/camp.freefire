@@ -96,6 +96,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     return () => clearInterval(interval);
   }, []);
 
+  const handleResetRanking = async () => {
+    if (!window.confirm('Zerar o ranking e comecar uma nova semana? Anuncie o campeao atual ANTES de zerar — as quedas da semana atual saem do ranking (o historico fica salvo).')) return;
+    try {
+      const r = await apiService.resetarRanking();
+      onAddToast('success', 'Ranking Zerado', r.message || 'Nova semana iniciada.');
+    } catch (err: any) { onAddToast('error', 'Falha ao Zerar', err.message || 'Nao foi possivel zerar o ranking.'); }
+  };
+
   const handleRegisterRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     const quedaNum = parseInt(salaQueda);
@@ -267,13 +275,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
               </div>
               <div className="bg-rose-900/20 backdrop-blur-md rounded-2xl border border-rose-800 p-5 shadow-xl">
                 <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-4"><AlertTriangle className="w-4 h-4 text-primary" />Cancelar Queda e Reembolsar</h2>
-                <p className="text-xs text-zinc-400 mb-4">Cancele uma queda não lotada. Isso removerá as inscrições e devolverá automaticamente R$ 3,00 para a carteira de todos os jogadores participantes.</p>
+                <p className="text-xs text-zinc-400 mb-4">Cancele uma queda não lotada. Isso removerá as inscrições de todos os jogadores participantes.</p>
                 <form onSubmit={handleCancelQueda} className="space-y-4">
                   <div><label className={labelCls}>Número da Queda para Cancelar</label><input type="number" min="1" placeholder="Ex: 1" value={quedaParaCancelar} onChange={(e) => setQuedaParaCancelar(e.target.value)} disabled={loadingCancelar} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-rose-500 focus:outline-none focus:ring-1 focus:ring-rose-500 transition-all" /></div>
                   <button type="submit" disabled={loadingCancelar || !quedaParaCancelar.trim()} className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:pointer-events-none">
                     {loadingCancelar ? <Spinner size="sm" /> : <Trash2 className="w-4 h-4" />}{loadingCancelar ? 'Cancelando...' : 'Cancelar e Reembolsar Competidores'}
                   </button>
                 </form>
+              </div>
+              <div className="ff-card p-5">
+                <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-2"><RefreshCw className="w-4 h-4 text-primary" />Ranking da Semana</h2>
+                <p className="text-xs text-zinc-400 mb-4">Zera a liga e comeca uma nova semana. Anuncie o campeao atual ANTES de zerar — as quedas da semana atual saem do ranking (o historico fica salvo).</p>
+                <button type="button" onClick={handleResetRanking} className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer border border-zinc-700">
+                  <RefreshCw className="w-4 h-4" />Zerar Ranking (Nova Semana)
+                </button>
               </div>
             </div>
             <div className="ff-card h-full min-h-[600px]">
