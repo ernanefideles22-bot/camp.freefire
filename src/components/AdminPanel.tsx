@@ -249,16 +249,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
           <Calendar className="w-4 h-4 text-primary" />
           Lançar Quedas (IA OCR)
         </button>
-        <button onClick={() => setActiveTab('depositos')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap relative ${activeTab === 'depositos' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
-          <Landmark className="w-4 h-4 text-primary" />
-          Depósitos PIX
-          {(depositos.length > 0 || saques.length > 0) && (<span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span></span>)}
-        </button>
-        <button onClick={() => setActiveTab('retidos')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap relative ${activeTab === 'retidos' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
-          <AlertTriangle className="w-4 h-4 text-amber-400" />
-          Prêmios Retidos
-          {retidos.length > 0 && (<span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span></span>)}
-        </button>
       </div>
       <div className="p-5">
         {activeTab === 'geral' && (
