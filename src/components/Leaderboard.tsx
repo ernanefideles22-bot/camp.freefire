@@ -167,9 +167,6 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
                 <tr className="border-b border-zinc-800 bg-zinc-900/50">
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400 w-20">Pos</th>
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400">Jogador</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400 text-right text-accent-orange font-mono">
-                    Ganhos (R$)
-                  </th>
                   <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400 text-right hidden sm:table-cell">
                     Pontos LBFF
                   </th>
@@ -205,11 +202,6 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
                         </span>
                       </td>
 
-                      {/* Total Prize money */}
-                      <td className="px-6 py-4 whitespace-nowrap text-right font-black text-accent-cyan text-base font-mono">
-                        R$ {(item.ganhos_reais || 0).toFixed(2).replace('.', ',')}
-                      </td>
-
                       {/* LBFF Score points */}
                       <td className="px-6 py-4 whitespace-nowrap text-right text-zinc-300 font-semibold text-sm hidden sm:table-cell">
                         {item.total_pontos} pts
@@ -235,16 +227,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
 
       {/* Rules Footer Summary */}
       <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-900 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-zinc-500">
-        <p>🏆 Classificação priorit�ria por **Prêmio Acumulado**, seguido de **Pontos LBFF** (colocação + abates).</p>
-        <p className="flex items-center gap-3">
-          <span className="text-zinc-400 font-bold">Taxa: R$ 3,00</span>
-          <span>•</span>
-          <span>Premiação: 2/3 do arrecadado</span>
-          <span>•</span>
-          <span>85% Top 5</span>
-          <span>•</span>
-          <span>15% rateado por abates</span>
-        </p>
+        <p>🏆 Classificacao por <strong>Pontos LBFF</strong> (colocacao + abates). Copa gratuita — os melhores da semana levam o titulo.</p>
       </div>
     </div>
   );
