@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sparkles, Send, HelpCircle, Bot, User, Trash2 } from 'lucide-react';
+import { Sparkles, Send, HelpCircle, Bot, User, Trash2, ImagePlus } from 'lucide-react';
 import { apiService } from '../services/api';
 import type { AgenteResposta } from '../services/api';
 import { Spinner } from './Spinner';
@@ -21,7 +21,7 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
     {
       id: 'welcome',
       sender: 'agent',
-      text: 'Olá! Sou o seu Agente de IA. Posso te ajudar a gerenciar o campeonato. Diga coisas como: "cadastre o jogador João nick Baiano", "libere a sala 54890 senha 999 para a queda 2" ou "lançar o resultado da queda 1: Baiano ficou em 3º lugar com 4 abates".',
+      text: 'Olá! Sou o seu Agente de IA. Posso te ajudar a gerenciar o campeonato. Diga coisas como: "cadastre o jogador João nick Baiano", "libere a sala 54890 senha 999 para a queda 2" ou "lançar o resultado da queda 1: Baiano ficou em 3º lugar com 4 abates". Você também pode enviar um PRINT (botão 📷) que eu cadastro os jogadores que aparecem nele.',
       timestamp: new Date()
     }
   ]);
@@ -31,6 +31,7 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
   const [proposta, setProposta] = useState<AgenteResposta | null>(null);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -135,6 +136,33 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
 
   const applyTemplate = (template: string) => {
     setInput(template);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!file || loading) return;
+    setMessages(prev => [...prev, {
+      id: Date.now().toString(), sender: 'user',
+      text: `📷 Print enviado (${file.name}) — cadastrar jogadores que aparecem nele`, timestamp: new Date(),
+    }]);
+    setLoading(true);
+    try {
+      const r = await apiService.cadastrarJogadoresDaImagem(file);
+      const criados = (r.criados || []) as string[];
+      const existentes = (r.existentes || []) as string[];
+      let text = r.message || 'Pronto.';
+      if (criados.length) text += `\n\nCriados: ${criados.join(', ')}`;
+      if (existentes.length) text += `\n\nJá existiam: ${existentes.join(', ')}`;
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), sender: 'agent', text, timestamp: new Date() }]);
+      onAddToast('success', 'Jogadores do print', r.message);
+      if (onRefreshData) onRefreshData();
+    } catch (err: any) {
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), sender: 'agent', text: `Erro ao ler a imagem: ${err.message || 'falha.'}`, timestamp: new Date() }]);
+      onAddToast('error', 'Falha ao ler imagem', err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -268,6 +296,16 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
 
         {/* Chat submit form */}
         <form onSubmit={handleSendMessage} className="flex gap-2">
+          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            title="Criar jogadores a partir de um print"
+            className="px-4 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-primary flex items-center justify-center transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+          >
+            <ImagePlus className="w-4 h-4" />
+          </button>
           <input
             type="text"
             placeholder="Digite sua instrução (ex: cadastre o jogador João nick Baiano)..."
