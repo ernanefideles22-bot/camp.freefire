@@ -51,7 +51,7 @@ if not os.environ.get('SKIP_DB_INIT'):
     except Exception as exc:
         print(f'[WARN] promocao de admin falhou: {exc}')
 
-TAXA_INSCRICAO = 3.0
+TAXA_INSCRICAO = 0.0
 # ---- Premiacao PROPORCIONAL ao arrecadado (fonte unica) ----
 # Arrecadado da queda = nº de inscritos x TAXA_INSCRICAO.
 # A casa fica com RAKE; o restante (premiacao) e dividido entre colocacao e abates.
