@@ -1160,6 +1160,54 @@ async def ocr_resultado(numero_queda: int = Form(...), imagem: UploadFile = File
     return {'resultados': resultados}
 
 
+@app.post('/agente/jogadores-da-imagem')
+async def agente_jogadores_da_imagem(imagem: UploadFile = File(...),
+                                     _admin: JogadorModel = Depends(require_admin),
+                                     db: Session = Depends(get_db)):
+    """Le um print do Free Fire e cadastra os jogadores (nicks) que aparecem nele.
+    Serve para popular jogadores de teste a partir de prints reais."""
+    conteudo = await imagem.read()
+    if len(conteudo) > 8 * 1024 * 1024:
+        raise HTTPException(413, 'Imagem muito grande (max 8 MB)')
+    img_b64 = base64.b64encode(conteudo).decode('utf-8')
+    mime = imagem.content_type or 'image/png'
+    if mime not in ('image/jpeg', 'image/png', 'image/gif', 'image/webp'):
+        mime = 'image/png'
+    prompt = ('Analise este print/tela do Free Fire e liste os NICKS (nomes de jogador) '
+              'visiveis no placar. Retorne APENAS um array JSON de strings, '
+              'ex: ["Nick1", "Nick2"]. Sem explicacao, somente o array.')
+    texto = await ia_generate(prompt, imagem_b64=img_b64, mime=mime)
+    try:
+        nicks = extrair_json(texto)
+    except Exception:
+        raise HTTPException(422, 'A IA nao retornou JSON valido.')
+    if isinstance(nicks, dict):
+        for v in nicks.values():
+            if isinstance(v, list):
+                nicks = v
+                break
+    if not isinstance(nicks, list):
+        raise HTTPException(422, 'A IA nao retornou uma lista de nicks.')
+    criados, existentes, vistos = [], [], set()
+    for raw in nicks:
+        if isinstance(raw, dict):
+            nick = str(raw.get('nick') or raw.get('nome') or raw.get('name') or '').strip()
+        else:
+            nick = str(raw).strip()
+        if not nick or nick.lower() in vistos:
+            continue
+        vistos.add(nick.lower())
+        if db.scalar(select(JogadorModel).where(JogadorModel.nick == nick)):
+            existentes.append(nick)
+            continue
+        db.add(JogadorModel(nome=nick, nick=nick, senha_hash=None, saldo=0.0,
+                            is_admin=False, aceitou_termos=False, confirmou_idade=False))
+        criados.append(nick)
+    db.commit()
+    return {'criados': criados, 'existentes': existentes,
+            'message': f'{len(criados)} jogador(es) criado(s) a partir da imagem; {len(existentes)} ja existiam.'}
+
+
 def _sanitizar_para_prompt(texto, maxlen: int = 40) -> str:
     """Neutraliza dados de usuario antes de entrarem no prompt (anti prompt-injection):
     remove chaves/aspas/quebras de linha e limita o tamanho. Nick/nome nunca devem
