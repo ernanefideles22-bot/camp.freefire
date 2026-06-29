@@ -474,13 +474,22 @@ async def admin_efi_consultar_webhook(_admin: JogadorModel = Depends(require_adm
     return await consultar_webhook()
 
 
+def _ranking_desde(db: Session) -> int:
+    """Marco do ranking semanal: so contam quedas com numero >= este valor."""
+    from models import AppConfigModel
+    cfg = db.scalar(select(AppConfigModel).where(AppConfigModel.id == 1))
+    return cfg.ranking_desde_queda if cfg else 0
+
+
 @app.get('/classificacao')
 def classificacao(db: Session = Depends(get_db)):
     jogadores = db.scalars(select(JogadorModel)).all()
+    _desde = _ranking_desde(db)
     resultado = []
     for j in jogadores:
         res_list = db.scalars(select(ResultadoQuedaModel)
-                              .where(ResultadoQuedaModel.jogador_id == j.id)).all()
+                              .where(ResultadoQuedaModel.jogador_id == j.id,
+                                     ResultadoQuedaModel.numero_queda >= _desde)).all()
         total_pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in res_list)
         colocacoes = [r.colocacao for r in res_list]
         resultado.append({
@@ -497,6 +506,26 @@ def classificacao(db: Session = Depends(get_db)):
     for i, item in enumerate(resultado, start=1):
         item['posicao'] = i
     return resultado
+
+
+@app.get('/admin/ranking/info')
+def admin_ranking_info(_admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    max_q = db.scalar(select(func.max(ResultadoQuedaModel.numero_queda))) or 0
+    return {'ranking_desde_queda': _ranking_desde(db), 'ultima_queda': int(max_q)}
+
+
+@app.post('/admin/ranking/resetar')
+def admin_ranking_resetar(_admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    from models import AppConfigModel
+    cfg = db.scalar(select(AppConfigModel).where(AppConfigModel.id == 1))
+    if not cfg:
+        cfg = AppConfigModel(id=1, ranking_desde_queda=0)
+        db.add(cfg)
+    max_q = int(db.scalar(select(func.max(ResultadoQuedaModel.numero_queda))) or 0)
+    cfg.ranking_desde_queda = max_q + 1
+    db.commit()
+    return {'message': f'Ranking zerado! A nova semana conta a partir da queda {max_q + 1}.',
+            'ranking_desde_queda': cfg.ranking_desde_queda}
 
 
 # ====================== JOGADORES ======================
