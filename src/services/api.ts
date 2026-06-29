@@ -303,6 +303,15 @@ export const apiService = {
     return res.data;
   },
 
+  async cadastrarJogadoresDaImagem(arquivo: File): Promise<any> {
+    const formData = new FormData();
+    formData.append('imagem', arquivo);
+    const res = await api.post('/agente/jogadores-da-imagem', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  },
+
   // DADOS BANCARIOS
   async obterDadosBancarios(): Promise<DadosBancarios> {
     const res = await api.get('/me/dados-bancarios');
