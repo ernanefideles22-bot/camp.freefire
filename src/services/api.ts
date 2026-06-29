@@ -271,6 +271,11 @@ export const apiService = {
     return res.data;
   },
 
+  async resetarRanking(): Promise<any> {
+    const res = await api.post('/admin/ranking/resetar');
+    return res.data;
+  },
+
   // DEPOSITOS
   async obterDepositosPendentes(): Promise<DepositoRequisicao[]> {
     const res = await api.get('/depositos/pendentes');
