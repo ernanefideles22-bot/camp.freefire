@@ -173,3 +173,12 @@ def registrar_transacao(db, jogador: 'JogadorModel', *, tipo: str,
     )
     db.add(tx)
     return tx
+
+
+class AppConfigModel(Base):
+    """Config global (linha unica, id=1).
+    ranking_desde_queda: so contam no ranking as quedas com numero >= este valor
+    (usado para o reset semanal da liga de pontos)."""
+    __tablename__ = 'app_config'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    ranking_desde_queda: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
