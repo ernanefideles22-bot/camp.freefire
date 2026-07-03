@@ -235,6 +235,11 @@ export const apiService = {
     return res.data as Jogador[];
   },
 
+  async limparJogadoresTeste(): Promise<any> {
+    const res = await api.post('/admin/jogadores/limpar-teste');
+    return res.data;
+  },
+
   async getPlayerHistory(nick: string): Promise<any> {
     const res = await api.get(`/historico/${encodeURIComponent(nick)}`);
     return res.data;
