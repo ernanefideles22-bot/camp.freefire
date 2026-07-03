@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UserPlus, Calendar, Plus, Trash2, Send, Key, Lock, Check, X, Upload, AlertTriangle, RefreshCw, Landmark } from 'lucide-react';
+import { UserPlus, Calendar, Plus, Trash2, Send, Key, Lock, Check, X, Upload, AlertTriangle, RefreshCw, Landmark, Copy, QrCode } from 'lucide-react';
 import { apiService, getPremioPorColocacao } from '../services/api';
 import type { Jogador, ResultadoQuedaInput, DepositoRequisicao, SaqueRequisicao } from '../services/api';
 import { Spinner } from './Spinner';
+import { gerarPixCopiaECola, gerarQrDataUrl } from '../utils/pix';
 import { AdminAgentChat } from './AdminAgentChat';
 
 interface AdminPanelProps {
@@ -35,6 +36,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   const [loadingDepositos, setLoadingDepositos] = useState<boolean>(false);
   const [saques, setSaques] = useState<SaqueRequisicao[]>([]);
   const [loadingSaques, setLoadingSaques] = useState<boolean>(false);
+  const [qrData, setQrData] = useState<{ id: number; url: string } | null>(null);
   const [retidos, setRetidos] = useState<any[]>([]);
   const [loadingRetidos, setLoadingRetidos] = useState<boolean>(false);
   const [players, setPlayers] = useState<Jogador[]>([]);
@@ -171,6 +173,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
       await fetchSaques(); await fetchPlayers();
     } catch (err: any) {
       onAddToast('error', 'Erro ao Processar Saque', err.message);
+    }
+  };
+
+  const copiar = async (texto: string, label: string) => {
+    try { await navigator.clipboard.writeText(texto); onAddToast('success', 'Copiado', label); }
+    catch { onAddToast('error', 'Nao foi possivel copiar', 'Selecione e copie manualmente.'); }
+  };
+
+  const pixCopiaECola = (sq: SaqueRequisicao) => gerarPixCopiaECola({
+    chave: sq.chave_pix, tipo: sq.tipo_chave, valor: sq.valor,
+    nome: sq.titular_chave || sq.titular_nome || sq.jogador_nick || 'RECEBEDOR',
+  });
+
+  const handleMostrarQr = async (sq: SaqueRequisicao) => {
+    if (qrData && qrData.id === sq.id) { setQrData(null); return; }
+    try {
+      const url = await gerarQrDataUrl(pixCopiaECola(sq));
+      setQrData({ id: sq.id, url });
+    } catch (e: any) {
+      onAddToast('error', 'QR indisponivel', e.message || 'Use o botao Copia e Cola.');
     }
   };
 
@@ -493,6 +515,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                         <p className="text-[10px] text-zinc-500">Chave PIX ({sq.tipo_chave}): <span className="font-mono text-zinc-300 select-all">{sq.chave_pix}</span></p>
                         {sq.titular_chave && (<p className="text-[10px] text-emerald-400/80">Titular (Asaas): {sq.titular_chave}</p>)}
                         <p className="text-[10px] text-zinc-600">Solicitado em: {sq.criado_em}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                          <button onClick={() => copiar(sq.chave_pix, `Chave PIX de ${sq.jogador_nick || 'jogador'} copiada`)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-primary transition-all cursor-pointer text-[10px] font-bold" title="Copiar a chave PIX"><Copy className="w-3 h-3" />Copiar chave</button>
+                          <button onClick={() => copiar(pixCopiaECola(sq), 'Pix Copia e Cola (com valor) copiado - cole no seu banco')} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary hover:text-white transition-all cursor-pointer text-[10px] font-bold" title="Copia e Cola do PIX com o valor ja preenchido"><Copy className="w-3 h-3" />Copia e Cola</button>
+                          <button onClick={() => handleMostrarQr(sq)} className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-primary transition-all cursor-pointer text-[10px] font-bold" title="Mostrar QR Code para pagar"><QrCode className="w-3 h-3" />{qrData && qrData.id === sq.id ? 'Ocultar QR' : 'QR'}</button>
+                        </div>
+                        {qrData && qrData.id === sq.id && (
+                          <div className="mt-2 inline-block p-2 bg-white rounded-lg">
+                            <img src={qrData.url} alt="QR PIX" className="w-40 h-40 block" />
+                            <p className="text-[9px] text-zinc-700 text-center mt-1 font-bold">R$ {sq.valor.toFixed(2).replace('.', ',')} - escaneie e confirme</p>
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-4 justify-between sm:justify-end border-t sm:border-none pt-3 sm:pt-0 border-zinc-800">
                         <div className="text-left sm:text-right"><p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Valor do Saque</p><span className="text-base font-black text-amber-400">R$ {sq.valor.toFixed(2).replace('.', ',')}</span></div>
