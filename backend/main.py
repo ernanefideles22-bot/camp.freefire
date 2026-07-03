@@ -8,7 +8,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.orm import Session
 
 from database import engine, get_db, Base
@@ -542,25 +542,33 @@ def admin_ranking_resetar(_admin: JogadorModel = Depends(require_admin), db: Ses
 # ====================== JOGADORES ======================
 @app.post('/admin/jogadores/limpar-teste')
 def admin_limpar_jogadores_teste(_admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
-    """Remove jogadores de TESTE: nao-admin, saldo 0, saldo_sacavel 0, sem deposito e sem saque.
-    Protege o admin e qualquer conta com historico financeiro. Remove linhas dependentes."""
-    candidatos = db.scalars(select(JogadorModel).where(JogadorModel.is_admin == False)).all()
-    apagados, protegidos = [], []
-    for j in candidatos:
-        tem_deposito = db.scalar(select(func.count()).select_from(DepositoRequisicaoModel).where(DepositoRequisicaoModel.jogador_id == j.id)) or 0
-        tem_saque = db.scalar(select(func.count()).select_from(SaqueRequisicaoModel).where(SaqueRequisicaoModel.jogador_id == j.id)) or 0
-        if (j.saldo or 0) > 0 or (j.saldo_sacavel or 0) > 0 or tem_deposito or tem_saque:
-            protegidos.append(j.nick)
-            continue
-        db.query(InscricaoModel).filter(InscricaoModel.jogador_id == j.id).delete(synchronize_session=False)
-        db.query(ResultadoQuedaModel).filter(ResultadoQuedaModel.jogador_id == j.id).delete(synchronize_session=False)
-        db.query(CobrancaPixModel).filter(CobrancaPixModel.jogador_id == j.id).delete(synchronize_session=False)
-        db.query(TransacaoModel).filter(TransacaoModel.jogador_id == j.id).delete(synchronize_session=False)
-        db.delete(j)
-        apagados.append(j.nick)
-    db.commit()
-    return {'apagados': len(apagados), 'lista_apagados': apagados, 'protegidos': protegidos,
-            'message': f'{len(apagados)} jogador(es) de teste removido(s); {len(protegidos)} protegido(s) por saldo/deposito/saque.'}
+    """Remove jogadores de TESTE (nao-admin, saldo<=0, saldo_sacavel<=0, sem deposito e sem saque)
+    em modo BULK set-based (rapido e atomico). Protege admin e contas com historico financeiro."""
+    ids_dep = select(DepositoRequisicaoModel.jogador_id)
+    ids_saq = select(SaqueRequisicaoModel.jogador_id)
+    rows = db.execute(
+        select(JogadorModel.id, JogadorModel.nick).where(
+            JogadorModel.is_admin == False,
+            JogadorModel.saldo <= 0,
+            JogadorModel.saldo_sacavel <= 0,
+            JogadorModel.id.notin_(ids_dep),
+            JogadorModel.id.notin_(ids_saq),
+        )
+    ).all()
+    ids = [r[0] for r in rows]
+    nicks = [r[1] for r in rows]
+    try:
+        if ids:
+            for M in (InscricaoModel, ResultadoQuedaModel, CobrancaPixModel, TransacaoModel):
+                db.execute(delete(M).where(M.jogador_id.in_(ids)))
+            db.execute(delete(JogadorModel).where(JogadorModel.id.in_(ids)))
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(500, f'Falha ao apagar: {type(exc).__name__}: {str(exc)[:200]}')
+    restantes = db.scalar(select(func.count()).select_from(JogadorModel))
+    return {'apagados': len(ids), 'lista_apagados': nicks, 'restantes': restantes,
+            'message': f'{len(ids)} jogador(es) de teste removido(s). Restam {restantes}.'}
 
 
 @app.get('/jogadores')
