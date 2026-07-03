@@ -104,6 +104,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     } catch (err: any) { onAddToast('error', 'Falha ao Zerar', err.message || 'Nao foi possivel zerar o ranking.'); }
   };
 
+  const handleLimparJogadores = async () => {
+    if (!window.confirm('Apagar TODOS os jogadores de teste (saldo R$ 0, sem deposito/saque)? Mantem o admin e quem tem historico financeiro. Acao IRREVERSIVEL.')) return;
+    try {
+      const r = await apiService.limparJogadoresTeste();
+      onAddToast('success', 'Jogadores de teste removidos', r.message || 'Limpeza concluida.');
+      await fetchPlayers();
+    } catch (err: any) { onAddToast('error', 'Falha ao limpar', err.message || 'Nao foi possivel remover os jogadores.'); }
+  };
+
   const handleRegisterRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     const quedaNum = parseInt(salaQueda);
@@ -333,6 +342,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                 <p className="text-xs text-zinc-400 mb-4">Zera a liga e comeca uma nova semana. Anuncie o campeao atual ANTES de zerar — as quedas da semana atual saem do ranking (o historico fica salvo).</p>
                 <button type="button" onClick={handleResetRanking} className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer border border-zinc-700">
                   <RefreshCw className="w-4 h-4" />Zerar Ranking (Nova Semana)
+                </button>
+                <div className="border-t border-zinc-800 my-4" />
+                <p className="text-xs text-zinc-400 mb-3">Remove os jogadores de teste (saldo R$ 0, sem deposito/saque). Mantem o admin e contas com historico financeiro. Irreversivel.</p>
+                <button type="button" onClick={handleLimparJogadores} className="w-full py-3 rounded-xl bg-rose-950/40 hover:bg-rose-900/40 text-rose-300 font-bold text-sm transition-all flex items-center justify-center gap-2 cursor-pointer border border-rose-800/50">
+                  <Trash2 className="w-4 h-4" />Limpar Jogadores de Teste
                 </button>
               </div>
             </div>
