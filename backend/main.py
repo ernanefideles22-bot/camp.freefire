@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from database import engine, get_db, Base
 from models import (JogadorModel, QuedaModel, InscricaoModel,
                     ResultadoQuedaModel, DepositoRequisicaoModel, SaqueRequisicaoModel,
-                    registrar_transacao, TransacaoModel)
+                    registrar_transacao, TransacaoModel, CobrancaPixModel)
 from auth import (hash_senha, verificar_senha, criar_access_token, criar_refresh_token,
                   decodificar_token, obter_usuario_atual, require_admin)
 from jose import jwt as jose_jwt
@@ -540,6 +540,29 @@ def admin_ranking_resetar(_admin: JogadorModel = Depends(require_admin), db: Ses
 
 
 # ====================== JOGADORES ======================
+@app.post('/admin/jogadores/limpar-teste')
+def admin_limpar_jogadores_teste(_admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    """Remove jogadores de TESTE: nao-admin, saldo 0, saldo_sacavel 0, sem deposito e sem saque.
+    Protege o admin e qualquer conta com historico financeiro. Remove linhas dependentes."""
+    candidatos = db.scalars(select(JogadorModel).where(JogadorModel.is_admin == False)).all()
+    apagados, protegidos = [], []
+    for j in candidatos:
+        tem_deposito = db.scalar(select(func.count()).select_from(DepositoRequisicaoModel).where(DepositoRequisicaoModel.jogador_id == j.id)) or 0
+        tem_saque = db.scalar(select(func.count()).select_from(SaqueRequisicaoModel).where(SaqueRequisicaoModel.jogador_id == j.id)) or 0
+        if (j.saldo or 0) > 0 or (j.saldo_sacavel or 0) > 0 or tem_deposito or tem_saque:
+            protegidos.append(j.nick)
+            continue
+        db.query(InscricaoModel).filter(InscricaoModel.jogador_id == j.id).delete(synchronize_session=False)
+        db.query(ResultadoQuedaModel).filter(ResultadoQuedaModel.jogador_id == j.id).delete(synchronize_session=False)
+        db.query(CobrancaPixModel).filter(CobrancaPixModel.jogador_id == j.id).delete(synchronize_session=False)
+        db.query(TransacaoModel).filter(TransacaoModel.jogador_id == j.id).delete(synchronize_session=False)
+        db.delete(j)
+        apagados.append(j.nick)
+    db.commit()
+    return {'apagados': len(apagados), 'lista_apagados': apagados, 'protegidos': protegidos,
+            'message': f'{len(apagados)} jogador(es) de teste removido(s); {len(protegidos)} protegido(s) por saldo/deposito/saque.'}
+
+
 @app.get('/jogadores')
 def listar_jogadores(_admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     jogadores = db.scalars(select(JogadorModel)).all()
