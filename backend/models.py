@@ -62,6 +62,7 @@ class QuedaModel(Base):
     sala_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     sala_senha: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default='aberta')
+    horario: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     inscricoes: Mapped[List['InscricaoModel']] = relationship(back_populates='queda')
     resultados: Mapped[List['ResultadoQuedaModel']] = relationship(back_populates='queda')
 
