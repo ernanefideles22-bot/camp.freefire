@@ -45,7 +45,7 @@ export const Toast: React.FC<ToastProps> = ({ message, onClose }) => {
     info: {
       bg: 'bg-zinc-950/95 border-accent-cyan/50',
       icon: <Info className="w-5 h-5 text-accent-cyan" />,
-      glow: 'shadow-[0_0_15px_rgba(0,240,255,0.15)]',
+      glow: 'shadow-[0_0_15px_rgba(255,160,50,0.15)]',
     },
   }[type];
 
