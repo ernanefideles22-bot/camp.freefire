@@ -189,7 +189,7 @@ function App() {
       {/* Footer */}
       <footer className="border-t border-zinc-900 bg-zinc-950/20 py-6 text-center text-xs text-zinc-600 hidden md:block">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-2">
-          <p>© 2026 Camp. Solo Free Fire. Todos os direitos reservados.</p>
+          <p>© 2026 FlowFire Champions. Todos os direitos reservados.</p>
           <p className="flex items-center gap-1.5">
             Desenvolvido com <Award className="w-3.5 h-3.5 text-primary" /> React, TS & Tailwind CSS
           </p>
