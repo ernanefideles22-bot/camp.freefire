@@ -82,8 +82,8 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
       setSecondsLeft(remaining);
       if (remaining === 0) clearInterval(timerInterval);
     };
-    updateTimer();
     const timerInterval = setInterval(updateTimer, 1000);
+    updateTimer();
     return () => clearInterval(timerInterval);
   }, [salaInfo, selectedQueda, currentUser.id]);
 
