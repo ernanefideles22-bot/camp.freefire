@@ -26,7 +26,6 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
   const [loadingInscricao, setLoadingInscricao] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<boolean>(false);
   const [copiedSenha, setCopiedSenha] = useState<boolean>(false);
-  const [secondsLeft, setSecondsLeft] = useState<number>(0);
 
   const fetchPlayerStats = async () => {
     setLoadingHistory(true);
@@ -68,24 +67,6 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     return () => clearInterval(interval);
   }, [selectedQueda, currentUser.id]);
 
-  useEffect(() => {
-    if (!salaInfo) { setSecondsLeft(0); return; }
-    const timerKey = `room_timer_${selectedQueda}_${currentUser.id}`;
-    let expiry = localStorage.getItem(timerKey);
-    let expiryTime = expiry ? parseInt(expiry, 10) : null;
-    if (!expiryTime) {
-      expiryTime = Date.now() + 5 * 60 * 1000;
-      localStorage.setItem(timerKey, String(expiryTime));
-    }
-    const updateTimer = () => {
-      const remaining = Math.max(0, Math.floor((expiryTime! - Date.now()) / 1000));
-      setSecondsLeft(remaining);
-      if (remaining === 0) clearInterval(timerInterval);
-    };
-    const timerInterval = setInterval(updateTimer, 1000);
-    updateTimer();
-    return () => clearInterval(timerInterval);
-  }, [salaInfo, selectedQueda, currentUser.id]);
 
   const handleInscricao = async () => {
     setLoadingInscricao(true);
@@ -117,11 +98,6 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     }
   };
 
-  const formatTime = (secs: number) => {
-    const minutes = Math.floor(secs / 60);
-    const remainingSeconds = secs % 60;
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
 
   const getPlacementBadge = (colocacao: number) => {
     if (colocacao === 1) return 'bg-yellow-400/10 border-yellow-400 text-yellow-400';
@@ -246,19 +222,17 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                               </button>
                             </div>
                           </div>
-                          <div className={`p-4 rounded-xl border flex items-center gap-4 ${secondsLeft > 0 ? 'bg-rose-500/10 border-rose-500/20 text-rose-200' : 'bg-zinc-950 border-zinc-800 text-zinc-400'}`}>
-                            <div className={`p-2.5 rounded-lg bg-zinc-900 flex items-center justify-center ${secondsLeft > 0 ? 'text-rose-500 animate-pulse' : 'text-zinc-600'}`}>
+                          <div className="p-4 rounded-xl border bg-zinc-950 border-zinc-800 text-zinc-400 flex items-center gap-4">
+                            <div className="p-2.5 rounded-lg bg-zinc-900 flex items-center justify-center text-primary">
                               <Clock className="w-5 h-5" />
                             </div>
                             <div className="flex-grow">
-                              <h5 className="text-sm font-bold">{secondsLeft > 0 ? 'Atencao! Entre na sala agora!' : 'Contagem regressiva encerrada.'}</h5>
-                              <p className="text-xs text-zinc-500 font-medium mt-0.5">{secondsLeft > 0 ? 'A partida comecara em breve.' : 'O administrador deve iniciar a partida a qualquer momento.'}</p>
+                              <h5 className="text-sm font-bold text-white">Horario do Salto</h5>
+                              <p className="text-xs text-zinc-500 font-medium mt-0.5">{salaInfo.horario ? 'Entre na sala antes do horario. O adm inicia a partida no horario marcado.' : 'O organizador ainda nao definiu o horario. Fique atento.'}</p>
                             </div>
-                            {secondsLeft > 0 && (
-                              <div className="text-right">
-                                <span className="text-2xl font-mono font-black text-rose-500 tracking-wider">{formatTime(secondsLeft)}</span>
-                              </div>
-                            )}
+                            <div className="text-right">
+                              <span className="text-2xl font-mono font-black text-primary tracking-wider">{salaInfo.horario || '--:--'}</span>
+                            </div>
                           </div>
                         </div>
                       ) : (
