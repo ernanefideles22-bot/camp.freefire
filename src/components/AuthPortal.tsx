@@ -146,7 +146,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
 
         <div className="text-center mb-8 mt-2">
           <div className="inline-flex items-center justify-center mb-4 animate-float">
-            <img src="/flowfire-logo.png" alt="Flow Fire Champions" className="w-20 h-20 object-contain drop-shadow-[0_0_18px_rgba(139,92,246,0.45)]" />
+            <img src="/flowfire-logo.png" alt="Flow Fire Champions" className="w-20 h-20 object-contain drop-shadow-[0_0_18px_rgba(255,90,31,0.45)]" />
           </div>
           <h2 className="text-2xl font-black tracking-tight text-gradient-neon">Flow Fire Champions</h2>
           <p className="text-sm text-zinc-400 mt-1">
@@ -180,7 +180,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
                 </div>
                 {aceiteBlock}
             <button type="submit" disabled={loading}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-zinc-950 font-bold bg-accent-cyan hover:bg-cyan-400 transition-all disabled:opacity-60">
+              className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-zinc-950 font-bold bg-accent-cyan hover:bg-amber-400 transition-all disabled:opacity-60">
               {loading ? 'Concluindo...' : 'Concluir cadastro'}<ChevronRight className="w-4 h-4" />
             </button>
             <button type="button" onClick={() => { setPendingGoogleToken(null); setGoogleNick(''); }}
@@ -251,7 +251,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
                 )}
                 {!isLogin && aceiteBlock}
           <button style={{ minHeight: '44px', touchAction: 'manipulation' }} type="submit" disabled={loading}
-            className={`w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-white font-bold transition-all duration-300 select-none ${ loading ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : isLogin ? 'bg-primary hover:bg-primary-dark shadow-[0_4px_20px_rgba(139,92,246,0.25)]' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_4px_20px_rgba(0,240,255,0.25)]'}`}>
+            className={`w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl text-white font-bold transition-all duration-300 select-none ${ loading ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : isLogin ? 'bg-primary hover:bg-primary-dark shadow-[0_4px_20px_rgba(255,90,31,0.25)]' : 'bg-accent-cyan text-zinc-950 hover:bg-amber-400 shadow-[0_4px_20px_rgba(255,160,50,0.25)]'}`}>
             {loading ? <span>Processando...</span> : (<><span>{isLogin ? 'Entrar' : 'Cadastrar'}</span>{isLogin ? <LogIn className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</>)}
           </button>
         </form>
