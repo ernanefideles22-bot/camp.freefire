@@ -72,10 +72,12 @@ function App() {
               <User className="w-4 h-4" />
               Portal do Jogador
             </button>
+            {currentUser?.is_admin && (
             <button onClick={() => setActiveTab('admin')} className={tabClasses('admin')}>
               <Sliders className="w-4 h-4" />
               Painel Admin
             </button>
+            )}
           </nav>
 
           <div className="flex items-center gap-4 absolute right-4 sm:right-6 lg:right-8 top-1/2 -translate-y-1/2">
@@ -112,11 +114,13 @@ function App() {
           <User className="w-5 h-5" />
           <span className="text-[10px]">Portal</span>
         </button>
+        {currentUser?.is_admin && (
         <button onClick={() => setActiveTab('admin')}
           className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'admin' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}>
           <Sliders className="w-5 h-5" />
           <span className="text-[10px]">Admin</span>
         </button>
+        )}
       </div>
 
       {/* Main Content */}
