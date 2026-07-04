@@ -47,7 +47,7 @@ function App() {
   const tabClasses = (tabName: TabType) => {
     const base = 'flex items-center gap-2 px-5 py-3 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer ';
     if (activeTab === tabName) {
-      return base + 'bg-gradient-to-r from-primary to-primary-dark text-white shadow-[0_0_15px_rgba(139,92,246,0.3)]';
+      return base + 'bg-gradient-to-r from-primary to-primary-dark text-white shadow-[0_0_15px_rgba(255,90,31,0.3)]';
     }
     return base + 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60';
   };
@@ -62,7 +62,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img src="/flowfire-logo.png" alt="Flow Fire Champions"
-              className="w-16 h-16 object-contain drop-shadow-[0_0_14px_rgba(139,92,246,0.5)]" />
+              className="w-16 h-16 object-contain drop-shadow-[0_0_14px_rgba(255,90,31,0.5)]" />
             <div>
               <h1 className="text-lg font-black tracking-tight flex items-center gap-1.5 leading-none">
                 <span className="text-gradient-neon">Flow Fire Champions</span>
