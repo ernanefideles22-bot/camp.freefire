@@ -317,7 +317,7 @@ export const AdminAgentChat: React.FC<AdminAgentChatProps> = ({ onAddToast, onRe
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="px-5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold flex items-center justify-center hover:shadow-[0_0_15px_rgba(139,92,246,0.35)] transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+            className="px-5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold flex items-center justify-center hover:shadow-[0_0_15px_rgba(255,90,31,0.35)] transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
           >
             <Send className="w-4 h-4" />
           </button>
