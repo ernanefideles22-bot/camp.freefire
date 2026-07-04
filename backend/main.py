@@ -665,6 +665,7 @@ def liberar_sala(numero: int, dados: SalaInput,
         queda = QuedaModel(numero_queda=numero, status='aberta')
         db.add(queda)
         db.flush()
+    queda.status = 'aberta'  # reabre a queda ao liberar a sala (permite inscricoes de novo)
     queda.sala_id = dados.sala_id
     queda.sala_senha = dados.sala_senha
     db.commit()
