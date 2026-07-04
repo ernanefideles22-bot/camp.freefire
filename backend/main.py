@@ -181,6 +181,7 @@ class JogadorResponse(BaseModel):
 class SalaInput(BaseModel):
     sala_id: str
     sala_senha: str
+    horario: Optional[str] = None
 
 class ResultadoInput(BaseModel):
     jogador_id: int
@@ -628,7 +629,7 @@ def info_sala(numero: int, jogador: JogadorModel = Depends(obter_usuario_atual),
     queda = _get_queda(db, numero)
     if not queda or not queda.sala_id:
         raise HTTPException(404, 'Sala ainda nao foi liberada pelo administrador')
-    return {'sala_id': queda.sala_id, 'senha': queda.sala_senha}
+    return {'sala_id': queda.sala_id, 'senha': queda.sala_senha, 'horario': queda.horario}
 
 
 @app.post('/queda/{numero}/inscrever')
@@ -668,6 +669,7 @@ def liberar_sala(numero: int, dados: SalaInput,
     queda.status = 'aberta'  # reabre a queda ao liberar a sala (permite inscricoes de novo)
     queda.sala_id = dados.sala_id
     queda.sala_senha = dados.sala_senha
+    queda.horario = dados.horario
     db.commit()
     return {'message': f'Sala da queda {numero} liberada com sucesso!'}
 
