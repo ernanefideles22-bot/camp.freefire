@@ -24,6 +24,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   const [salaQueda, setSalaQueda] = useState<string>('1');
   const [salaId, setSalaId] = useState<string>('');
   const [salaSenha, setSalaSenha] = useState<string>('');
+  const [salaHorario, setSalaHorario] = useState<string>('');
   const [loadingSala, setLoadingSala] = useState<boolean>(false);
   const [quedaParaCancelar, setQuedaParaCancelar] = useState<string>('');
   const [loadingCancelar, setLoadingCancelar] = useState<boolean>(false);
@@ -122,7 +123,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     if (!salaId.trim() || !salaSenha.trim()) { onAddToast('warning', 'Campos Vazios', 'Preencha o ID e a Senha da sala.'); return; }
     setLoadingSala(true);
     try {
-      await apiService.liberarSala(quedaNum, salaId.trim(), salaSenha.trim());
+      await apiService.liberarSala(quedaNum, salaId.trim(), salaSenha.trim(), salaHorario || undefined);
       onAddToast('success', 'Sala Liberada', `Dados da Sala para a Queda ${quedaNum} salvos com sucesso!`);
       setSalaId(''); setSalaSenha(''); setSalaQueda((quedaNum + 1).toString());
     } catch (err) { onAddToast('error', 'Falha ao Enviar', 'Não foi possível registrar os dados da sala no backend.'); }
@@ -344,6 +345,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                   <div><label className={labelCls}>Número da Queda</label><input type="number" min="1" value={salaQueda} onChange={(e) => setSalaQueda(e.target.value)} disabled={loadingSala} className={inputCls} /></div>
                   <div><label className={labelCls}>ID da Sala (Custom)</label><input type="text" placeholder="Ex: 549382" value={salaId} onChange={(e) => setSalaId(e.target.value)} disabled={loadingSala} className={inputCls} /></div>
                   <div><label className={labelCls}>Senha da Sala</label><input type="text" placeholder="Ex: 1234" value={salaSenha} onChange={(e) => setSalaSenha(e.target.value)} disabled={loadingSala} className={inputCls} /></div>
+                  <div><label className={labelCls}>Horario do Salto</label><input type="time" value={salaHorario} onChange={(e) => setSalaHorario(e.target.value)} disabled={loadingSala} className={inputCls} /></div>
                   <button type="submit" disabled={loadingSala || !salaId.trim() || !salaSenha.trim()} className="w-full py-3 rounded-xl bg-primary text-white font-bold text-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:pointer-events-none">
                     {loadingSala ? <Spinner size="sm" /> : <Lock className="w-4 h-4" />}{loadingSala ? 'Liberando...' : 'Liberar Credenciais'}
                   </button>
