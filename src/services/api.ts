@@ -107,6 +107,7 @@ export interface StatusQueda {
 export interface SalaData {
   sala_id: string;
   senha: string;
+  horario?: string;
 }
 
 export interface ResultadoQuedaInput {
@@ -261,8 +262,8 @@ export const apiService = {
     return res.data;
   },
 
-  async liberarSala(numero: number, salaId: string, senha: string): Promise<any> {
-    const res = await api.post(`/queda/${numero}/sala`, { sala_id: salaId, sala_senha: senha });
+  async liberarSala(numero: number, salaId: string, senha: string, horario?: string): Promise<any> {
+    const res = await api.post(`/queda/${numero}/sala`, { sala_id: salaId, sala_senha: senha, horario });
     return res.data;
   },
 
