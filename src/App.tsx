@@ -59,24 +59,11 @@ function App() {
 
       {/* Header */}
       <header className="border-b border-zinc-900 bg-panel-bg/40 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/flowfire-logo.png" alt="Flow Fire Champions"
-              className="w-16 h-16 object-contain drop-shadow-[0_0_14px_rgba(255,90,31,0.5)]" />
-            <div>
-              <h1 className="text-lg font-black tracking-tight flex items-center gap-1.5 leading-none">
-                <span className="text-gradient-neon">Flow Fire Champions</span>
-                <span className="text-[10px] font-bold tracking-widest text-accent-orange bg-accent-orange/10 border border-accent-orange/20 px-1.5 py-0.5 rounded-md">
-                  PRO
-                </span>
-              </h1>
-              <span className="text-[10px] text-zinc-500 font-bold tracking-wider uppercase block mt-1">
-                Free Fire Arena • Modo Partida
-              </span>
-            </div>
-          </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative flex items-center justify-center py-4">
+          <img src="/flowfire-logo.png" alt="Flow Fire Champions"
+            className="h-40 w-auto object-contain drop-shadow-[0_0_30px_rgba(255,90,31,0.55)]" />
 
-          <nav className="hidden md:flex items-center gap-2">
+          <nav className="hidden md:flex items-center gap-2 absolute left-4 sm:left-6 lg:left-8 top-1/2 -translate-y-1/2">
             <button onClick={() => setActiveTab('leaderboard')} className={tabClasses('leaderboard')}>
               <Trophy className="w-4 h-4" />
               Leaderboard
@@ -91,7 +78,7 @@ function App() {
             </button>
           </nav>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 absolute right-4 sm:right-6 lg:right-8 top-1/2 -translate-y-1/2">
             {currentUser ? (
               <div className="flex items-center gap-3.5">
                 <div className="text-right hidden sm:block">
