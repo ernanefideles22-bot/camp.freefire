@@ -127,7 +127,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     if (colocacao === 1) return 'bg-yellow-400/10 border-yellow-400 text-yellow-400';
     if (colocacao === 2) return 'bg-zinc-300/10 border-zinc-300 text-zinc-300';
     if (colocacao === 3) return 'bg-amber-600/10 border-amber-600 text-amber-500';
-    if (colocacao >= 4 && colocacao <= 10) return 'bg-purple-500/10 border-purple-500 text-purple-400';
+    if (colocacao >= 4 && colocacao <= 10) return 'bg-amber-500/10 border-amber-500 text-amber-400';
     return 'bg-zinc-900 border-zinc-800 text-zinc-400';
   };
 
@@ -162,7 +162,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
             <div className="grid grid-cols-3 gap-2">
               {[1, 2, 3].map((num) => (
                 <button key={num} onClick={() => { setSelectedQueda(num); setSalaInfo(null); }}
-                  className={`py-3 rounded-xl font-bold text-sm border transition-all cursor-pointer ${selectedQueda === num ? 'bg-primary border-primary text-white shadow-[0_0_12px_rgba(139,92,246,0.25)]' : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}`}>
+                  className={`py-3 rounded-xl font-bold text-sm border transition-all cursor-pointer ${selectedQueda === num ? 'bg-primary border-primary text-white shadow-[0_0_12px_rgba(255,90,31,0.25)]' : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}`}>
                   Queda #{num}
                 </button>
               ))}
@@ -217,7 +217,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                       </div>
                       <button onClick={handleInscricao}
                         disabled={loadingInscricao || (currentUser.saldo || 0) < 3.0}
-                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 ${(currentUser.saldo || 0) < 3.0 ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed' : 'bg-accent-cyan text-zinc-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.2)]'}`}>
+                        className={`px-6 py-3 rounded-xl font-bold text-sm transition-all select-none cursor-pointer flex items-center gap-2 ${(currentUser.saldo || 0) < 3.0 ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/50 cursor-not-allowed' : 'bg-accent-cyan text-zinc-950 hover:bg-amber-400 shadow-[0_0_15px_rgba(255,160,50,0.2)]'}`}>
                         {loadingInscricao ? <Spinner size="sm" className="text-zinc-950" /> : <Gamepad2 className="w-4 h-4" />}
                         {loadingInscricao ? 'Confirmando...' : (currentUser.saldo || 0) < 3.0 ? 'Saldo Insuficiente' : 'Entrar na Sala (R$ 3,00)'}
                       </button>
@@ -307,7 +307,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
               <div className="p-4 rounded-xl border border-zinc-800 bg-gradient-to-b from-zinc-900/40 to-zinc-950/40 flex items-center justify-between shadow-md">
                 <div className="space-y-0.5">
                   <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Rank Medio</span>
-                  <h4 className="text-lg font-black text-purple-400 font-mono">{historyData.averagePlacement > 0 ? `${historyData.averagePlacement}o` : '-'}</h4>
+                  <h4 className="text-lg font-black text-amber-400 font-mono">{historyData.averagePlacement > 0 ? `${historyData.averagePlacement}o` : '-'}</h4>
                 </div>
               </div>
             </div>
