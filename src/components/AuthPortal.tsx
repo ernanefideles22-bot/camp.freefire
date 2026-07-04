@@ -169,7 +169,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
                   <Gamepad2 className="w-4 h-4" />
                 </div>
-                <input style={{ fontSize: '16px' }} type="text" required placeholder="Ex: Nobru" value={googleNick}
+                <input style={{ fontSize: '16px' }} type="text" autoCapitalize="none" autoCorrect="off" spellCheck={false} required placeholder="Ex: Nobru" value={googleNick}
                   onChange={(e) => setGoogleNick(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-accent-cyan focus:outline-none transition-all" />
               </div>
@@ -211,7 +211,7 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-500">
                 <Gamepad2 className="w-4 h-4" />
               </div>
-              <input style={{ fontSize: '16px' }} type="text" required placeholder="Ex: Nobru" value={nick}
+              <input style={{ fontSize: '16px' }} type="text" autoCapitalize="none" autoCorrect="off" spellCheck={false} required placeholder="Ex: Nobru" value={nick}
                 onChange={(e) => setNick(e.target.value)}
                 className="w-full bg-zinc-900 border border-zinc-800 text-white pl-10 pr-4 py-3 rounded-xl focus:border-accent-cyan focus:outline-none transition-all" />
             </div>
