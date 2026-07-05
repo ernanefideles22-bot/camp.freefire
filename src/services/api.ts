@@ -96,6 +96,17 @@ export interface ClassificacaoItem {
   melhor_colocacao: number | null;
 }
 
+export interface MeuConvite {
+  codigo: string;
+  link: string;
+  valor_por_convite: number;
+  bonus_convidado: number;
+  convidados_total: number;
+  convidados_que_jogaram: number;
+  ganhos_total: number;
+  restante_semana: number;
+}
+
 export interface QuedaAberta {
   numero_queda: number;
   inscritos_count: number;
@@ -220,10 +231,12 @@ export const apiService = {
   },
 
   async cadastrarJogador(nome: string, nick: string, senha?: string,
-                         aceitouTermos = false, confirmaIdade = false, dataNascimento?: string): Promise<Jogador> {
+                         aceitouTermos = false, confirmaIdade = false, dataNascimento?: string,
+                         ref?: string | null): Promise<Jogador> {
     const res = await api.post('/auth/cadastro', {
       nome, nick, senha: senha || undefined,
       aceitou_termos: aceitouTermos, confirma_idade: confirmaIdade, data_nascimento: dataNascimento,
+      ref: ref || undefined,
     });
     return res.data as Jogador;
   },
@@ -234,6 +247,7 @@ export const apiService = {
   }> {
     const res = await api.post('/auth/google', {
       id_token: idToken, nick, aceitou_termos: aceitouTermos, confirma_idade: confirmaIdade, data_nascimento: dataNascimento,
+      ref: (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') : null) || undefined,
     });
     const data = res.data;
     if (data.access_token) {
@@ -267,6 +281,11 @@ export const apiService = {
   },
 
   // QUEDAS
+  async obterMeuConvite(): Promise<MeuConvite> {
+    const res = await api.get('/me/convite');
+    return res.data as MeuConvite;
+  },
+
   async listarQuedasAbertas(): Promise<QuedaAberta[]> {
     const res = await api.get('/quedas/abertas');
     return res.data as QuedaAberta[];
