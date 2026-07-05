@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { UserPlus, Calendar, Plus, Trash2, Send, Key, Lock, Check, X, Upload, AlertTriangle, RefreshCw, Landmark, Copy, QrCode } from 'lucide-react';
-import { apiService, getPremioPorColocacao } from '../services/api';
-import type { Jogador, ResultadoQuedaInput, DepositoRequisicao, SaqueRequisicao } from '../services/api';
+import { apiService } from '../services/api';
+import type { Jogador, ResultadoQuedaInput, DepositoRequisicao, SaqueRequisicao, PremiacaoQueda } from '../services/api';
 import { Spinner } from './Spinner';
 import { gerarPixCopiaECola, gerarQrDataUrl } from '../utils/pix';
 import { AdminAgentChat } from './AdminAgentChat';
@@ -29,6 +29,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   const [quedaParaCancelar, setQuedaParaCancelar] = useState<string>('');
   const [loadingCancelar, setLoadingCancelar] = useState<boolean>(false);
   const [numeroQueda, setNumeroQueda] = useState<string>('1');
+  const [premiacao, setPremiacao] = useState<PremiacaoQueda | null>(null);
   const [linhas, setLinhas] = useState<LinhaResultado[]>([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]);
   const [loadingResults, setLoadingResults] = useState<boolean>(false);
   const [loadingOcr, setLoadingOcr] = useState<boolean>(false);
@@ -98,6 +99,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     const interval = setInterval(() => { fetchDepositos(); fetchSaques(); fetchRetidos(); }, 20000);
     return () => clearInterval(interval);
   }, []);
+
+  // Premiacao REAL da queda selecionada (pote sobre inscritos reais, nunca lobby cheio)
+  const fetchPremiacao = async (numero: number) => {
+    if (isNaN(numero) || numero <= 0) { setPremiacao(null); return; }
+    try { setPremiacao(await apiService.obterPremiacaoQueda(numero)); }
+    catch { setPremiacao(null); }
+  };
+  useEffect(() => {
+    const num = parseInt(numeroQueda);
+    fetchPremiacao(num);
+    const t = setInterval(() => fetchPremiacao(parseInt(numeroQueda)), 15000);
+    return () => clearInterval(t);
+  }, [numeroQueda]);
 
   const handleResetRanking = async () => {
     if (!window.confirm('Zerar o ranking e comecar uma nova semana? Anuncie o campeao atual ANTES de zerar — as quedas da semana atual saem do ranking (o historico fica salvo).')) return;
@@ -278,7 +292,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     try {
       await apiService.lancarResultadoQueda({ numero_queda: quedaNum, resultados: formattedResultados });
       onAddToast('success', 'Resultados Registrados', `Queda ${quedaNum} lançada com sucesso no campeonato! Saldos dos vencedores foram creditados.`);
-      setLinhas([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]); setNumeroQueda((quedaNum + 1).toString()); await fetchPlayers();
+      setLinhas([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]); setNumeroQueda((quedaNum + 1).toString()); await fetchPlayers(); fetchPremiacao(quedaNum + 1);
     } catch (err: any) { onAddToast('error', 'Falha ao Enviar', err.message || 'Não foi possível registrar os resultados.'); }
     finally { setLoadingResults(false); }
   };
@@ -391,6 +405,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                 <input type="number" min="1" value={numeroQueda} onChange={(e) => setNumeroQueda(e.target.value)} disabled={loadingResults || loadingOcr} className="w-16 bg-transparent border-none text-white text-center text-sm font-black focus:outline-none" />
               </div>
             </div>
+            {premiacao && (
+              <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 flex flex-wrap items-center gap-x-6 gap-y-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Pote real da queda {premiacao.numero_queda}</span>
+                <span className="text-xs text-zinc-300"><b className="text-white">{premiacao.inscritos}</b> inscritos × R$ {premiacao.taxa_inscricao.toFixed(2).replace('.', ',')}</span>
+                <span className="text-xs text-zinc-300">Arrecadado: <b className="text-white">R$ {premiacao.arrecadado.toFixed(2).replace('.', ',')}</b></span>
+                <span className="text-xs text-zinc-300">Premiação: <b className="text-emerald-400">R$ {premiacao.premiacao_total.toFixed(2).replace('.', ',')}</b></span>
+                <span className="text-xs text-zinc-300">Bolo de abates: <b className="text-white">R$ {premiacao.bolo_abates.toFixed(2).replace('.', ',')}</b> (rateado por kills)</span>
+                {premiacao.inscritos === 0 && (<span className="text-[10px] font-bold text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />Sem inscritos nesta queda — prêmios serão R$ 0,00</span>)}
+              </div>
+            )}
             <div className="p-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5"><Upload className="w-4 h-4 text-primary" />Carregar Print de Placar (IA OCR Gemini)</span>
@@ -405,7 +429,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
               <div className="space-y-2.5 max-h-[450px] overflow-y-auto pr-1">
                 {linhas.map((linha, index) => {
                   const placeNum = parseInt(linha.colocacao);
-                  const cashPrize = !isNaN(placeNum) ? getPremioPorColocacao(placeNum) : 0;
+                  const cashPrize = (!isNaN(placeNum) && premiacao) ? (premiacao.premios_colocacao[String(placeNum)] ?? 0) : 0;
                   const colDuplicada = colocacoesDuplicadas.has((linha.colocacao || '').trim());
                   return (
                     <div key={linha.tempId} className={`flex flex-col md:flex-row items-stretch md:items-center gap-3 p-4 rounded-xl border bg-zinc-950/40 ${colDuplicada ? 'border-rose-500/70 ring-1 ring-rose-500/40' : 'border-zinc-800'}`}>
