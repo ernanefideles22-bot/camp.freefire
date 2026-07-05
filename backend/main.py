@@ -738,6 +738,9 @@ def _aplicar_resultados(db: Session, numero: int, lista: list) -> list:
     # ---- Premiacao proporcional: arrecadado e total de abates da queda ----
     inscritos = db.scalar(select(func.count()).select_from(InscricaoModel)
                           .where(InscricaoModel.numero_queda == numero)) or 0
+    if inscritos == 0:
+        raise HTTPException(400, f'A queda {numero} nao tem nenhum inscrito - o pote seria R$ 0,00. '
+                                 'Confira o NUMERO da queda antes de lancar (os inscritos podem estar em outra).')
     arrecadado = inscritos * TAXA_INSCRICAO
     abates_previos = db.scalar(select(func.coalesce(func.sum(ResultadoQuedaModel.abates), 0))
                                .where(ResultadoQuedaModel.numero_queda == numero)) or 0
