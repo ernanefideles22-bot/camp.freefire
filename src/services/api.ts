@@ -172,16 +172,28 @@ export async function getConfig(): Promise<ConfigRegras> {
   return _configCache;
 }
 
-// Premiacao agora e PROPORCIONAL ao arrecadado. Esta funcao devolve uma ESTIMATIVA
-// por colocacao assumindo LOBBY CHEIO (so para preview do admin). O valor real e
-// calculado no backend conforme inscritos e abates de cada queda.
-export function premioPorColocacao(colocacao: number): number {
+// Previa da premiacao de uma queda vinda do BACKEND, calculada sobre os
+// INSCRITOS REAIS (fonte unica de verdade). Use apiService.obterPremiacaoQueda().
+export interface PremiacaoQueda {
+  numero_queda: number;
+  inscritos: number;
+  taxa_inscricao: number;
+  arrecadado: number;
+  premiacao_total: number;
+  bolo_abates: number;
+  premios_colocacao: Record<string, number>; // { '1': R$, ..., '5': R$ }
+}
+
+// Estimativa LOCAL (fallback/offline) do premio de colocacao para uma queda com
+// `inscritos` jogadores. Espelha a formula do backend. NUNCA assume lobby cheio:
+// quem chama e obrigado a informar quantos jogadores cairam.
+export function premioPorColocacao(colocacao: number, inscritos: number): number {
   const c = _configCache;
   if (!c) { getConfig().catch(() => {}); return 0; }
   const peso = c.pesos_colocacao?.[String(colocacao)];
-  if (!peso) return 0;
+  if (!peso || inscritos <= 0) return 0;
   const somaPesos = Object.values(c.pesos_colocacao).reduce((a, b) => a + b, 0);
-  const arrecadado = c.lobby_cheio * c.taxa_inscricao;
+  const arrecadado = inscritos * c.taxa_inscricao;
   const boloColoc = arrecadado * (1 - c.rake) * c.share_colocacao;
   return boloColoc * (peso / somaPesos);
 }
@@ -250,6 +262,11 @@ export const apiService = {
   async obterStatusQueda(numero: number): Promise<StatusQueda> {
     const res = await api.get(`/queda/${numero}/status`);
     return res.data as StatusQueda;
+  },
+
+  async obterPremiacaoQueda(numero: number): Promise<PremiacaoQueda> {
+    const res = await api.get(`/queda/${numero}/premiacao`);
+    return res.data as PremiacaoQueda;
   },
 
   async obterInfoSala(numero: number): Promise<SalaData> {
