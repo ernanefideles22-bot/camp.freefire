@@ -54,6 +54,7 @@ if not os.environ.get('SKIP_DB_INIT'):
 TAXA_INSCRICAO = 3.0
 # ---- Convites (indicacao): pago SOMENTE quando o convidado tem resultado
 # lancado na 1a queda (anti-fraude: conta fake nao joga). Tudo JOGAVEL, nao sacavel.
+SITE_URL = os.environ.get('SITE_URL', 'https://camp-freefas.com.br')  # dominio principal do camp
 VALOR_CONVITE = 1.0           # R$ pro padrinho por convidado que jogou
 VALOR_BONUS_BEMVINDO = 1.0    # R$ pro convidado quando joga a 1a queda
 CAP_CONVITES_SEMANA = 10      # maximo de convites pagos por padrinho a cada 7 dias
@@ -529,7 +530,7 @@ def meu_convite(jogador: JogadorModel = Depends(obter_usuario_atual), db: Sessio
                                 TransacaoModel.criado_em >= _utcnow() - _timedelta(days=7))) or 0
     return {
         'codigo': jogador.codigo_convite,
-        'link': f'https://camp-freefire.vercel.app/?ref={jogador.codigo_convite}',
+        'link': f'{SITE_URL}/?ref={jogador.codigo_convite}',
         'valor_por_convite': VALOR_CONVITE,
         'bonus_convidado': VALOR_BONUS_BEMVINDO,
         'convidados_total': len(convidados),
