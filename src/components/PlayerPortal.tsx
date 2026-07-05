@@ -412,12 +412,21 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
                   Seu amigo também ganha <b className="text-emerald-400">R$ {convite.bonus_convidado.toFixed(2).replace('.', ',')}</b>!
                 </p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-amber-400 font-mono truncate">{convite.link}</code>
+                  <a href={convite.link} target="_blank" rel="noopener noreferrer"
+                    className="flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-amber-400 font-mono truncate underline decoration-amber-400/40 hover:text-amber-300 hover:border-amber-500/40 transition-colors">
+                    {convite.link}
+                  </a>
                   <button onClick={() => { navigator.clipboard.writeText(convite.link); setCopiedConvite(true); setTimeout(() => setCopiedConvite(false), 2000); }}
+                    title="Copiar link"
                     className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer">
                     {copiedConvite ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
+                <a href={`https://wa.me/?text=${encodeURIComponent(`Cola no FLOW FIRE CHAMPIONS! Camp de Free Fire com premio em dinheiro via Pix. Se cadastra pelo meu link que a gente GANHA R$ 1,00 cada quando voce jogar a primeira queda: ${convite.link}`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-sm font-bold text-emerald-400 hover:bg-emerald-500/25 hover:text-emerald-300 transition-all cursor-pointer">
+                  Convidar pelo WhatsApp
+                </a>
                 <p className="text-[10px] text-zinc-500">
                   {convite.convidados_que_jogaram}/{convite.convidados_total} convidados jogaram • você já ganhou R$ {convite.ganhos_total.toFixed(2).replace('.', ',')}
                 </p>
