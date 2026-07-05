@@ -95,6 +95,24 @@ def distribuir_premios(arrecadado: float, resultados: list, abates_previos: int 
     return out
 
 
+def previa_premiacao(inscritos: int) -> dict:
+    """Previa da premiacao de uma queda com base nos INSCRITOS REAIS (nao lobby cheio).
+    Espelha exatamente distribuir_premios(): mesmo rake, shares e pesos."""
+    arrecadado = inscritos * TAXA_INSCRICAO
+    premiacao = arrecadado * (1.0 - RAKE)
+    bolo_coloc = premiacao * SHARE_COLOCACAO
+    bolo_abate = premiacao * SHARE_ABATE
+    return {
+        'inscritos': inscritos,
+        'taxa_inscricao': TAXA_INSCRICAO,
+        'arrecadado': round(arrecadado, 2),
+        'premiacao_total': round(premiacao, 2),
+        'bolo_abates': round(bolo_abate, 2),
+        'premios_colocacao': {str(pos): round(bolo_coloc * (peso / SOMA_PESOS), 2)
+                              for pos, peso in PESOS_COLOCACAO.items()},
+    }
+
+
 PONTOS_LBFF = {1: 12, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1}
 
 def calcular_pontos_lbff(colocacao: int, abates: int) -> int:
@@ -619,6 +637,17 @@ def status_queda(numero: int, jogador: JogadorModel = Depends(obter_usuario_atua
         'esta_inscrito': _get_inscricao(db, numero, jogador.id) is not None,
         'sala_liberada': queda is not None and queda.sala_id is not None,
     }
+
+
+@app.get('/queda/{numero}/premiacao')
+def premiacao_queda(numero: int, db: Session = Depends(get_db)):
+    """Previa REAL da premiacao da queda: pote calculado sobre os inscritos atuais.
+    Endpoint publico (mesma politica de /config e /classificacao)."""
+    inscritos = db.scalar(select(func.count()).select_from(InscricaoModel)
+                          .where(InscricaoModel.numero_queda == numero)) or 0
+    out = previa_premiacao(int(inscritos))
+    out['numero_queda'] = numero
+    return out
 
 
 @app.get('/queda/{numero}/sala')
