@@ -292,7 +292,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     try {
       await apiService.lancarResultadoQueda({ numero_queda: quedaNum, resultados: formattedResultados });
       onAddToast('success', 'Resultados Registrados', `Queda ${quedaNum} lançada com sucesso no campeonato! Saldos dos vencedores foram creditados.`);
-      setLinhas([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]); setNumeroQueda((quedaNum + 1).toString()); await fetchPlayers(); fetchPremiacao(quedaNum + 1);
+      setLinhas([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]); await fetchPlayers(); fetchPremiacao(quedaNum);
     } catch (err: any) { onAddToast('error', 'Falha ao Enviar', err.message || 'Não foi possível registrar os resultados.'); }
     finally { setLoadingResults(false); }
   };
