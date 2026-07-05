@@ -626,6 +626,26 @@ def _get_inscricao(db: Session, numero: int, jogador_id: int) -> Optional[Inscri
         InscricaoModel.numero_queda == numero, InscricaoModel.jogador_id == jogador_id))
 
 
+@app.get('/quedas/abertas')
+def quedas_abertas(db: Session = Depends(get_db)):
+    """Lista quedas com status 'aberta' (inscricoes possiveis), com contagem de inscritos.
+    O Portal do Jogador usa isto para montar o seletor dinamicamente (sem limite de 3)."""
+    quedas = db.scalars(select(QuedaModel).where(QuedaModel.status == 'aberta')
+                        .order_by(QuedaModel.numero_queda)).all()
+    out = []
+    for q in quedas:
+        inscritos = db.scalar(select(func.count()).select_from(InscricaoModel)
+                              .where(InscricaoModel.numero_queda == q.numero_queda)) or 0
+        out.append({
+            'numero_queda': q.numero_queda,
+            'inscritos_count': int(inscritos),
+            'limite': LIMITE_QUEDA,
+            'sala_liberada': q.sala_id is not None,
+            'horario': q.horario,
+        })
+    return out
+
+
 @app.get('/queda/{numero}/status')
 def status_queda(numero: int, jogador: JogadorModel = Depends(obter_usuario_atual),
                  db: Session = Depends(get_db)):
