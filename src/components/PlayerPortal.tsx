@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Wallet, Clock, Gamepad2, Copy, Check, RefreshCw, Award } from 'lucide-react';
 import { apiService } from '../services/api';
-import type { Jogador, SalaData, StatusQueda, PremiacaoQueda } from '../services/api';
+import type { Jogador, SalaData, StatusQueda, PremiacaoQueda, QuedaAberta } from '../services/api';
 import { Spinner } from './Spinner';
 import PixDeposito from './PixDeposito';
 import PixSaque from './PixSaque';
@@ -21,6 +21,7 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
   const [historyData, setHistoryData] = useState<any>(null);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
   const [statusQueda, setStatusQueda] = useState<StatusQueda | null>(null);
+  const [quedasAbertas, setQuedasAbertas] = useState<QuedaAberta[]>([]);
   const [premiacao, setPremiacao] = useState<PremiacaoQueda | null>(null);
   const [salaInfo, setSalaInfo] = useState<SalaData | null>(null);
   const [loadingStatus, setLoadingStatus] = useState<boolean>(false);
@@ -49,6 +50,14 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
       const status = await apiService.obterStatusQueda(selectedQueda);
       setStatusQueda(status);
       apiService.obterPremiacaoQueda(selectedQueda).then(setPremiacao).catch(() => setPremiacao(null));
+      apiService.listarQuedasAbertas().then((qs) => {
+        setQuedasAbertas(qs);
+        // se a queda selecionada nao esta mais aberta, pula para a primeira aberta
+        if (qs.length > 0 && !qs.some(q => q.numero_queda === selectedQueda)) {
+          setSelectedQueda(qs[0].numero_queda);
+          setSalaInfo(null);
+        }
+      }).catch(() => {});
       if (status.esta_inscrito && status.sala_liberada) {
         const room = await apiService.obterInfoSala(selectedQueda);
         setSalaInfo(room);
@@ -137,14 +146,19 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
           {/* Seletor de Queda */}
           <div className="ff-card p-4">
             <h3 className="text-sm font-bold uppercase tracking-wider text-zinc-400 mb-3.5">Selecione a Queda</h3>
-            <div className="grid grid-cols-3 gap-2">
-              {[1, 2, 3].map((num) => (
-                <button key={num} onClick={() => { setSelectedQueda(num); setSalaInfo(null); }}
-                  className={`py-3 rounded-xl font-bold text-sm border transition-all cursor-pointer ${selectedQueda === num ? 'bg-primary border-primary text-white shadow-[0_0_12px_rgba(255,90,31,0.25)]' : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}`}>
-                  Queda #{num}
-                </button>
-              ))}
-            </div>
+            {quedasAbertas.length === 0 ? (
+              <p className="text-xs text-zinc-500 font-semibold py-2">Nenhuma queda aberta no momento. O organizador abre a próxima em breve — fica ligado!</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {quedasAbertas.map((q) => (
+                  <button key={q.numero_queda} onClick={() => { setSelectedQueda(q.numero_queda); setSalaInfo(null); }}
+                    className={`py-3 px-5 rounded-xl font-bold text-sm border transition-all cursor-pointer flex-grow basis-[30%] ${selectedQueda === q.numero_queda ? 'bg-primary border-primary text-white shadow-[0_0_12px_rgba(255,90,31,0.25)]' : 'bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}`}>
+                    Queda #{q.numero_queda}
+                    <span className="block text-[10px] font-semibold opacity-80 mt-0.5">{q.inscritos_count}/{q.limite}{q.horario ? ` • ${q.horario}` : ''}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Card da sala */}
