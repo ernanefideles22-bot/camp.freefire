@@ -96,6 +96,14 @@ export interface ClassificacaoItem {
   melhor_colocacao: number | null;
 }
 
+export interface QuedaAberta {
+  numero_queda: number;
+  inscritos_count: number;
+  limite: number;
+  sala_liberada: boolean;
+  horario?: string | null;
+}
+
 export interface StatusQueda {
   numero_queda: number;
   inscritos_count: number;
@@ -259,6 +267,11 @@ export const apiService = {
   },
 
   // QUEDAS
+  async listarQuedasAbertas(): Promise<QuedaAberta[]> {
+    const res = await api.get('/quedas/abertas');
+    return res.data as QuedaAberta[];
+  },
+
   async obterStatusQueda(numero: number): Promise<StatusQueda> {
     const res = await api.get(`/queda/${numero}/status`);
     return res.data as StatusQueda;
