@@ -36,6 +36,10 @@ class JogadorModel(Base):
     termos_versao: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     termos_aceito_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     data_nascimento: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # --- Sistema de convites (indicacao) ---
+    codigo_convite: Mapped[Optional[str]] = mapped_column(String, unique=True, nullable=True, index=True)
+    indicado_por: Mapped[Optional[int]] = mapped_column(ForeignKey('jogadores.id'), nullable=True, index=True)
+    convite_pago: Mapped[bool] = mapped_column(Boolean, default=False)
     registro_ip: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     ultimo_ip: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     # Dados bancarios para saque via API Cora (transferencia exige conta, nao chave PIX)

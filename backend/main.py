@@ -52,6 +52,11 @@ if not os.environ.get('SKIP_DB_INIT'):
         print(f'[WARN] promocao de admin falhou: {exc}')
 
 TAXA_INSCRICAO = 3.0
+# ---- Convites (indicacao): pago SOMENTE quando o convidado tem resultado
+# lancado na 1a queda (anti-fraude: conta fake nao joga). Tudo JOGAVEL, nao sacavel.
+VALOR_CONVITE = 1.0           # R$ pro padrinho por convidado que jogou
+VALOR_BONUS_BEMVINDO = 1.0    # R$ pro convidado quando joga a 1a queda
+CAP_CONVITES_SEMANA = 10      # maximo de convites pagos por padrinho a cada 7 dias
 # ---- Premiacao PROPORCIONAL ao arrecadado (fonte unica) ----
 # Arrecadado da queda = nº de inscritos x TAXA_INSCRICAO.
 # A casa fica com RAKE; o restante (premiacao) e dividido entre colocacao e abates.
@@ -65,6 +70,48 @@ TERMOS_VERSAO = '1.0'  # bump quando os termos mudarem (forca novo aceite no fut
 LIMITE_QUEDA = 48    # jogadores por queda (Free Fire)
 MAX_COLOCACAO = LIMITE_QUEDA
 MAX_ABATES = 50      # teto plausivel de abates por partida
+
+import secrets as _secrets
+from datetime import timedelta as _timedelta
+
+def _gerar_codigo_convite(db: Session) -> str:
+    """Codigo curto e unico, ex.: FF7K2Q9."""
+    alf = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    for _ in range(20):
+        cod = 'FF' + ''.join(_secrets.choice(alf) for _ in range(5))
+        if not db.scalar(select(JogadorModel).where(JogadorModel.codigo_convite == cod)):
+            return cod
+    raise HTTPException(500, 'Falha ao gerar codigo de convite')
+
+def _resolver_padrinho(db: Session, ref: 'Optional[str]') -> 'Optional[int]':
+    if not ref:
+        return None
+    ref = ref.strip().upper()
+    pad = db.scalar(select(JogadorModel).where(JogadorModel.codigo_convite == ref))
+    return pad.id if pad else None
+
+def _pagar_convite_se_primeira_queda(db: Session, jogador: JogadorModel, msgs: list) -> None:
+    """Chamado ao lancar resultado. Se for a 1a queda de um convidado ainda nao pago,
+    credita padrinho (respeitando o cap semanal) e o proprio convidado. Idempotente
+    via flag convite_pago. Tudo delta_sacavel=0 (bonus jogavel)."""
+    if not jogador.indicado_por or jogador.convite_pago:
+        return
+    from models import utcnow as _utcnow
+    padrinho = _lock_jogador(db, jogador.indicado_por)
+    if padrinho and padrinho.id != jogador.id:
+        pagos_7d = db.scalar(
+            select(func.count()).select_from(TransacaoModel)
+            .where(TransacaoModel.jogador_id == padrinho.id,
+                   TransacaoModel.tipo == 'bonus_convite',
+                   TransacaoModel.criado_em >= _utcnow() - _timedelta(days=7))) or 0
+        if pagos_7d < CAP_CONVITES_SEMANA:
+            registrar_transacao(db, padrinho, tipo='bonus_convite',
+                                delta_saldo=VALOR_CONVITE, ref=f'convite:{jogador.id}')
+            msgs.append(f'Convite pago: {padrinho.nick} +R$ {VALOR_CONVITE:.2f} (indicou {jogador.nick})')
+    registrar_transacao(db, jogador, tipo='bonus_bemvindo',
+                        delta_saldo=VALOR_BONUS_BEMVINDO, ref=f'convite-bemvindo:{jogador.indicado_por}')
+    jogador.convite_pago = True
+
 
 # ====================== REGRAS DE PREMIO / PONTOS ======================
 def distribuir_premios(arrecadado: float, resultados: list, abates_previos: int = 0) -> dict:
@@ -179,6 +226,7 @@ class JogadorCreate(BaseModel):
     aceitou_termos: bool = False
     confirma_idade: bool = False
     data_nascimento: Optional[str] = None
+    ref: Optional[str] = None
 
 class JogadorLogin(BaseModel):
     nick: str
@@ -293,6 +341,7 @@ def cadastrar(jogador: JogadorCreate, request: Request, db: Session = Depends(ge
                         senha_hash=hash_senha(jogador.senha), saldo=0.0, is_admin=eh_admin,
                         aceitou_termos=True, confirmou_idade=True,
                         data_nascimento=nasc, registro_ip=ip, ultimo_ip=ip,
+                        indicado_por=_resolver_padrinho(db, jogador.ref),
                         termos_versao=TERMOS_VERSAO, termos_aceito_em=utcnow())
     db.add(novo)
     db.commit()
@@ -396,6 +445,7 @@ class GoogleLoginBody(BaseModel):
     aceitou_termos: bool = False
     confirma_idade: bool = False
     data_nascimento: Optional[str] = None
+    ref: Optional[str] = None
 
 
 @app.post('/auth/google')
@@ -431,6 +481,7 @@ async def auth_google(body: GoogleLoginBody, request: Request, db: Session = Dep
                         is_admin=(nick in _admin_nicks()),
                         aceitou_termos=True, confirmou_idade=True,
                         data_nascimento=nasc, registro_ip=ip, ultimo_ip=ip,
+                        indicado_por=_resolver_padrinho(db, body.ref),
                         termos_versao=TERMOS_VERSAO, termos_aceito_em=utcnow())
     db.add(novo)
     db.commit()
@@ -458,6 +509,34 @@ def meu_extrato(limite: int = 50, jogador: JogadorModel = Depends(obter_usuario_
              'ref': t.ref,
              'criado_em': t.criado_em.strftime('%d/%m/%Y %H:%M') if t.criado_em else None}
             for t in txs]
+
+
+@app.get('/me/convite')
+def meu_convite(jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    """Codigo/link de convite do jogador + estatisticas. Gera o codigo na 1a chamada."""
+    if not jogador.codigo_convite:
+        jogador.codigo_convite = _gerar_codigo_convite(db)
+        db.commit()
+        db.refresh(jogador)
+    convidados = db.scalars(select(JogadorModel).where(JogadorModel.indicado_por == jogador.id)).all()
+    ganhos = db.scalar(select(func.coalesce(func.sum(TransacaoModel.valor), 0.0))
+                       .where(TransacaoModel.jogador_id == jogador.id,
+                              TransacaoModel.tipo == 'bonus_convite')) or 0.0
+    from models import utcnow as _utcnow
+    pagos_7d = db.scalar(select(func.count()).select_from(TransacaoModel)
+                         .where(TransacaoModel.jogador_id == jogador.id,
+                                TransacaoModel.tipo == 'bonus_convite',
+                                TransacaoModel.criado_em >= _utcnow() - _timedelta(days=7))) or 0
+    return {
+        'codigo': jogador.codigo_convite,
+        'link': f'https://camp-freefire.vercel.app/?ref={jogador.codigo_convite}',
+        'valor_por_convite': VALOR_CONVITE,
+        'bonus_convidado': VALOR_BONUS_BEMVINDO,
+        'convidados_total': len(convidados),
+        'convidados_que_jogaram': sum(1 for c in convidados if c.convite_pago),
+        'ganhos_total': round(float(ganhos), 2),
+        'restante_semana': max(0, CAP_CONVITES_SEMANA - int(pagos_7d)),
+    }
 
 
 @app.get('/admin/extrato/{jogador_id}')
@@ -782,6 +861,7 @@ def _aplicar_resultados(db: Session, numero: int, lista: list) -> list:
                                    colocacao=colocacao, abates=abates, premio=premio, suspeito=eh_suspeito))
         registrar_transacao(db, jogador, tipo='premio', delta_saldo=premio,
                             delta_sacavel=(0.0 if eh_suspeito else premio), ref=f'queda:{numero}')
+        _pagar_convite_se_primeira_queda(db, jogador, msgs)
         msgs.append(f'{jogador.nick}: {colocacao}o, {abates} kills, R$ {premio:.2f}' + (' (SACAVEL RETIDO p/ revisao)' if eh_suspeito else ''))
     queda = _get_queda(db, numero)
     if queda:
