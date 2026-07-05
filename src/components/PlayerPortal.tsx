@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Wallet, Clock, Gamepad2, Copy, Check, RefreshCw, Award } from 'lucide-react';
 import { apiService } from '../services/api';
-import type { Jogador, SalaData, StatusQueda, PremiacaoQueda, QuedaAberta } from '../services/api';
+import type { Jogador, SalaData, StatusQueda, PremiacaoQueda, QuedaAberta, MeuConvite } from '../services/api';
 import { Spinner } from './Spinner';
 import PixDeposito from './PixDeposito';
 import PixSaque from './PixSaque';
@@ -22,6 +22,8 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
   const [statusQueda, setStatusQueda] = useState<StatusQueda | null>(null);
   const [quedasAbertas, setQuedasAbertas] = useState<QuedaAberta[]>([]);
+  const [convite, setConvite] = useState<MeuConvite | null>(null);
+  const [copiedConvite, setCopiedConvite] = useState<boolean>(false);
   const [premiacao, setPremiacao] = useState<PremiacaoQueda | null>(null);
   const [salaInfo, setSalaInfo] = useState<SalaData | null>(null);
   const [loadingStatus, setLoadingStatus] = useState<boolean>(false);
@@ -77,6 +79,10 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
     const interval = setInterval(() => { fetchQuedaStatus(true); }, 6000);
     return () => clearInterval(interval);
   }, [selectedQueda, currentUser.id]);
+
+  useEffect(() => {
+    apiService.obterMeuConvite().then(setConvite).catch(() => {});
+  }, [currentUser.id]);
 
 
   const handleInscricao = async () => {
@@ -393,6 +399,30 @@ export const PlayerPortal: React.FC<PlayerPortalProps> = ({
             </div>
             <div className="border-t border-zinc-800" />
             <PixDeposito jogadorId={currentUser.id} />
+
+            <div className="border-t border-zinc-800" />
+            {convite && (
+              <div className="p-4 bg-zinc-950 rounded-xl border border-emerald-500/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Convide e Ganhe</span>
+                  <span className="text-[10px] text-zinc-500 font-bold">{convite.restante_semana} restantes na semana</span>
+                </div>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Ganhe <b className="text-emerald-400">R$ {convite.valor_por_convite.toFixed(2).replace('.', ',')}</b> por amigo que jogar a 1ª queda.
+                  Seu amigo também ganha <b className="text-emerald-400">R$ {convite.bonus_convidado.toFixed(2).replace('.', ',')}</b>!
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-amber-400 font-mono truncate">{convite.link}</code>
+                  <button onClick={() => { navigator.clipboard.writeText(convite.link); setCopiedConvite(true); setTimeout(() => setCopiedConvite(false), 2000); }}
+                    className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer">
+                    {copiedConvite ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[10px] text-zinc-500">
+                  {convite.convidados_que_jogaram}/{convite.convidados_total} convidados jogaram • você já ganhou R$ {convite.ganhos_total.toFixed(2).replace('.', ',')}
+                </p>
+              </div>
+            )}
             <div className="border-t border-zinc-800" />
             <PixSaque saldoSacavel={currentUser.saldo_sacavel || 0} saldo={currentUser.saldo || 0} />
           </div>

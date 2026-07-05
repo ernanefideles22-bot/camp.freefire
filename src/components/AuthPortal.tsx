@@ -100,7 +100,8 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
         onAddToast('success', 'Bem-vindo!', `Bem-vindo de volta, ${user.nome}!`);
         onAuthSuccess(user);
       } else {
-        const user = await apiService.cadastrarJogador(nome.trim(), nick.trim(), senha, aceito, maior, dataNascimento);
+        const refCode = new URLSearchParams(window.location.search).get('ref');
+        const user = await apiService.cadastrarJogador(nome.trim(), nick.trim(), senha, aceito, maior, dataNascimento, refCode);
         localStorage.setItem('currentUser', JSON.stringify(user));
         onAddToast('success', 'Conta Criada!', `Jogador ${user.nick} cadastrado com sucesso!`);
         onAuthSuccess(user);
