@@ -751,6 +751,26 @@ def premiacao_queda(numero: int, db: Session = Depends(get_db)):
     return out
 
 
+@app.get('/queda/{numero}/inscritos')
+def inscritos_queda(numero: int, _admin: JogadorModel = Depends(require_admin),
+                    db: Session = Depends(get_db)):
+    """Lista de quem PAGOU a inscricao da queda (admin). Ordem de chegada."""
+    inscricoes = db.scalars(select(InscricaoModel)
+                            .where(InscricaoModel.numero_queda == numero)
+                            .order_by(InscricaoModel.data_inscricao)).all()
+    out = []
+    for i in inscricoes:
+        j = db.get(JogadorModel, i.jogador_id)
+        if not j:
+            continue
+        out.append({
+            'jogador_id': j.id, 'nick': j.nick, 'nome': j.nome,
+            'pago_em': i.data_inscricao.strftime('%d/%m %H:%M') if i.data_inscricao else None,
+        })
+    return {'numero_queda': numero, 'total': len(out),
+            'arrecadado': round(len(out) * TAXA_INSCRICAO, 2), 'jogadores': out}
+
+
 @app.get('/queda/{numero}/sala')
 def info_sala(numero: int, jogador: JogadorModel = Depends(obter_usuario_atual),
               db: Session = Depends(get_db)):
