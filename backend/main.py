@@ -791,6 +791,13 @@ def inscrever(numero: int, request: Request, jogador: JogadorModel = Depends(obt
 @app.post('/queda/{numero}/sala')
 def liberar_sala(numero: int, dados: SalaInput,
                  _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    # TRAVA: numero de queda nunca se reutiliza. Se ja ha resultado lancado, sugere o proximo.
+    ja_tem = db.scalar(select(func.count()).select_from(ResultadoQuedaModel)
+                       .where(ResultadoQuedaModel.numero_queda == numero)) or 0
+    if ja_tem:
+        prox = int(db.scalar(select(func.max(ResultadoQuedaModel.numero_queda))) or 0) + 1
+        raise HTTPException(400, f'A queda {numero} ja tem resultado lancado e nao pode ser reaproveitada. '
+                                 f'Use a queda {prox} para a proxima partida.')
     queda = _get_queda(db, numero)
     if not queda:
         queda = QuedaModel(numero_queda=numero, status='aberta')
@@ -1488,6 +1495,11 @@ def agente_executar(body: ExecutarAcaoBody,
         ssn = (dados.get('sala_senha') or '').strip()
         if not num or not sid or not ssn:
             raise HTTPException(400, 'Informe queda, ID e senha da sala.')
+        _ja = db.scalar(select(func.count()).select_from(ResultadoQuedaModel)
+                        .where(ResultadoQuedaModel.numero_queda == int(num))) or 0
+        if _ja:
+            _prox = int(db.scalar(select(func.max(ResultadoQuedaModel.numero_queda))) or 0) + 1
+            raise HTTPException(400, f'A queda {num} ja tem resultado lancado. Use a queda {_prox}.')
         queda = _get_queda(db, int(num))
         if not queda:
             queda = QuedaModel(numero_queda=int(num), status='aberta')
