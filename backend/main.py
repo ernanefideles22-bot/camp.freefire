@@ -612,7 +612,8 @@ def classificacao(db: Session = Depends(get_db)):
             'total_pontos': total_pontos,
             'melhor_colocacao': min(colocacoes) if colocacoes else None,
         })
-    resultado.sort(key=lambda x: (-x['total_premios'], -x['total_pontos'], -x['total_abates']))
+    # Liga de PONTOS: pontos > kills > premios (dinheiro nao define posicao no ranking)
+    resultado.sort(key=lambda x: (-x['total_pontos'], -x['total_abates'], -x['total_premios']))
     for i, item in enumerate(resultado, start=1):
         item['posicao'] = i
     return resultado
