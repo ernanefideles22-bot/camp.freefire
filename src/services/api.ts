@@ -203,6 +203,22 @@ export interface PremiacaoQueda {
   premios_colocacao: Record<string, number>; // { '1': R$, ..., '5': R$ }
 }
 
+// Lista de quem PAGOU a inscricao de uma queda (admin). Ordem de chegada.
+// Vem de GET /queda/{numero}/inscritos. Fonte de "quem vai jogar a proxima queda".
+export interface InscritoQueda {
+  jogador_id: number;
+  nick: string;
+  nome: string;
+  pago_em: string | null; // 'dd/mm HH:MM' ou null
+}
+
+export interface InscritosQueda {
+  numero_queda: number;
+  total: number;
+  arrecadado: number;
+  jogadores: InscritoQueda[];
+}
+
 // Estimativa LOCAL (fallback/offline) do premio de colocacao para uma queda com
 // `inscritos` jogadores. Espelha a formula do backend. NUNCA assume lobby cheio:
 // quem chama e obrigado a informar quantos jogadores cairam.
@@ -299,6 +315,12 @@ export const apiService = {
   async obterPremiacaoQueda(numero: number): Promise<PremiacaoQueda> {
     const res = await api.get(`/queda/${numero}/premiacao`);
     return res.data as PremiacaoQueda;
+  },
+
+  // Lista de quem PAGOU a inscricao da queda (somente admin).
+  async obterInscritosQueda(numero: number): Promise<InscritosQueda> {
+    const res = await api.get(`/queda/${numero}/inscritos`);
+    return res.data as InscritosQueda;
   },
 
   async obterInfoSala(numero: number): Promise<SalaData> {
