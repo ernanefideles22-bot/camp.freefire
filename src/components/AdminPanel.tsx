@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UserPlus, Calendar, Plus, Trash2, Send, Key, Lock, Check, X, Upload, AlertTriangle, RefreshCw, Landmark, Copy, QrCode } from 'lucide-react';
+import { UserPlus, Users, Calendar, Plus, Trash2, Send, Key, Lock, Check, X, Upload, AlertTriangle, RefreshCw, Landmark, Copy, QrCode } from 'lucide-react';
 import { apiService } from '../services/api';
-import type { Jogador, ResultadoQuedaInput, DepositoRequisicao, SaqueRequisicao, PremiacaoQueda } from '../services/api';
+import type { Jogador, ResultadoQuedaInput, DepositoRequisicao, SaqueRequisicao, PremiacaoQueda, InscritosQueda } from '../services/api';
 import { Spinner } from './Spinner';
 import { gerarPixCopiaECola, gerarQrDataUrl } from '../utils/pix';
 import { AdminAgentChat } from './AdminAgentChat';
@@ -30,6 +30,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   const [loadingCancelar, setLoadingCancelar] = useState<boolean>(false);
   const [numeroQueda, setNumeroQueda] = useState<string>('1');
   const [premiacao, setPremiacao] = useState<PremiacaoQueda | null>(null);
+  const [inscritos, setInscritos] = useState<InscritosQueda | null>(null);
   const [linhas, setLinhas] = useState<LinhaResultado[]>([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]);
   const [loadingResults, setLoadingResults] = useState<boolean>(false);
   const [loadingOcr, setLoadingOcr] = useState<boolean>(false);
@@ -106,10 +107,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     try { setPremiacao(await apiService.obterPremiacaoQueda(numero)); }
     catch { setPremiacao(null); }
   };
+  // Lista de quem PAGOU a inscricao da queda selecionada (quem vai jogar a proxima queda)
+  const fetchInscritos = async (numero: number) => {
+    if (isNaN(numero) || numero <= 0) { setInscritos(null); return; }
+    try { setInscritos(await apiService.obterInscritosQueda(numero)); }
+    catch { setInscritos(null); }
+  };
   useEffect(() => {
     const num = parseInt(numeroQueda);
     fetchPremiacao(num);
-    const t = setInterval(() => fetchPremiacao(parseInt(numeroQueda)), 15000);
+    fetchInscritos(num);
+    const t = setInterval(() => { const n = parseInt(numeroQueda); fetchPremiacao(n); fetchInscritos(n); }, 15000);
     return () => clearInterval(t);
   }, [numeroQueda]);
 
@@ -292,7 +300,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     try {
       await apiService.lancarResultadoQueda({ numero_queda: quedaNum, resultados: formattedResultados });
       onAddToast('success', 'Resultados Registrados', `Queda ${quedaNum} lançada com sucesso no campeonato! Saldos dos vencedores foram creditados.`);
-      setLinhas([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]); await fetchPlayers(); fetchPremiacao(quedaNum);
+      setLinhas([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]); await fetchPlayers(); fetchPremiacao(quedaNum); fetchInscritos(quedaNum);
     } catch (err: any) { onAddToast('error', 'Falha ao Enviar', err.message || 'Não foi possível registrar os resultados.'); }
     finally { setLoadingResults(false); }
   };
@@ -415,6 +423,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
                 {premiacao.inscritos === 0 && (<span className="text-[10px] font-bold text-amber-400 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />Sem inscritos nesta queda — prêmios serão R$ 0,00</span>)}
               </div>
             )}
+            {/* Jogadores pagantes da queda selecionada (quem vai jogar a proxima queda) */}
+            <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/30 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 flex items-center gap-1.5"><Users className="w-4 h-4 text-primary" />Jogadores pagantes{inscritos ? ` — Queda ${inscritos.numero_queda}` : ''}</span>
+                <div className="flex items-center gap-2">
+                  {inscritos && (<span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full whitespace-nowrap">{inscritos.total} {inscritos.total === 1 ? 'inscrito' : 'inscritos'} · R$ {inscritos.arrecadado.toFixed(2).replace('.', ',')}</span>)}
+                  <button type="button" onClick={() => fetchInscritos(parseInt(numeroQueda))} title="Atualizar lista" className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"><RefreshCw className="w-3.5 h-3.5" /></button>
+                </div>
+              </div>
+              {(!inscritos || inscritos.total === 0) ? (
+                <div className="py-6 text-center text-xs text-zinc-500 flex flex-col items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-amber-400" />Nenhum jogador pagou a inscrição da queda {numeroQueda} ainda.</div>
+              ) : (
+                <div className="max-h-64 overflow-y-auto pr-1 space-y-1.5">
+                  {inscritos.jogadores.map((j, i) => (
+                    <div key={j.jogador_id} className="flex items-center gap-3 p-2.5 rounded-lg bg-zinc-950/50 border border-zinc-800">
+                      <span className="text-[10px] font-bold text-zinc-600 w-5 text-center shrink-0">#{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold text-white truncate">{j.nick}</div>
+                        <div className="text-[11px] text-zinc-500 truncate">{j.nome}</div>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 whitespace-nowrap shrink-0"><Check className="w-3 h-3 text-emerald-400" />Pagou{j.pago_em ? ` · ${j.pago_em}` : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div className="p-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5"><Upload className="w-4 h-4 text-primary" />Carregar Print de Placar (IA OCR Gemini)</span>
