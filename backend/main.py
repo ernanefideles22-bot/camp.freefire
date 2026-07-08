@@ -1570,3 +1570,389 @@ def saque_disponivel(jogador: JogadorModel = Depends(obter_usuario_atual),
     return {'disponivel': disp, 'em_risco_med': em_risco,
             'libera_em': lib.strftime('%d/%m/%Y') if lib else None,
             'saldo_sacavel': jogador.saldo_sacavel}
+
+
+# ====================== QUEDA BONUS (evento promocional, melhor de 3) ======================
+from models import (EventoBonusModel, InscricaoBonusModel,
+                    ResultadoBonusModel, PagamentoBonusModel)
+from models import utcnow as _utcnow_bonus
+
+PREMIO_BONUS_TOP5 = {1: 50.0, 2: 20.0, 3: 15.0, 4: 10.0, 5: 5.0}
+PREMIO_BONUS_TOP5_LIST = [PREMIO_BONUS_TOP5[i] for i in (1, 2, 3, 4, 5)]
+MIN_JOGADORES_BONUS = 20
+PREMIO_TOTAL_BONUS = 100.0
+LIMITE_BONUS = 48  # cap por sala (Free Fire)
+
+
+class CriarBonusBody(BaseModel):
+    nome: str
+
+
+class InscreverBonusBody(BaseModel):
+    device_hash: Optional[str] = None
+
+
+class BonusSalaBody(BaseModel):
+    ordem: int
+    sala_id: str
+    sala_senha: str
+    horario: Optional[str] = None
+
+
+class BonusResultadoItem(BaseModel):
+    jogador_id: int
+    colocacao: int
+    abates: int = 0
+
+
+class BonusResultadoBody(BaseModel):
+    ordem: int
+    resultados: List[BonusResultadoItem]
+
+
+def _evento_bonus_atual(db: Session):
+    """Ultimo evento que ainda nao foi finalizado (pago/cancelado)."""
+    return db.scalar(select(EventoBonusModel)
+                     .where(EventoBonusModel.status.notin_(['pago', 'cancelado']))
+                     .order_by(EventoBonusModel.id.desc()))
+
+
+def _contar_inscritos_bonus(db: Session, evento_id: int) -> int:
+    return db.scalar(select(func.count()).select_from(InscricaoBonusModel)
+                     .where(InscricaoBonusModel.evento_id == evento_id)) or 0
+
+
+def _placar_bonus(db: Session, evento_id: int) -> list:
+    """Classificacao do evento: soma dos pontos LBFF das quedas jogadas.
+    Elegivel = jogou as 3. Ordena elegiveis primeiro por pontos > kills > melhor colocacao."""
+    inscritos = db.scalars(select(InscricaoBonusModel)
+                           .where(InscricaoBonusModel.evento_id == evento_id)).all()
+    linhas = []
+    for ins in inscritos:
+        jog = db.get(JogadorModel, ins.jogador_id)
+        if not jog:
+            continue
+        res = db.scalars(select(ResultadoBonusModel)
+                         .where(ResultadoBonusModel.evento_id == evento_id,
+                                ResultadoBonusModel.jogador_id == ins.jogador_id)).all()
+        ordens = {r.ordem for r in res}
+        pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in res)
+        kills = sum(r.abates for r in res)
+        melhor = min((r.colocacao for r in res), default=None)
+        elegivel = {1, 2, 3}.issubset(ordens)
+        linhas.append({'jogador_id': jog.id, 'nick': jog.nick, 'nome': jog.nome,
+                       'pontos': pontos, 'kills': kills, 'quedas_jogadas': len(ordens),
+                       'melhor_colocacao': melhor, 'elegivel': elegivel})
+    linhas.sort(key=lambda x: (0 if x['elegivel'] else 1, -x['pontos'], -x['kills'],
+                               x['melhor_colocacao'] if x['melhor_colocacao'] else 999))
+    for i, l in enumerate(linhas, start=1):
+        l['posicao'] = i
+    return linhas
+
+
+def _fechar_evento_bonus_se_completo(db: Session, evento_id: int):
+    """Se nao ha mais pagamento pendente, marca o evento como pago."""
+    db.flush()  # sessao usa autoflush=False: garante que status recem-alterado seja contado
+    pend = db.scalar(select(func.count()).select_from(PagamentoBonusModel)
+                     .where(PagamentoBonusModel.evento_id == evento_id,
+                            PagamentoBonusModel.status == 'pendente')) or 0
+    if pend == 0:
+        ev = db.get(EventoBonusModel, evento_id)
+        if ev and ev.status == 'aguardando_revisao':
+            ev.status = 'pago'
+
+
+def _serializar_evento_bonus(db: Session, ev: EventoBonusModel) -> dict:
+    return {'id': ev.id, 'nome': ev.nome, 'status': ev.status,
+            'min_jogadores': ev.min_jogadores, 'premio_total': ev.premio_total,
+            'inscritos': _contar_inscritos_bonus(db, ev.id),
+            'premio_top5': PREMIO_BONUS_TOP5_LIST}
+
+
+# ---------- Publico / jogador ----------
+@app.get('/bonus/atual')
+def bonus_atual(db: Session = Depends(get_db)):
+    ev = _evento_bonus_atual(db)
+    return {'evento': _serializar_evento_bonus(db, ev) if ev else None}
+
+
+@app.get('/bonus/{evento_id}/placar')
+def bonus_placar(evento_id: int, db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    return {'evento_id': evento_id, 'status': ev.status,
+            'premio_top5': PREMIO_BONUS_TOP5_LIST,
+            'jogadores': _placar_bonus(db, evento_id)}
+
+
+@app.post('/bonus/{evento_id}/inscrever')
+def bonus_inscrever(evento_id: int, body: InscreverBonusBody, request: Request,
+                    jogador: JogadorModel = Depends(obter_usuario_atual),
+                    db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    if ev.status != 'inscricao':
+        raise HTTPException(400, 'As inscricoes deste evento estao fechadas.')
+    # anti-farm 1: exige CPF (o mesmo que trava o saque)
+    if not (jogador.cpf and jogador.cpf.strip()):
+        raise HTTPException(400, 'Para entrar no evento bonus voce precisa ter CPF cadastrado '
+                                 '(o mesmo usado no saque).')
+    if db.scalar(select(InscricaoBonusModel)
+                 .where(InscricaoBonusModel.evento_id == evento_id,
+                        InscricaoBonusModel.jogador_id == jogador.id)):
+        raise HTTPException(400, 'Voce ja esta inscrito neste evento.')
+    ip = gates.extrair_ip(request)
+    dev = (body.device_hash or '').strip() or None
+    # anti-farm: CPF e trava DURA (1 identidade = 1 entrada). IP/dispositivo NAO bloqueiam
+    # (CGNAT/rede compartilhada gera falso-positivo); ficam gravados e viram sinal de
+    # colusao na revisao manual do top 5 (ver /admin/bonus/{id}/pagamentos).
+    if db.scalar(select(InscricaoBonusModel).where(InscricaoBonusModel.evento_id == evento_id,
+                                                   InscricaoBonusModel.cpf == jogador.cpf)):
+        raise HTTPException(400, 'Ja existe uma inscricao com este CPF neste evento.')
+    if _contar_inscritos_bonus(db, evento_id) >= LIMITE_BONUS:
+        raise HTTPException(400, f'Evento lotado ({LIMITE_BONUS} jogadores).')
+    db.add(InscricaoBonusModel(evento_id=evento_id, jogador_id=jogador.id,
+                               cpf=jogador.cpf, registro_ip=ip, device_hash=dev))
+    db.commit()
+    return {'message': 'Inscricao confirmada no evento bonus! Entrada gratuita.'}
+
+
+@app.get('/bonus/{evento_id}/minha-inscricao')
+def bonus_minha_inscricao(evento_id: int, jogador: JogadorModel = Depends(obter_usuario_atual),
+                          db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    inscrito = db.scalar(select(InscricaoBonusModel)
+                         .where(InscricaoBonusModel.evento_id == evento_id,
+                                InscricaoBonusModel.jogador_id == jogador.id)) is not None
+    salas = []
+    if inscrito:
+        for o in (1, 2, 3):
+            sid = getattr(ev, f'sala{o}_id')
+            if sid:
+                salas.append({'ordem': o, 'sala_id': sid,
+                              'senha': getattr(ev, f'sala{o}_senha'),
+                              'horario': getattr(ev, f'sala{o}_horario')})
+    return {'inscrito': inscrito, 'salas': salas}
+
+
+# ---------- Admin ----------
+@app.post('/admin/bonus/criar')
+def bonus_criar(body: CriarBonusBody, _admin: JogadorModel = Depends(require_admin),
+                db: Session = Depends(get_db)):
+    ativo = _evento_bonus_atual(db)
+    if ativo:
+        raise HTTPException(400, f'Ja existe um evento bonus ativo (#{ativo.id}, {ativo.status}). '
+                                 'Finalize ou cancele antes de criar outro.')
+    ev = EventoBonusModel(nome=(body.nome or '').strip() or 'Queda Bonus', status='inscricao',
+                          min_jogadores=MIN_JOGADORES_BONUS, premio_total=PREMIO_TOTAL_BONUS)
+    db.add(ev)
+    db.commit()
+    db.refresh(ev)
+    return _serializar_evento_bonus(db, ev)
+
+
+@app.post('/admin/bonus/{evento_id}/iniciar')
+def bonus_iniciar(evento_id: int, _admin: JogadorModel = Depends(require_admin),
+                  db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    if ev.status != 'inscricao':
+        raise HTTPException(400, 'Evento ja iniciado ou finalizado.')
+    total = _contar_inscritos_bonus(db, evento_id)
+    if total < ev.min_jogadores:
+        raise HTTPException(400, f'Faltam inscritos: {total}/{ev.min_jogadores}. '
+                                 f'O evento so inicia com no minimo {ev.min_jogadores} jogadores.')
+    ev.status = 'em_andamento'
+    db.commit()
+    return {'message': f'Evento iniciado com {total} jogadores. Inscricoes fechadas.', 'total': total}
+
+
+@app.post('/admin/bonus/{evento_id}/sala')
+def bonus_set_sala(evento_id: int, body: BonusSalaBody,
+                   _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    if body.ordem not in (1, 2, 3):
+        raise HTTPException(400, 'ordem deve ser 1, 2 ou 3.')
+    setattr(ev, f'sala{body.ordem}_id', (body.sala_id or '').strip())
+    setattr(ev, f'sala{body.ordem}_senha', (body.sala_senha or '').strip())
+    setattr(ev, f'sala{body.ordem}_horario', (body.horario or '').strip() or None)
+    db.commit()
+    return {'message': f'Sala da queda {body.ordem} salva.'}
+
+
+@app.post('/admin/bonus/{evento_id}/resultado')
+def bonus_lancar_resultado(evento_id: int, body: BonusResultadoBody,
+                           _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    if ev.status != 'em_andamento':
+        raise HTTPException(400, 'Inicie o evento antes de lancar resultados.')
+    if body.ordem not in (1, 2, 3):
+        raise HTTPException(400, 'ordem deve ser 1, 2 ou 3.')
+    existentes = db.scalars(select(ResultadoBonusModel)
+                            .where(ResultadoBonusModel.evento_id == evento_id,
+                                   ResultadoBonusModel.ordem == body.ordem)).all()
+    coloc_usadas = {r.colocacao for r in existentes}
+    jog_com_result = {r.jogador_id for r in existentes}
+    vistos_c, vistos_j = set(), set()
+    for r in body.resultados:
+        if not 1 <= r.colocacao <= MAX_COLOCACAO:
+            raise HTTPException(400, f'Colocacao invalida ({r.colocacao}): 1 a {MAX_COLOCACAO}.')
+        if not 0 <= r.abates <= MAX_ABATES:
+            raise HTTPException(400, f'Abates invalidos ({r.abates}): 0 a {MAX_ABATES}.')
+        if not db.scalar(select(InscricaoBonusModel)
+                         .where(InscricaoBonusModel.evento_id == evento_id,
+                                InscricaoBonusModel.jogador_id == r.jogador_id)):
+            raise HTTPException(400, f'Jogador {r.jogador_id} nao esta inscrito no evento.')
+        if r.jogador_id in vistos_j or r.jogador_id in jog_com_result:
+            raise HTTPException(400, f'Jogador {r.jogador_id} ja tem resultado na queda {body.ordem}.')
+        if r.colocacao in vistos_c or r.colocacao in coloc_usadas:
+            raise HTTPException(400, f'Colocacao {r.colocacao} duplicada na queda {body.ordem}.')
+        vistos_j.add(r.jogador_id)
+        vistos_c.add(r.colocacao)
+    for r in body.resultados:
+        db.add(ResultadoBonusModel(evento_id=evento_id, ordem=body.ordem,
+                                   jogador_id=r.jogador_id, colocacao=r.colocacao, abates=r.abates))
+    db.commit()
+    return {'message': f'Resultados da queda {body.ordem} salvos ({len(body.resultados)} jogadores).'}
+
+
+@app.post('/admin/bonus/{evento_id}/apurar')
+def bonus_apurar(evento_id: int, _admin: JogadorModel = Depends(require_admin),
+                 db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    if ev.status != 'em_andamento':
+        raise HTTPException(400, 'Evento nao esta em andamento.')
+    ordens = set(db.scalars(select(ResultadoBonusModel.ordem)
+                            .where(ResultadoBonusModel.evento_id == evento_id)).all())
+    if not {1, 2, 3}.issubset(ordens):
+        faltam = sorted({1, 2, 3} - ordens)
+        raise HTTPException(400, f'Faltam resultados das quedas {faltam}. Lance as 3 antes de apurar.')
+    if db.scalar(select(PagamentoBonusModel).where(PagamentoBonusModel.evento_id == evento_id)):
+        raise HTTPException(400, 'Evento ja apurado.')
+    placar = _placar_bonus(db, evento_id)
+    elegiveis = [l for l in placar if l['elegivel']]
+    top5 = elegiveis[:5]
+    criados = []
+    for idx, l in enumerate(top5, start=1):
+        valor = PREMIO_BONUS_TOP5.get(idx, 0.0)
+        if valor <= 0:
+            continue
+        db.add(PagamentoBonusModel(evento_id=evento_id, jogador_id=l['jogador_id'],
+                                   colocacao_final=idx, pontos_total=l['pontos'],
+                                   valor=valor, status='pendente'))
+        criados.append({'colocacao': idx, 'jogador_id': l['jogador_id'], 'nick': l['nick'],
+                        'pontos': l['pontos'], 'valor': valor})
+    ev.status = 'aguardando_revisao'
+    db.commit()
+    return {'message': f'Apuracao concluida. {len(criados)} premios gerados (retidos p/ revisao).',
+            'elegiveis': len(elegiveis), 'top5': criados}
+
+
+@app.post('/admin/bonus/{evento_id}/cancelar')
+def bonus_cancelar(evento_id: int, _admin: JogadorModel = Depends(require_admin),
+                   db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    if ev.status in ('pago', 'cancelado'):
+        raise HTTPException(400, 'Evento ja finalizado.')
+    if db.scalar(select(PagamentoBonusModel)
+                 .where(PagamentoBonusModel.evento_id == evento_id,
+                        PagamentoBonusModel.status == 'liberado')):
+        raise HTTPException(400, 'Nao da pra cancelar: ja ha premio liberado neste evento.')
+    ev.status = 'cancelado'
+    db.commit()
+    return {'message': f'Evento #{evento_id} cancelado. Entrada era gratis, nada a reembolsar.'}
+
+
+@app.get('/admin/bonus/{evento_id}/inscritos')
+def bonus_inscritos(evento_id: int, _admin: JogadorModel = Depends(require_admin),
+                    db: Session = Depends(get_db)):
+    inscritos = db.scalars(select(InscricaoBonusModel)
+                           .where(InscricaoBonusModel.evento_id == evento_id)
+                           .order_by(InscricaoBonusModel.criado_em)).all()
+    out = []
+    for i in inscritos:
+        j = db.get(JogadorModel, i.jogador_id)
+        if not j:
+            continue
+        out.append({'jogador_id': j.id, 'nick': j.nick, 'nome': j.nome,
+                    'entrou_em': i.criado_em.strftime('%d/%m %H:%M') if i.criado_em else None})
+    return {'evento_id': evento_id, 'total': len(out), 'jogadores': out}
+
+
+@app.get('/admin/bonus/{evento_id}/pagamentos')
+def bonus_pagamentos(evento_id: int, _admin: JogadorModel = Depends(require_admin),
+                     db: Session = Depends(get_db)):
+    pgs = db.scalars(select(PagamentoBonusModel)
+                     .where(PagamentoBonusModel.evento_id == evento_id)
+                     .order_by(PagamentoBonusModel.colocacao_final)).all()
+    # Sinais de colusao: IP/dispositivo compartilhados entre inscritos do evento.
+    inscricoes = db.scalars(select(InscricaoBonusModel)
+                            .where(InscricaoBonusModel.evento_id == evento_id)).all()
+    ip_count, dev_count, by_jog = {}, {}, {}
+    for ins in inscricoes:
+        by_jog[ins.jogador_id] = ins
+        if ins.registro_ip:
+            ip_count[ins.registro_ip] = ip_count.get(ins.registro_ip, 0) + 1
+        if ins.device_hash:
+            dev_count[ins.device_hash] = dev_count.get(ins.device_hash, 0) + 1
+    out = []
+    for p in pgs:
+        j = db.get(JogadorModel, p.jogador_id)
+        ins = by_jog.get(p.jogador_id)
+        ip_share = bool(ins and ins.registro_ip and ip_count.get(ins.registro_ip, 0) > 1)
+        dev_share = bool(ins and ins.device_hash and dev_count.get(ins.device_hash, 0) > 1)
+        out.append({'id': p.id, 'jogador_id': p.jogador_id,
+                    'nick': j.nick if j else None, 'nome': j.nome if j else None,
+                    'colocacao': p.colocacao_final, 'pontos': p.pontos_total,
+                    'valor': p.valor, 'status': p.status,
+                    'ip_compartilhado': ip_share, 'device_compartilhado': dev_share})
+    return {'evento_id': evento_id, 'pagamentos': out}
+
+
+@app.post('/admin/bonus/pagamento/{pagamento_id}/liberar')
+def bonus_liberar_pagamento(pagamento_id: int, _admin: JogadorModel = Depends(require_admin),
+                            db: Session = Depends(get_db)):
+    pg = db.get(PagamentoBonusModel, pagamento_id)
+    if not pg:
+        raise HTTPException(404, 'Pagamento nao encontrado')
+    if pg.status != 'pendente':
+        raise HTTPException(400, 'Pagamento ja processado.')
+    jog = _lock_jogador(db, pg.jogador_id)
+    if not jog:
+        raise HTTPException(404, 'Jogador nao encontrado')
+    # Promo: credita direto como sacavel (o saque ja exige CPF batendo com a chave Pix).
+    registrar_transacao(db, jog, tipo='premio_bonus', delta_saldo=pg.valor,
+                        delta_sacavel=pg.valor, ref=f'bonus:{pg.evento_id}:{pg.colocacao_final}')
+    pg.status = 'liberado'
+    pg.liberado_em = _utcnow_bonus()
+    _fechar_evento_bonus_se_completo(db, pg.evento_id)
+    db.commit()
+    return {'message': f'Premio de R$ {pg.valor:.2f} liberado para {jog.nick}.',
+            'premio_liberado': pg.valor}
+
+
+@app.post('/admin/bonus/pagamento/{pagamento_id}/rejeitar')
+def bonus_rejeitar_pagamento(pagamento_id: int, _admin: JogadorModel = Depends(require_admin),
+                             db: Session = Depends(get_db)):
+    pg = db.get(PagamentoBonusModel, pagamento_id)
+    if not pg:
+        raise HTTPException(404, 'Pagamento nao encontrado')
+    if pg.status != 'pendente':
+        raise HTTPException(400, 'Pagamento ja processado.')
+    pg.status = 'rejeitado'
+    _fechar_evento_bonus_se_completo(db, pg.evento_id)
+    db.commit()
+    return {'message': 'Premio rejeitado (nao pago).'}

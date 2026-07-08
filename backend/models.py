@@ -187,3 +187,67 @@ class AppConfigModel(Base):
     __tablename__ = 'app_config'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     ranking_desde_queda: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+# ====================== QUEDA BONUS (evento promocional, melhor de 3) ======================
+# Tudo isolado do fluxo de dinheiro (pote/rake). NAO usa InscricaoModel nem
+# ResultadoQuedaModel -> logo NAO entra no ranking semanal nem na premiacao proporcional.
+class EventoBonusModel(Base):
+    """Serie de 3 quedas, entrada gratis, premio fixo da casa ao top 5."""
+    __tablename__ = 'eventos_bonus'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    nome: Mapped[str] = mapped_column(String, nullable=False)
+    # inscricao -> em_andamento -> aguardando_revisao -> pago | cancelado
+    status: Mapped[str] = mapped_column(String, default='inscricao', index=True)
+    min_jogadores: Mapped[int] = mapped_column(Integer, default=20)
+    premio_total: Mapped[float] = mapped_column(Float, default=100.0)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # Credenciais de sala de cada uma das 3 quedas (preenchidas pelo admin)
+    sala1_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala1_senha: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala1_horario: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala2_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala2_senha: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala2_horario: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala3_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala3_senha: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala3_horario: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class InscricaoBonusModel(Base):
+    """Inscricao GRATIS num evento bonus. Guarda CPF/IP/device para anti-farm."""
+    __tablename__ = 'inscricoes_bonus'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    evento_id: Mapped[int] = mapped_column(ForeignKey('eventos_bonus.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    cpf: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    registro_ip: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    device_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ResultadoBonusModel(Base):
+    """Resultado de UMA das 3 quedas do evento (ordem 1..3). Fora do ranking semanal."""
+    __tablename__ = 'resultados_bonus'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    evento_id: Mapped[int] = mapped_column(ForeignKey('eventos_bonus.id'), nullable=False, index=True)
+    ordem: Mapped[int] = mapped_column(Integer, nullable=False)  # 1, 2 ou 3
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    colocacao: Mapped[int] = mapped_column(Integer, nullable=False)
+    abates: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PagamentoBonusModel(Base):
+    """Premio apurado do top 5. Fica RETIDO (pendente) ate o admin liberar -> so ai
+    o dinheiro entra no ledger e vira sacavel."""
+    __tablename__ = 'pagamentos_bonus'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    evento_id: Mapped[int] = mapped_column(ForeignKey('eventos_bonus.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    colocacao_final: Mapped[int] = mapped_column(Integer, nullable=False)
+    pontos_total: Mapped[int] = mapped_column(Integer, default=0)
+    valor: Mapped[float] = mapped_column(Float, nullable=False)
+    status: Mapped[str] = mapped_column(String, default='pendente', index=True)  # pendente|liberado|rejeitado
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    liberado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
