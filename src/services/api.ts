@@ -234,6 +234,55 @@ export function premioPorColocacao(colocacao: number, inscritos: number): number
 }
 export const getPremioPorColocacao = premioPorColocacao;
 
+// ====================== QUEDA BONUS ======================
+export interface EventoBonus {
+  id: number;
+  nome: string;
+  status: 'inscricao' | 'em_andamento' | 'aguardando_revisao' | 'pago' | 'cancelado';
+  min_jogadores: number;
+  premio_total: number;
+  inscritos: number;
+  premio_top5: number[];
+}
+
+export interface PlacarBonusItem {
+  jogador_id: number;
+  nick: string;
+  nome: string;
+  pontos: number;
+  kills: number;
+  quedas_jogadas: number;
+  melhor_colocacao: number | null;
+  elegivel: boolean;
+  posicao: number;
+}
+
+export interface PlacarBonus {
+  evento_id: number;
+  status: string;
+  premio_top5: number[];
+  jogadores: PlacarBonusItem[];
+}
+
+export interface BonusSala { ordem: number; sala_id: string; senha: string; horario?: string | null; }
+export interface MinhaInscricaoBonus { inscrito: boolean; salas: BonusSala[]; }
+export interface BonusInscrito { jogador_id: number; nick: string; nome: string; entrou_em: string | null; }
+
+export interface PagamentoBonus {
+  id: number;
+  jogador_id: number;
+  nick: string | null;
+  nome: string | null;
+  colocacao: number;
+  pontos: number;
+  valor: number;
+  status: string;
+  ip_compartilhado: boolean;
+  device_compartilhado: boolean;
+}
+
+export interface BonusResultadoInput { jogador_id: number; colocacao: number; abates: number; }
+
 // ====================== API SERVICE ======================
 export const apiService = {
   // AUTH
@@ -321,6 +370,64 @@ export const apiService = {
   async obterInscritosQueda(numero: number): Promise<InscritosQueda> {
     const res = await api.get(`/queda/${numero}/inscritos`);
     return res.data as InscritosQueda;
+  },
+
+  // ---------- QUEDA BONUS ----------
+  async obterBonusAtual(): Promise<EventoBonus | null> {
+    const res = await api.get('/bonus/atual');
+    return (res.data?.evento ?? null) as EventoBonus | null;
+  },
+  async obterPlacarBonus(eventoId: number): Promise<PlacarBonus> {
+    const res = await api.get(`/bonus/${eventoId}/placar`);
+    return res.data as PlacarBonus;
+  },
+  async inscreverBonus(eventoId: number, deviceHash: string): Promise<any> {
+    const res = await api.post(`/bonus/${eventoId}/inscrever`, { device_hash: deviceHash });
+    return res.data;
+  },
+  async obterMinhaInscricaoBonus(eventoId: number): Promise<MinhaInscricaoBonus> {
+    const res = await api.get(`/bonus/${eventoId}/minha-inscricao`);
+    return res.data as MinhaInscricaoBonus;
+  },
+  async criarBonus(nome: string): Promise<EventoBonus> {
+    const res = await api.post('/admin/bonus/criar', { nome });
+    return res.data as EventoBonus;
+  },
+  async iniciarBonus(eventoId: number): Promise<any> {
+    const res = await api.post(`/admin/bonus/${eventoId}/iniciar`);
+    return res.data;
+  },
+  async definirSalaBonus(eventoId: number, ordem: number, salaId: string, salaSenha: string, horario?: string): Promise<any> {
+    const res = await api.post(`/admin/bonus/${eventoId}/sala`, { ordem, sala_id: salaId, sala_senha: salaSenha, horario });
+    return res.data;
+  },
+  async lancarResultadoBonus(eventoId: number, ordem: number, resultados: BonusResultadoInput[]): Promise<any> {
+    const res = await api.post(`/admin/bonus/${eventoId}/resultado`, { ordem, resultados });
+    return res.data;
+  },
+  async apurarBonus(eventoId: number): Promise<any> {
+    const res = await api.post(`/admin/bonus/${eventoId}/apurar`);
+    return res.data;
+  },
+  async cancelarBonus(eventoId: number): Promise<any> {
+    const res = await api.post(`/admin/bonus/${eventoId}/cancelar`);
+    return res.data;
+  },
+  async listarInscritosBonus(eventoId: number): Promise<{ evento_id: number; total: number; jogadores: BonusInscrito[] }> {
+    const res = await api.get(`/admin/bonus/${eventoId}/inscritos`);
+    return res.data;
+  },
+  async listarPagamentosBonus(eventoId: number): Promise<{ evento_id: number; pagamentos: PagamentoBonus[] }> {
+    const res = await api.get(`/admin/bonus/${eventoId}/pagamentos`);
+    return res.data;
+  },
+  async liberarPagamentoBonus(pagamentoId: number): Promise<any> {
+    const res = await api.post(`/admin/bonus/pagamento/${pagamentoId}/liberar`);
+    return res.data;
+  },
+  async rejeitarPagamentoBonus(pagamentoId: number): Promise<any> {
+    const res = await api.post(`/admin/bonus/pagamento/${pagamentoId}/rejeitar`);
+    return res.data;
   },
 
   async obterInfoSala(numero: number): Promise<SalaData> {
