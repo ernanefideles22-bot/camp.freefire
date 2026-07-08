@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { Trophy, User, Sliders, Shield, Award, LogOut } from 'lucide-react';
+import { Trophy, User, Gift, Sliders, Shield, Award, LogOut } from 'lucide-react';
 import { Leaderboard } from './components/Leaderboard';
 import { PlayerPortal } from './components/PlayerPortal';
 import { AdminPanel } from './components/AdminPanel';
+import { QuedaBonus } from './components/QuedaBonus';
 import { AuthPortal } from './components/AuthPortal';
 import { ToastContainer } from './components/Toast';
 import type { ToastMessage, ToastType } from './components/Toast';
 import type { Jogador } from './services/api';
 
-type TabType = 'leaderboard' | 'player_portal' | 'admin';
+type TabType = 'leaderboard' | 'player_portal' | 'admin' | 'bonus';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<Jogador | null>(() => {
@@ -72,6 +73,10 @@ function App() {
               <User className="w-4 h-4" />
               Portal do Jogador
             </button>
+            <button onClick={() => setActiveTab('bonus')} className={tabClasses('bonus')}>
+              <Gift className="w-4 h-4" />
+              Queda Bônus
+            </button>
             {currentUser?.is_admin && (
             <button onClick={() => setActiveTab('admin')} className={tabClasses('admin')}>
               <Sliders className="w-4 h-4" />
@@ -114,6 +119,11 @@ function App() {
           <User className="w-5 h-5" />
           <span className="text-[10px]">Portal</span>
         </button>
+        <button onClick={() => setActiveTab('bonus')}
+          className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'bonus' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}>
+          <Gift className="w-5 h-5" />
+          <span className="text-[10px]">Bônus</span>
+        </button>
         {currentUser?.is_admin && (
         <button onClick={() => setActiveTab('admin')}
           className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'admin' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}>
@@ -128,6 +138,10 @@ function App() {
         <div className="animate-in fade-in slide-in-from-bottom-3 duration-300">
           {activeTab === 'leaderboard' && (
             <Leaderboard onAddToast={handleAddToast} />
+          )}
+
+          {activeTab === 'bonus' && (
+            <QuedaBonus currentUser={currentUser} onAddToast={handleAddToast} />
           )}
 
           {activeTab === 'player_portal' && (
