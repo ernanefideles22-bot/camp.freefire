@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Gift, Trophy, Users, Play, Check, X, RefreshCw, AlertTriangle, Plus, Trash2, Send, Ban } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Gift, Trophy, Users, Play, Check, X, RefreshCw, AlertTriangle, Plus, Trash2, Send, Ban, Upload } from 'lucide-react';
 import { apiService } from '../services/api';
 import type { EventoBonus, BonusInscrito, PlacarBonusItem, PagamentoBonus, BonusResultadoInput } from '../services/api';
 import { Spinner } from './Spinner';
@@ -8,7 +8,7 @@ interface AdminBonusProps {
   onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void;
 }
 interface SalaForm { sala_id: string; senha: string; horario: string; }
-interface LinhaBonus { tempId: string; jogadorId: string; colocacao: string; abates: string; }
+interface LinhaBonus { tempId: string; jogadorId: string; colocacao: string; abates: string; jogadorDetectadoNick?: string; }
 
 const brl = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
 
@@ -27,6 +27,8 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
     3: { sala_id: '', senha: '', horario: '' },
   });
   const [linhas, setLinhas] = useState<LinhaBonus[]>([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]);
+  const [loadingOcr, setLoadingOcr] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -67,15 +69,68 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
   const rmLinha = (id: string) => setLinhas(linhas.length > 1 ? linhas.filter(l => l.tempId !== id) : linhas);
   const updLinha = (id: string, f: keyof LinhaBonus, v: string) => setLinhas(linhas.map(l => l.tempId === id ? { ...l, [f]: v } : l));
 
+  const handleOcrUpload = async (file: File) => {
+    if (!evento) return;
+    setLoadingOcr(true);
+    try {
+      const data = await apiService.processarOcrResultado(ordemSel, file);
+      if (data && data.resultados && data.resultados.length > 0) {
+        const ocrLinhas: LinhaBonus[] = data.resultados.map((res: any, idx: number) => {
+          const jId = res.jogador_id;
+          const isEnrolled = inscritos.some(i => i.jogador_id === jId);
+          return {
+            tempId: String(idx + 1),
+            jogadorId: (jId && isEnrolled) ? String(jId) : '',
+            colocacao: String(res.colocacao),
+            abates: String(res.abates),
+            jogadorDetectadoNick: res.jogador_nick,
+          };
+        });
+        setLinhas(ocrLinhas);
+        onAddToast('success', 'Print Lançado via OCR', `IA identificou ${data.resultados.length} jogadores do placar. Verifique os dados e salve.`);
+      } else {
+        onAddToast('warning', 'OCR Vazio', 'Não foi possível extrair nenhum competidor do print. Tente outra imagem.');
+      }
+    } catch (err: any) {
+      onAddToast('error', 'Erro no OCR', err.message || 'Erro ao processar imagem. Verifique a chave de IA no backend.');
+    } finally {
+      setLoadingOcr(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleLancar = () => {
     if (!evento) return;
     const resultados: BonusResultadoInput[] = [];
-    for (const l of linhas) {
+    const selectedPlayers = new Set<number>();
+    const selectedPlacements = new Set<number>();
+
+    for (const [idx, l] of linhas.entries()) {
       const jid = parseInt(l.jogadorId), col = parseInt(l.colocacao), ab = parseInt(l.abates);
-      if (isNaN(jid)) { onAddToast('warning', 'Jogador pendente', 'Selecione o jogador em todas as linhas.'); return; }
-      if (isNaN(col) || col < 1) { onAddToast('warning', 'Colocação inválida', 'Informe a colocação em todas as linhas.'); return; }
+      if (isNaN(jid)) { onAddToast('warning', 'Jogador pendente', `Selecione o jogador para a linha #${idx + 1}.`); return; }
+      if (isNaN(col) || col < 1 || col > 48) { onAddToast('warning', 'Colocação inválida', `A colocação na linha #${idx + 1} deve ser entre 1 e 48.`); return; }
+      
+      if (selectedPlayers.has(jid)) {
+        const playerNick = inscritos.find(p => p.jogador_id === jid)?.nick || 'jogador';
+        onAddToast('warning', 'Jogador Duplicado', `O jogador "${playerNick}" está duplicado na mesma queda.`);
+        return;
+      }
+      if (selectedPlacements.has(col)) {
+        onAddToast('warning', 'Colocação Duplicada', `A colocação ${col}º está duplicada na mesma queda.`);
+        return;
+      }
+      
+      const isEnrolled = inscritos.some(i => i.jogador_id === jid);
+      if (!isEnrolled) {
+        onAddToast('warning', 'Não Inscrito', `O jogador na linha #${idx + 1} não está inscrito neste evento bônus.`);
+        return;
+      }
+
+      selectedPlayers.add(jid);
+      selectedPlacements.add(col);
       resultados.push({ jogador_id: jid, colocacao: col, abates: isNaN(ab) ? 0 : ab });
     }
+
     guard(async () => {
       const r = await apiService.lancarResultadoBonus(evento.id, ordemSel, resultados);
       setLinhas([{ tempId: '1', jogadorId: '', colocacao: '', abates: '0' }]);
@@ -177,17 +232,37 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
                     ))}
                   </div>
                 </div>
+
+                <div className="p-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5"><Upload className="w-4 h-4 text-primary" />Carregar Print de Placar (IA OCR)</span>
+                    <span className="text-[9px] text-zinc-500 bg-zinc-900 border border-zinc-800 px-1.5 py-0.5 rounded">Utiliza a IA do backend</span>
+                  </div>
+                  <div className="border border-dashed border-zinc-800 hover:border-primary/50 rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer bg-zinc-950/40 hover:bg-zinc-950/80 transition-all group" onClick={() => fileInputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }} onDrop={async (e) => { e.preventDefault(); e.stopPropagation(); const files = e.dataTransfer.files; if (files && files.length > 0) await handleOcrUpload(files[0]); }}>
+                    <input type="file" ref={fileInputRef} onChange={async (e) => { const files = e.target.files; if (files && files.length > 0) await handleOcrUpload(files[0]); }} accept="image/*" className="hidden" />
+                    {loadingOcr ? (<div className="space-y-2 py-2"><Spinner size="md" className="mx-auto text-primary" /><p className="text-xs font-bold text-primary animate-pulse">OCR analisando placar da queda bônus...</p><p className="text-[10px] text-zinc-500">Mapeando nicks com os inscritos do evento</p></div>) : (<div className="space-y-1.5"><Upload className="w-8 h-8 text-zinc-600 group-hover:text-primary mx-auto transition-colors" /><p className="text-xs text-zinc-300"><span className="font-bold text-primary">Arraste o print da queda bônus</span> ou clique para escolher</p><p className="text-[10px] text-zinc-500 font-medium">Auto-preenche os inscritos detectados</p></div>)}
+                  </div>
+                </div>
+
                 <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
                   {linhas.map((l, i) => (
-                    <div key={l.tempId} className="flex items-center gap-2">
-                      <span className="text-[10px] text-zinc-600 w-5 text-center">#{i + 1}</span>
-                      <select value={l.jogadorId} onChange={e => updLinha(l.tempId, 'jogadorId', e.target.value)} className="flex-1 min-w-0 px-2 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm focus:border-primary focus:outline-none">
-                        <option value="">-- jogador --</option>
-                        {inscritos.map(j => (<option key={j.jogador_id} value={j.jogador_id}>{j.nick}</option>))}
-                      </select>
-                      <input type="number" min="1" max="48" placeholder="Col." value={l.colocacao} onChange={e => updLinha(l.tempId, 'colocacao', e.target.value)} className="w-16 px-2 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm focus:border-primary focus:outline-none" />
-                      <input type="number" min="0" placeholder="Kills" value={l.abates} onChange={e => updLinha(l.tempId, 'abates', e.target.value)} className="w-16 px-2 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm focus:border-primary focus:outline-none" />
-                      <button onClick={() => rmLinha(l.tempId)} className="p-2 text-zinc-600 hover:text-rose-400 rounded-lg cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                    <div key={l.tempId} className="flex flex-col space-y-1 p-2 rounded-lg border border-zinc-900 bg-zinc-950/20">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-zinc-600 w-5 text-center">#{i + 1}</span>
+                        <select value={l.jogadorId} onChange={e => updLinha(l.tempId, 'jogadorId', e.target.value)} className="flex-1 min-w-0 px-2 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm focus:border-primary focus:outline-none">
+                          <option value="">-- jogador --</option>
+                          {inscritos.map(j => (<option key={j.jogador_id} value={j.jogador_id}>{j.nick}</option>))}
+                        </select>
+                        <input type="number" min="1" max="48" placeholder="Col." value={l.colocacao} onChange={e => updLinha(l.tempId, 'colocacao', e.target.value)} className="w-16 px-2 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm focus:border-primary focus:outline-none" />
+                        <input type="number" min="0" placeholder="Kills" value={l.abates} onChange={e => updLinha(l.tempId, 'abates', e.target.value)} className="w-16 px-2 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-200 text-sm focus:border-primary focus:outline-none" />
+                        <button onClick={() => rmLinha(l.tempId)} className="p-2 text-zinc-600 hover:text-rose-400 rounded-lg cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                      {l.jogadorDetectadoNick && (
+                        <div className="flex items-center gap-1.5 pl-7">
+                          <span className="text-[9px] font-extrabold text-amber-500/80 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded">OCR: "{l.jogadorDetectadoNick}"</span>
+                          {!l.jogadorId && <span className="text-[9px] text-zinc-500 italic">(Não inscrito ou não vinculado automaticamente)</span>}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
