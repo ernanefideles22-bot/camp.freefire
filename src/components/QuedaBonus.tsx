@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Gift, Trophy, Users, Check, Copy, RefreshCw, Crown, Lock } from 'lucide-react';
 import { apiService } from '../services/api';
-import type { Jogador, EventoBonus, PlacarBonusItem, MinhaInscricaoBonus } from '../services/api';
+import type { Jogador, EventoBonus, PlacarBonusItem, MinhaInscricaoBonus, HistoricoBonusItem } from '../services/api';
 import { Spinner } from './Spinner';
 
 interface QuedaBonusProps {
@@ -35,6 +35,7 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [copied, setCopied] = useState<string>('');
+  const [historico, setHistorico] = useState<HistoricoBonusItem[]>([]);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -58,6 +59,10 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
     return () => clearInterval(t);
   }, [fetchAll]);
 
+  useEffect(() => {
+    apiService.obterHistoricoBonus().then(setHistorico).catch(() => {});
+  }, []);
+
   const handleParticipar = async () => {
     if (!currentUser) { onAddToast('warning', 'Faça login', 'Entre na sua conta para participar do evento bônus.'); return; }
     if (!evento) return;
@@ -77,14 +82,51 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
     }).catch(() => {});
   };
 
+  const historicoSection = historico.length === 0 ? null : (
+    <div className="max-w-3xl mx-auto p-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 space-y-3">
+      <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5"><Trophy className="w-4 h-4 text-zinc-400" />Histórico de eventos bônus</span>
+      <div className="space-y-3">
+        {historico.map(ev => (
+          <div key={ev.id} className="p-3 rounded-xl border border-zinc-800 bg-zinc-950/60 space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <span className="text-sm font-bold text-white">{ev.nome} <span className="text-zinc-600">#{ev.id}</span></span>
+              <div className="flex items-center gap-2">
+                {ev.data_hora && <span className="text-[10px] text-zinc-500">{ev.data_hora}</span>}
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${ev.status === 'pago' ? 'text-emerald-400 bg-emerald-500/10' : 'text-zinc-400 bg-zinc-800'}`}>{ev.status === 'pago' ? 'pago' : 'cancelado'}</span>
+              </div>
+            </div>
+            {ev.vencedores.length === 0 ? (
+              <p className="text-[11px] text-zinc-500">Sem vencedores (cancelado ou sem elegíveis).</p>
+            ) : (
+              <div className="space-y-1">
+                {ev.vencedores.map(v => (
+                  <div key={v.colocacao} className="flex items-center gap-2 text-xs">
+                    <span className={`w-7 text-center font-black ${v.colocacao === 1 ? 'text-amber-400' : 'text-zinc-500'}`}>{v.colocacao}º</span>
+                    <span className="flex-1 min-w-0 truncate text-white font-bold">{v.nick ?? '—'}</span>
+                    <span className="text-emerald-400 font-bold">{brl(v.valor)}</span>
+                    {v.status === 'rejeitado' && <span className="text-[9px] text-rose-400">rejeitado</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <span className="text-[10px] text-zinc-600">{ev.inscritos} inscritos · total {brl(ev.premio_total)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   if (loading) return (<div className="flex justify-center py-16"><Spinner size="md" className="text-primary" /></div>);
 
   if (!evento) {
     return (
-      <div className="max-w-2xl mx-auto p-8 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/30 text-center space-y-2">
-        <Gift className="w-10 h-10 text-zinc-700 mx-auto" />
-        <h2 className="text-sm font-bold text-white">Nenhuma Queda Bônus no momento</h2>
-        <p className="text-xs text-zinc-500">Fique de olho: eventos bônus têm entrada grátis e prêmio garantido ao top 5.</p>
+      <div className="space-y-5">
+        <div className="max-w-2xl mx-auto p-8 rounded-2xl border border-dashed border-zinc-800 bg-zinc-950/30 text-center space-y-2">
+          <Gift className="w-10 h-10 text-zinc-700 mx-auto" />
+          <h2 className="text-sm font-bold text-white">Nenhuma Queda Bônus no momento</h2>
+          <p className="text-xs text-zinc-500">Fique de olho: eventos bônus têm entrada grátis e prêmio garantido ao top 5.</p>
+        </div>
+        {historicoSection}
       </div>
     );
   }
@@ -187,6 +229,7 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
         )}
         <p className="text-[10px] text-zinc-600 flex items-center gap-1"><Lock className="w-3 h-3" />Só quem joga as 3 quedas concorre ao prêmio.</p>
       </div>
+      {historicoSection}
     </div>
   );
 };
