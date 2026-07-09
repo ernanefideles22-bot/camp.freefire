@@ -1777,6 +1777,30 @@ def bonus_minha_inscricao(evento_id: int, jogador: JogadorModel = Depends(obter_
     return {'inscrito': inscrito, 'salas': salas}
 
 
+@app.get('/bonus/historico')
+def bonus_historico(db: Session = Depends(get_db)):
+    """Eventos bonus ja encerrados (pago/cancelado), com o podio, para os jogadores conferirem."""
+    evs = db.scalars(select(EventoBonusModel)
+                     .where(EventoBonusModel.status.in_(['pago', 'cancelado']))
+                     .order_by(EventoBonusModel.id.desc()).limit(20)).all()
+    out = []
+    for ev in evs:
+        pgs = db.scalars(select(PagamentoBonusModel)
+                         .where(PagamentoBonusModel.evento_id == ev.id)
+                         .order_by(PagamentoBonusModel.colocacao_final)).all()
+        vencedores = []
+        for p in pgs:
+            j = db.get(JogadorModel, p.jogador_id)
+            vencedores.append({'colocacao': p.colocacao_final,
+                               'nick': j.nick if j else None,
+                               'valor': p.valor, 'status': p.status})
+        out.append({'id': ev.id, 'nome': ev.nome, 'data_hora': ev.data_hora,
+                    'status': ev.status, 'inscritos': _contar_inscritos_bonus(db, ev.id),
+                    'premio_total': ev.premio_total, 'premio_top5': _premios_evento(ev),
+                    'vencedores': vencedores})
+    return {'eventos': out}
+
+
 # ---------- Admin ----------
 @app.post('/admin/bonus/criar')
 def bonus_criar(body: CriarBonusBody, _admin: JogadorModel = Depends(require_admin),
