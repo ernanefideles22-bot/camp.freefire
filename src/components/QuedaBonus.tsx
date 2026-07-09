@@ -36,6 +36,8 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
   const [busy, setBusy] = useState<boolean>(false);
   const [copied, setCopied] = useState<string>('');
   const [historico, setHistorico] = useState<HistoricoBonusItem[]>([]);
+  const [rankingAberto, setRankingAberto] = useState<number | null>(null);
+  const [rankings, setRankings] = useState<Record<number, PlacarBonusItem[]>>({});
 
   const fetchAll = useCallback(async () => {
     try {
@@ -82,6 +84,15 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
     }).catch(() => {});
   };
 
+  const verRanking = async (id: number) => {
+    if (rankingAberto === id) { setRankingAberto(null); return; }
+    setRankingAberto(id);
+    if (!rankings[id]) {
+      try { const p = await apiService.obterPlacarBonus(id); setRankings(r => ({ ...r, [id]: p.jogadores })); }
+      catch { /* silencioso */ }
+    }
+  };
+
   const historicoSection = historico.length === 0 ? null : (
     <div className="max-w-3xl mx-auto p-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 space-y-3">
       <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5"><Trophy className="w-4 h-4 text-zinc-400" />Histórico de eventos bônus</span>
@@ -110,6 +121,24 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
               </div>
             )}
             <span className="text-[10px] text-zinc-600">{ev.inscritos} inscritos · total {brl(ev.premio_total)}</span>
+            <button onClick={() => verRanking(ev.id)} className="text-[10px] font-bold text-primary hover:underline cursor-pointer">{rankingAberto === ev.id ? 'Ocultar ranking' : 'Ver ranking completo'}</button>
+            {rankingAberto === ev.id && (
+              <div className="mt-1 space-y-0.5 border-t border-zinc-800 pt-2 max-h-64 overflow-y-auto pr-1">
+                {!rankings[ev.id] ? (
+                  <span className="text-[10px] text-zinc-500">Carregando...</span>
+                ) : rankings[ev.id].length === 0 ? (
+                  <span className="text-[10px] text-zinc-500">Sem participantes.</span>
+                ) : rankings[ev.id].map(l => (
+                  <div key={l.jogador_id} className="flex items-center gap-2 text-[11px]">
+                    <span className="w-6 text-center text-zinc-500 font-bold">{l.posicao}</span>
+                    <span className="flex-1 min-w-0 truncate text-zinc-200">{l.nick}</span>
+                    <span className="text-zinc-400">{l.pontos} pts</span>
+                    <span className="text-zinc-600 w-10 text-right">{l.kills}k</span>
+                    {l.elegivel ? <span className="text-[8px] font-bold text-emerald-400">3/3</span> : <span className="text-[8px] font-bold text-amber-400">{l.quedas_jogadas}/3</span>}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
