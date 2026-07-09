@@ -72,6 +72,8 @@ def obter_usuario_atual(
     jogador = db.scalar(select(JogadorModel).where(JogadorModel.id == user_id))
     if not jogador:
         raise HTTPException(401, 'Usuario nao encontrado')
+    if not jogador.ativo:
+        raise HTTPException(403, 'Conta desativada. Fale com o suporte.')
     return jogador
 
 
