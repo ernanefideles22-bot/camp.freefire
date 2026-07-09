@@ -1586,6 +1586,16 @@ LIMITE_BONUS = 48  # cap por sala (Free Fire)
 
 class CriarBonusBody(BaseModel):
     nome: str
+    data_hora: Optional[str] = None
+    min_jogadores: Optional[int] = None
+    premios: Optional[List[float]] = None  # [1o, 2o, 3o, 4o, 5o]
+
+
+class ConfigBonusBody(BaseModel):
+    nome: Optional[str] = None
+    data_hora: Optional[str] = None
+    min_jogadores: Optional[int] = None
+    premios: Optional[List[float]] = None
 
 
 class InscreverBonusBody(BaseModel):
@@ -1662,11 +1672,39 @@ def _fechar_evento_bonus_se_completo(db: Session, evento_id: int):
             ev.status = 'pago'
 
 
+def _premios_evento(ev: EventoBonusModel) -> list:
+    """Lista de premios absolutos por colocacao (qualquer tamanho). Padrao se vazio."""
+    try:
+        vals = json.loads(ev.premios_json) if ev.premios_json else None
+    except Exception:
+        vals = None
+    if not isinstance(vals, list) or not vals:
+        return PREMIO_BONUS_TOP5_LIST
+    return [round(float(x), 2) for x in vals]
+
+
+def _aplicar_config_bonus(ev: EventoBonusModel, body) -> None:
+    """Aplica campos configuraveis (nome/data/minimo/premios) num evento em inscricao."""
+    if getattr(body, 'nome', None) is not None and body.nome.strip():
+        ev.nome = body.nome.strip()
+    if getattr(body, 'data_hora', None) is not None:
+        ev.data_hora = (body.data_hora or '').strip() or None
+    if getattr(body, 'min_jogadores', None) is not None:
+        ev.min_jogadores = max(2, int(body.min_jogadores))
+    if getattr(body, 'premios', None) is not None:
+        p = [round(float(x), 2) for x in body.premios][:20]  # ate 20 posicoes
+        if not p:
+            p = [0.0]
+        ev.premios_json = json.dumps(p)
+        ev.premio_total = round(sum(x for x in p if x > 0), 2)
+
+
 def _serializar_evento_bonus(db: Session, ev: EventoBonusModel) -> dict:
     return {'id': ev.id, 'nome': ev.nome, 'status': ev.status,
             'min_jogadores': ev.min_jogadores, 'premio_total': ev.premio_total,
+            'data_hora': ev.data_hora,
             'inscritos': _contar_inscritos_bonus(db, ev.id),
-            'premio_top5': PREMIO_BONUS_TOP5_LIST}
+            'premio_top5': _premios_evento(ev)}
 
 
 # ---------- Publico / jogador ----------
@@ -1682,7 +1720,7 @@ def bonus_placar(evento_id: int, db: Session = Depends(get_db)):
     if not ev:
         raise HTTPException(404, 'Evento nao encontrado')
     return {'evento_id': evento_id, 'status': ev.status,
-            'premio_top5': PREMIO_BONUS_TOP5_LIST,
+            'premio_top5': _premios_evento(ev),
             'jogadores': _placar_bonus(db, evento_id)}
 
 
@@ -1749,7 +1787,22 @@ def bonus_criar(body: CriarBonusBody, _admin: JogadorModel = Depends(require_adm
                                  'Finalize ou cancele antes de criar outro.')
     ev = EventoBonusModel(nome=(body.nome or '').strip() or 'Queda Bonus', status='inscricao',
                           min_jogadores=MIN_JOGADORES_BONUS, premio_total=PREMIO_TOTAL_BONUS)
+    _aplicar_config_bonus(ev, body)
     db.add(ev)
+    db.commit()
+    db.refresh(ev)
+    return _serializar_evento_bonus(db, ev)
+
+
+@app.post('/admin/bonus/{evento_id}/config')
+def bonus_config(evento_id: int, body: ConfigBonusBody,
+                 _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    if ev.status != 'inscricao':
+        raise HTTPException(400, 'So da pra ajustar enquanto as inscricoes estao abertas.')
+    _aplicar_config_bonus(ev, body)
     db.commit()
     db.refresh(ev)
     return _serializar_evento_bonus(db, ev)
@@ -1842,10 +1895,11 @@ def bonus_apurar(evento_id: int, _admin: JogadorModel = Depends(require_admin),
         raise HTTPException(400, 'Evento ja apurado.')
     placar = _placar_bonus(db, evento_id)
     elegiveis = [l for l in placar if l['elegivel']]
-    top5 = elegiveis[:5]
+    premios_ev = _premios_evento(ev)
+    top5 = elegiveis[:len(premios_ev)]
     criados = []
     for idx, l in enumerate(top5, start=1):
-        valor = PREMIO_BONUS_TOP5.get(idx, 0.0)
+        valor = premios_ev[idx - 1] if idx <= len(premios_ev) else 0.0
         if valor <= 0:
             continue
         db.add(PagamentoBonusModel(evento_id=evento_id, jogador_id=l['jogador_id'],
