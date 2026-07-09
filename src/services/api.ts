@@ -241,6 +241,7 @@ export interface EventoBonus {
   status: 'inscricao' | 'em_andamento' | 'aguardando_revisao' | 'pago' | 'cancelado';
   min_jogadores: number;
   premio_total: number;
+  data_hora: string | null;
   inscritos: number;
   premio_top5: number[];
 }
@@ -389,8 +390,12 @@ export const apiService = {
     const res = await api.get(`/bonus/${eventoId}/minha-inscricao`);
     return res.data as MinhaInscricaoBonus;
   },
-  async criarBonus(nome: string): Promise<EventoBonus> {
-    const res = await api.post('/admin/bonus/criar', { nome });
+  async criarBonus(payload: { nome: string; data_hora?: string; min_jogadores?: number; premios?: number[] }): Promise<EventoBonus> {
+    const res = await api.post('/admin/bonus/criar', payload);
+    return res.data as EventoBonus;
+  },
+  async configurarBonus(eventoId: number, payload: { nome?: string; data_hora?: string; min_jogadores?: number; premios?: number[] }): Promise<EventoBonus> {
+    const res = await api.post(`/admin/bonus/${eventoId}/config`, payload);
     return res.data as EventoBonus;
   },
   async iniciarBonus(eventoId: number): Promise<any> {
