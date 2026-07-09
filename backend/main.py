@@ -8,7 +8,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import select, func, delete
+from sqlalchemy import select, func, delete, update
 from sqlalchemy.orm import Session
 
 from database import engine, get_db, Base
@@ -669,6 +669,43 @@ def admin_limpar_jogadores_teste(_admin: JogadorModel = Depends(require_admin), 
     restantes = db.scalar(select(func.count()).select_from(JogadorModel))
     return {'apagados': len(ids), 'lista_apagados': nicks, 'restantes': restantes,
             'message': f'{len(ids)} jogador(es) de teste removido(s). Restam {restantes}.'}
+
+
+@app.post('/admin/jogadores/{jogador_id}/apagar')
+def admin_apagar_jogador(jogador_id: int, _admin: JogadorModel = Depends(require_admin),
+                         db: Session = Depends(get_db)):
+    """Apaga UM jogador escolhido pelo admin, com travas de seguranca:
+    nao apaga admin, nao apaga quem tem saldo (evita apagar dinheiro) nem saque em andamento.
+    Remove os registros filhos (inscricoes, resultados, depositos, saques, cobrancas, ledger,
+    e do bonus) e zera referencias de convite. Acao irreversivel."""
+    jog = db.get(JogadorModel, jogador_id)
+    if not jog:
+        raise HTTPException(404, 'Jogador nao encontrado')
+    if jog.is_admin:
+        raise HTTPException(400, 'Nao e possivel apagar um administrador.')
+    if (jog.saldo or 0) > 0.005 or (jog.saldo_sacavel or 0) > 0.005:
+        raise HTTPException(400, f'{jog.nick} tem saldo de R$ {jog.saldo:.2f} '
+                                 f'(sacavel R$ {jog.saldo_sacavel:.2f}). Zere/estorne o saldo '
+                                 'antes de apagar, para nao apagar dinheiro.')
+    saque_ativo = db.scalar(select(SaqueRequisicaoModel).where(
+        SaqueRequisicaoModel.jogador_id == jogador_id,
+        SaqueRequisicaoModel.status.in_(['pendente', 'processando'])))
+    if saque_ativo:
+        raise HTTPException(400, f'{jog.nick} tem um saque em andamento. Resolva o saque antes de apagar.')
+    nick = jog.nick
+    try:
+        db.execute(update(JogadorModel).where(JogadorModel.indicado_por == jogador_id)
+                   .values(indicado_por=None))
+        for M in (InscricaoModel, ResultadoQuedaModel, DepositoRequisicaoModel,
+                  SaqueRequisicaoModel, CobrancaPixModel, TransacaoModel,
+                  InscricaoBonusModel, ResultadoBonusModel, PagamentoBonusModel):
+            db.execute(delete(M).where(M.jogador_id == jogador_id))
+        db.execute(delete(JogadorModel).where(JogadorModel.id == jogador_id))
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(500, f'Falha ao apagar: {type(exc).__name__}: {str(exc)[:200]}')
+    return {'message': f'Jogador {nick} apagado.', 'nick': nick}
 
 
 @app.get('/jogadores')
