@@ -351,6 +351,10 @@ export const apiService = {
     const res = await api.post('/admin/jogadores/limpar-teste');
     return res.data;
   },
+  async apagarJogador(jogadorId: number): Promise<any> {
+    const res = await api.post(`/admin/jogadores/${jogadorId}/apagar`);
+    return res.data;
+  },
 
   async getPlayerHistory(nick: string): Promise<any> {
     const res = await api.get(`/historico/${encodeURIComponent(nick)}`);
