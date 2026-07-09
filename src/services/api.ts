@@ -267,6 +267,17 @@ export interface PlacarBonus {
 
 export interface BonusSala { ordem: number; sala_id: string; senha: string; horario?: string | null; }
 export interface MinhaInscricaoBonus { inscrito: boolean; salas: BonusSala[]; }
+export interface HistoricoBonusVencedor { colocacao: number; nick: string | null; valor: number; status: string; }
+export interface HistoricoBonusItem {
+  id: number;
+  nome: string;
+  data_hora: string | null;
+  status: string;
+  inscritos: number;
+  premio_total: number;
+  premio_top5: number[];
+  vencedores: HistoricoBonusVencedor[];
+}
 export interface BonusInscrito { jogador_id: number; nick: string; nome: string; entrou_em: string | null; }
 
 export interface PagamentoBonus {
@@ -389,6 +400,10 @@ export const apiService = {
   async obterMinhaInscricaoBonus(eventoId: number): Promise<MinhaInscricaoBonus> {
     const res = await api.get(`/bonus/${eventoId}/minha-inscricao`);
     return res.data as MinhaInscricaoBonus;
+  },
+  async obterHistoricoBonus(): Promise<HistoricoBonusItem[]> {
+    const res = await api.get('/bonus/historico');
+    return (res.data?.eventos ?? []) as HistoricoBonusItem[];
   },
   async criarBonus(payload: { nome: string; data_hora?: string; min_jogadores?: number; premios?: number[] }): Promise<EventoBonus> {
     const res = await api.post('/admin/bonus/criar', payload);
