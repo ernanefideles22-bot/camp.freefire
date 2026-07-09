@@ -51,6 +51,7 @@ class JogadorModel(Base):
     titular_doc: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     chave_pix: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     asaas_customer_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # soft delete: False = jogador excluido/bloqueado pelo admin
     inscricoes: Mapped[List['InscricaoModel']] = relationship(back_populates='jogador')
     resultados: Mapped[List['ResultadoQuedaModel']] = relationship(back_populates='jogador')
     depositos: Mapped[List['DepositoRequisicaoModel']] = relationship(back_populates='jogador')
