@@ -178,7 +178,7 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
     ? Array.from({ length: nPos }, (_, i) => parseFloat(valores[i] ?? '') || 0).reduce((a, b) => a + b, 0)
     : 100;
   const buildConfig = () => ({
-    nome: nome.trim() || 'Queda BÃ´nus',
+    nome: nome.trim() || 'Queda Bônus',
     data_hora: dataHora.trim() || undefined,
     min_jogadores: parseInt(minimo) || undefined,
     premios: premiosAbs,
@@ -188,19 +188,19 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div><label className={lbl}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} className={inp} /></div>
         <div><label className={lbl}>Data e hora</label><input value={dataHora} onChange={e => setDataHora(e.target.value)} placeholder="ex: 15/07 20:00" className={inp} /></div>
-        <div><label className={lbl}>MÃ­nimo de jogadores</label><input type="number" min="2" value={minimo} onChange={e => setMinimo(e.target.value)} className={inp} /></div>
+        <div><label className={lbl}>Mínimo de jogadores</label><input type="number" min="2" value={minimo} onChange={e => setMinimo(e.target.value)} className={inp} /></div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div><label className={lbl}>PosiÃ§Ãµes premiadas (top N)</label><input type="number" min="1" max="20" value={numPos} onChange={e => setNumPos(e.target.value)} className={inp} /></div>
+        <div><label className={lbl}>Posições premiadas (top N)</label><input type="number" min="1" max="20" value={numPos} onChange={e => setNumPos(e.target.value)} className={inp} /></div>
         <div>
-          <label className={lbl}>Modo dos prÃªmios</label>
+          <label className={lbl}>Modo dos prêmios</label>
           <div className="flex gap-1">
             <button type="button" onClick={() => setModo('valor')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${modo === 'valor' ? 'bg-primary text-white' : 'bg-zinc-950 border border-zinc-800 text-zinc-400'}`}>Valor (R$)</button>
             <button type="button" onClick={() => setModo('pct')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${modo === 'pct' ? 'bg-primary text-white' : 'bg-zinc-950 border border-zinc-800 text-zinc-400'}`}>Porcentagem</button>
           </div>
         </div>
         {modo === 'pct' && (
-          <div><label className={lbl}>PrÃªmio total (R$)</label><input type="number" min="0" step="0.01" value={totalPool} onChange={e => setTotalPool(e.target.value)} className={inp} /></div>
+          <div><label className={lbl}>Prêmio total (R$)</label><input type="number" min="0" step="0.01" value={totalPool} onChange={e => setTotalPool(e.target.value)} className={inp} /></div>
         )}
       </div>
       <div>
