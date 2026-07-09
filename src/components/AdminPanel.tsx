@@ -139,6 +139,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
     } catch (err: any) { onAddToast('error', 'Falha ao limpar', err.message || 'Nao foi possivel remover os jogadores.'); }
   };
 
+  const handleExcluirJogador = async (jogadorId: number, nick: string) => {
+    if (!window.confirm(`Excluir o jogador "${nick}"? Ele deixa de aparecer/jogar, mas todo o historico financeiro e mantido. Voce pode reativar depois.`)) return;
+    try {
+      const r = await apiService.excluirJogador(jogadorId);
+      onAddToast('success', 'Jogador excluido', r.message || `${nick} foi excluido.`);
+      await fetchPlayers();
+    } catch (err: any) { onAddToast('error', 'Falha ao excluir', err.message || 'Nao foi possivel excluir o jogador.'); }
+  };
+
+  const handleReativarJogador = async (jogadorId: number, nick: string) => {
+    try {
+      const r = await apiService.reativarJogador(jogadorId);
+      onAddToast('success', 'Jogador reativado', r.message || `${nick} foi reativado.`);
+      await fetchPlayers();
+    } catch (err: any) { onAddToast('error', 'Falha ao reativar', err.message || 'Nao foi possivel reativar o jogador.'); }
+  };
+
   const handleRegisterRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     const quedaNum = parseInt(salaQueda);
@@ -405,6 +422,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
               <AdminAgentChat onAddToast={onAddToast} onRefreshData={fetchPlayers} />
             </div>
           </div>
+<div className="ff-card p-5 mt-5">
+<div className="flex items-center justify-between gap-4 mb-4">
+<h2 className="text-sm font-bold text-white flex items-center gap-2"><Users className="w-4 h-4 text-primary" />Jogadores Cadastrados</h2>
+<button onClick={fetchPlayers} disabled={loadingPlayersList} className="p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer" title="Atualizar"><RefreshCw className={`w-4 h-4 ${loadingPlayersList ? 'animate-spin' : ''}`} /></button>
+</div>
+{loadingPlayersList && players.length === 0 ? (
+<div className="flex justify-center py-8"><Spinner /></div>
+) : players.length === 0 ? (
+<p className="text-xs text-zinc-500 text-center py-8 border border-dashed border-zinc-800 rounded-xl">Nenhum jogador cadastrado.</p>
+) : (
+<div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+{players.map(p => (
+<div key={p.id} className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${p.ativo === false ? 'border-zinc-800 bg-zinc-950/20 opacity-50' : 'border-zinc-800 bg-zinc-950/60'}`}>
+<div className="min-w-0 flex-1">
+<div className="flex items-center gap-2">
+<span className="text-sm font-bold text-white truncate">{p.nick}</span>
+{p.is_admin && <span className="text-[9px] bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded font-bold uppercase">Admin</span>}
+{p.ativo === false && <span className="text-[9px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1.5 py-0.5 rounded font-bold uppercase">Excluido</span>}
+</div>
+<div className="text-[11px] text-zinc-500 truncate">{p.nome} · Saldo R$ {p.saldo.toFixed(2).replace('.', ',')}</div>
+</div>
+{!p.is_admin && (
+p.ativo === false ? (
+<button onClick={() => handleReativarJogador(p.id, p.nick)} className="px-3 py-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-zinc-950 border border-emerald-500/20 hover:border-emerald-500 transition-all cursor-pointer text-xs font-bold shrink-0">Reativar</button>
+) : (
+<button onClick={() => handleExcluirJogador(p.id, p.nick)} className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-zinc-950 border border-rose-500/20 hover:border-rose-500 transition-all cursor-pointer shrink-0" title="Excluir jogador (soft delete)"><Trash2 className="w-4 h-4" /></button>
+)
+)}
+</div>
+))}
+</div>
+)}
+</div>
         )}
         {activeTab === 'lancar' && (
           <div className="ff-card p-5 space-y-6">

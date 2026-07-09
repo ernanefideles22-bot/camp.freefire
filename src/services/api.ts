@@ -59,6 +59,7 @@ export interface Jogador {
   saldo: number;
   saldo_sacavel?: number;
   is_admin: boolean;
+  ativo: boolean;
 }
 
 export interface AgenteResposta {
@@ -349,6 +350,16 @@ export const apiService = {
 
   async limparJogadoresTeste(): Promise<any> {
     const res = await api.post('/admin/jogadores/limpar-teste');
+    return res.data;
+  },
+
+  async excluirJogador(id: number): Promise<any> {
+    const res = await api.post(`/admin/jogadores/${id}/excluir`);
+    return res.data;
+  },
+
+  async reativarJogador(id: number): Promise<any> {
+    const res = await api.post(`/admin/jogadores/${id}/reativar`);
     return res.data;
   },
 
