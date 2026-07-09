@@ -320,7 +320,7 @@ def _lock_jogador(db: Session, jogador_id: int):
 
 def _payload_jogador(j: JogadorModel) -> dict:
     return {'id': j.id, 'nome': j.nome, 'nick': j.nick, 'saldo': j.saldo,
-            'saldo_sacavel': getattr(j, 'saldo_sacavel', 0.0), 'is_admin': j.is_admin}
+            'saldo_sacavel': getattr(j, 'saldo_sacavel', 0.0), 'is_admin': j.is_admin, 'ativo': getattr(j, 'ativo', True)}
 
 
 @app.post('/auth/cadastro', response_model=JogadorResponse)
@@ -355,6 +355,8 @@ def login(dados: JogadorLogin, db: Session = Depends(get_db)):
     jogador = db.scalar(select(JogadorModel).where(JogadorModel.nick == dados.nick))
     if not jogador or not jogador.senha_hash or not verificar_senha(dados.senha, jogador.senha_hash):
         raise HTTPException(401, 'Nick ou senha incorretos')
+    if not jogador.ativo:
+        raise HTTPException(403, 'Conta desativada. Fale com o suporte.')
     sub = {'sub': str(jogador.id)}
     return {
         'access_token': criar_access_token(sub),
@@ -463,6 +465,8 @@ async def auth_google(body: GoogleLoginBody, request: Request, db: Session = Dep
 
     jogador = db.scalar(select(JogadorModel).where(JogadorModel.google_sub == google_sub))
     if jogador:
+        if not jogador.ativo:
+            raise HTTPException(403, 'Conta desativada. Fale com o suporte.')
         sub = {'sub': str(jogador.id)}
         return {'access_token': criar_access_token(sub), 'refresh_token': criar_refresh_token(sub),
                 'token_type': 'bearer', 'jogador': _payload_jogador(jogador)}
@@ -593,7 +597,7 @@ def _ranking_desde(db: Session) -> int:
 
 @app.get('/classificacao')
 def classificacao(db: Session = Depends(get_db)):
-    jogadores = db.scalars(select(JogadorModel)).all()
+    jogadores = db.scalars(select(JogadorModel).where(JogadorModel.ativo == True)).all()
     _desde = _ranking_desde(db)
     resultado = []
     for j in jogadores:
@@ -669,6 +673,32 @@ def admin_limpar_jogadores_teste(_admin: JogadorModel = Depends(require_admin), 
     restantes = db.scalar(select(func.count()).select_from(JogadorModel))
     return {'apagados': len(ids), 'lista_apagados': nicks, 'restantes': restantes,
             'message': f'{len(ids)} jogador(es) de teste removido(s). Restam {restantes}.'}
+
+
+@app.post('/admin/jogadores/{jogador_id}/excluir')
+def admin_excluir_jogador(jogador_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    """Soft delete: marca o jogador como inativo (ativo=False) em vez de apagar.
+    Preserva todo o historico financeiro (transacoes, saques, depositos, resultados).
+    Bloqueia login e acoes do jogador. Nao permite excluir administradores."""
+    jogador = db.scalar(select(JogadorModel).where(JogadorModel.id == jogador_id))
+    if not jogador:
+        raise HTTPException(404, 'Jogador nao encontrado')
+    if jogador.is_admin:
+        raise HTTPException(400, 'Nao e possivel excluir um administrador')
+    jogador.ativo = False
+    db.commit()
+    return {'message': f'Jogador {jogador.nick} excluido (soft delete). Historico financeiro preservado.'}
+
+
+@app.post('/admin/jogadores/{jogador_id}/reativar')
+def admin_reativar_jogador(jogador_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    """Reverte o soft delete: marca o jogador como ativo novamente."""
+    jogador = db.scalar(select(JogadorModel).where(JogadorModel.id == jogador_id))
+    if not jogador:
+        raise HTTPException(404, 'Jogador nao encontrado')
+    jogador.ativo = True
+    db.commit()
+    return {'message': f'Jogador {jogador.nick} reativado.'}
 
 
 @app.get('/jogadores')
