@@ -101,10 +101,11 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
         onAuthSuccess(user);
       } else {
         const refCode = new URLSearchParams(window.location.search).get('ref');
-        const user = await apiService.cadastrarJogador(nome.trim(), nick.trim(), senha, aceito, maior, dataNascimento, refCode);
-        localStorage.setItem('currentUser', JSON.stringify(user));
-        onAddToast('success', 'Conta Criada!', `Jogador ${user.nick} cadastrado com sucesso!`);
-        onAuthSuccess(user);
+        await apiService.cadastrarJogador(nome.trim(), nick.trim(), senha, aceito, maior, dataNascimento, refCode);
+        // Automatically login the registered player to obtain JWT token
+        const loggedUser = await apiService.loginJogador(nick.trim(), senha);
+        onAddToast('success', 'Conta Criada!', `Jogador ${loggedUser.nick} cadastrado com sucesso!`);
+        onAuthSuccess(loggedUser);
       }
     } catch (err: any) {
       const msg = err.message || 'Ocorreu um erro ao processar sua solicitacao.';

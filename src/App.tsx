@@ -14,7 +14,8 @@ type TabType = 'leaderboard' | 'player_portal' | 'admin' | 'bonus';
 function App() {
   const [currentUser, setCurrentUser] = useState<Jogador | null>(() => {
     const userJson = localStorage.getItem('currentUser');
-    if (userJson) {
+    const token = localStorage.getItem('access_token');
+    if (userJson && token) {
       try { return JSON.parse(userJson); } catch (e) { return null; }
     }
     return null;
