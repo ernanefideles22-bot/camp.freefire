@@ -241,6 +241,7 @@ export interface EventoBonus {
   status: 'inscricao' | 'em_andamento' | 'aguardando_revisao' | 'pago' | 'cancelado';
   min_jogadores: number;
   premio_total: number;
+  data_hora: string | null;
   inscritos: number;
   premio_top5: number[];
 }
@@ -266,6 +267,17 @@ export interface PlacarBonus {
 
 export interface BonusSala { ordem: number; sala_id: string; senha: string; horario?: string | null; }
 export interface MinhaInscricaoBonus { inscrito: boolean; salas: BonusSala[]; }
+export interface HistoricoBonusVencedor { colocacao: number; nick: string | null; valor: number; status: string; }
+export interface HistoricoBonusItem {
+  id: number;
+  nome: string;
+  data_hora: string | null;
+  status: string;
+  inscritos: number;
+  premio_total: number;
+  premio_top5: number[];
+  vencedores: HistoricoBonusVencedor[];
+}
 export interface BonusInscrito { jogador_id: number; nick: string; nome: string; entrou_em: string | null; }
 
 export interface PagamentoBonus {
@@ -339,6 +351,10 @@ export const apiService = {
     const res = await api.post('/admin/jogadores/limpar-teste');
     return res.data;
   },
+  async apagarJogador(jogadorId: number): Promise<any> {
+    const res = await api.post(`/admin/jogadores/${jogadorId}/apagar`);
+    return res.data;
+  },
 
   async getPlayerHistory(nick: string): Promise<any> {
     const res = await api.get(`/historico/${encodeURIComponent(nick)}`);
@@ -389,8 +405,16 @@ export const apiService = {
     const res = await api.get(`/bonus/${eventoId}/minha-inscricao`);
     return res.data as MinhaInscricaoBonus;
   },
-  async criarBonus(nome: string): Promise<EventoBonus> {
-    const res = await api.post('/admin/bonus/criar', { nome });
+  async obterHistoricoBonus(): Promise<HistoricoBonusItem[]> {
+    const res = await api.get('/bonus/historico');
+    return (res.data?.eventos ?? []) as HistoricoBonusItem[];
+  },
+  async criarBonus(payload: { nome: string; data_hora?: string; min_jogadores?: number; premios?: number[] }): Promise<EventoBonus> {
+    const res = await api.post('/admin/bonus/criar', payload);
+    return res.data as EventoBonus;
+  },
+  async configurarBonus(eventoId: number, payload: { nome?: string; data_hora?: string; min_jogadores?: number; premios?: number[] }): Promise<EventoBonus> {
+    const res = await api.post(`/admin/bonus/${eventoId}/config`, payload);
     return res.data as EventoBonus;
   },
   async iniciarBonus(eventoId: number): Promise<any> {

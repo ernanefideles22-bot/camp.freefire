@@ -6,6 +6,7 @@ import { Spinner } from './Spinner';
 import { gerarPixCopiaECola, gerarQrDataUrl } from '../utils/pix';
 import { AdminAgentChat } from './AdminAgentChat';
 import { AdminBonus } from './AdminBonus';
+import { AdminApagarJogadores } from './AdminApagarJogadores';
 
 interface AdminPanelProps {
   onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void;
@@ -365,6 +366,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
       <div className="p-5">
         {activeTab === 'geral' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+            <AdminApagarJogadores onAddToast={onAddToast} />
             <div className="space-y-5">
               <div className="ff-card p-5">
                 <h2 className="text-sm font-bold text-white flex items-center gap-2 mb-4"><Key className="w-4 h-4 text-primary" />Liberar Sala e Senha</h2>

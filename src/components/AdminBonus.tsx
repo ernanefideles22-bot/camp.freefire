@@ -20,6 +20,12 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [nome, setNome] = useState<string>('Queda Bônus');
+  const [dataHora, setDataHora] = useState<string>('');
+  const [minimo, setMinimo] = useState<string>('20');
+  const [numPos, setNumPos] = useState<string>('5');
+  const [modo, setModo] = useState<'valor' | 'pct'>('valor');
+  const [totalPool, setTotalPool] = useState<string>('100');
+  const [valores, setValores] = useState<string[]>(['50', '20', '15', '10', '5']);
   const [ordemSel, setOrdemSel] = useState<number>(1);
   const [salaForms, setSalaForms] = useState<Record<number, SalaForm>>({
     1: { sala_id: '', senha: '', horario: '' },
@@ -55,6 +61,21 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
     const t = setInterval(fetchAll, 15000);
     return () => clearInterval(t);
   }, [fetchAll]);
+
+  // Prefill do formulario quando um evento em inscricao esta carregado
+  useEffect(() => {
+    if (evento && evento.status === 'inscricao') {
+      setNome(evento.nome);
+      setDataHora(evento.data_hora ?? '');
+      setMinimo(String(evento.min_jogadores));
+      const lst = evento.premio_top5 ?? [50, 20, 15, 10, 5];
+      setNumPos(String(lst.length));
+      setModo('valor');
+      setValores(lst.map(v => String(v)));
+      setTotalPool(String(lst.reduce((a, b) => a + b, 0)));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evento?.id, evento?.status]);
 
   const guard = async (fn: () => Promise<any>, okMsg?: string) => {
     setBusy(true);
@@ -143,6 +164,64 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
   const premioTop5 = evento?.premio_top5 ?? [50, 20, 15, 10, 5];
   const podeIniciar = !!evento && evento.status === 'inscricao' && evento.inscritos >= evento.min_jogadores;
 
+  const nPos = Math.max(1, Math.min(20, parseInt(numPos) || 1));
+  const lbl = 'text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1';
+  const inp = 'w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none';
+  const setVal = (i: number, v: string) => setValores(prev => { const a = [...prev]; a[i] = v; return a; });
+  const premiosAbs = Array.from({ length: nPos }, (_, i) => {
+    const raw = parseFloat(valores[i] ?? '') || 0;
+    if (modo === 'pct') return Math.round((parseFloat(totalPool) || 0) * raw / 100 * 100) / 100;
+    return Math.round(raw * 100) / 100;
+  });
+  const totalPremios = premiosAbs.reduce((a, b) => a + b, 0);
+  const somaPct = modo === 'pct'
+    ? Array.from({ length: nPos }, (_, i) => parseFloat(valores[i] ?? '') || 0).reduce((a, b) => a + b, 0)
+    : 100;
+  const buildConfig = () => ({
+    nome: nome.trim() || 'Queda Bônus',
+    data_hora: dataHora.trim() || undefined,
+    min_jogadores: parseInt(minimo) || undefined,
+    premios: premiosAbs,
+  });
+  const configCampos = (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div><label className={lbl}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} className={inp} /></div>
+        <div><label className={lbl}>Data e hora</label><input value={dataHora} onChange={e => setDataHora(e.target.value)} placeholder="ex: 15/07 20:00" className={inp} /></div>
+        <div><label className={lbl}>Mínimo de jogadores</label><input type="number" min="2" value={minimo} onChange={e => setMinimo(e.target.value)} className={inp} /></div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div><label className={lbl}>Posições premiadas (top N)</label><input type="number" min="1" max="20" value={numPos} onChange={e => setNumPos(e.target.value)} className={inp} /></div>
+        <div>
+          <label className={lbl}>Modo dos prêmios</label>
+          <div className="flex gap-1">
+            <button type="button" onClick={() => setModo('valor')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${modo === 'valor' ? 'bg-primary text-white' : 'bg-zinc-950 border border-zinc-800 text-zinc-400'}`}>Valor (R$)</button>
+            <button type="button" onClick={() => setModo('pct')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${modo === 'pct' ? 'bg-primary text-white' : 'bg-zinc-950 border border-zinc-800 text-zinc-400'}`}>Porcentagem</button>
+          </div>
+        </div>
+        {modo === 'pct' && (
+          <div><label className={lbl}>Prêmio total (R$)</label><input type="number" min="0" step="0.01" value={totalPool} onChange={e => setTotalPool(e.target.value)} className={inp} /></div>
+        )}
+      </div>
+      <div>
+        <label className={lbl}>{modo === 'pct' ? 'Porcentagem por colocação (%)' : 'Prêmio por colocação (R$)'} — 0 não paga a posição</label>
+        <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+          {Array.from({ length: nPos }, (_, i) => (
+            <div key={i} className="flex flex-col items-center">
+              <span className="text-[9px] font-bold text-zinc-500 mb-0.5">{i + 1}º</span>
+              <input type="number" min="0" step="0.01" value={valores[i] ?? ''} onChange={e => setVal(i, e.target.value)} className={`${inp} text-center px-1`} />
+              {modo === 'pct' && <span className="text-[9px] text-zinc-500 mt-0.5">R$ {premiosAbs[i].toFixed(2).replace('.', ',')}</span>}
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center gap-3 mt-1 flex-wrap">
+          <span className="text-[10px] text-zinc-500">Total: <b className="text-emerald-400">R$ {totalPremios.toFixed(2).replace('.', ',')}</b></span>
+          {modo === 'pct' && <span className={`text-[10px] ${Math.abs(somaPct - 100) < 0.01 ? 'text-zinc-500' : 'text-amber-400 font-bold'}`}>Soma: {somaPct.toFixed(0)}%{Math.abs(somaPct - 100) >= 0.01 ? ' (ideal 100%)' : ''}</span>}
+        </div>
+      </div>
+    </div>
+  );
+
   // Cabeçalho da tabela de prêmios (reutilizado)
   const TabelaPremio = () => (
     <div className="flex flex-wrap gap-2">
@@ -162,7 +241,7 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
           <h2 className="text-sm font-bold text-white flex items-center gap-2"><Gift className="w-4 h-4 text-primary" />Queda Bônus — melhor de 3 (entrada grátis)</h2>
           <button onClick={fetchAll} className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer" title="Atualizar"><RefreshCw className="w-3.5 h-3.5" /></button>
         </div>
-        <p className="text-xs text-zinc-400">Prêmio fixo da casa, R$ 100 garantidos ao top 5 (elegível quem joga as 3 quedas). Prêmio fica retido até você liberar.</p>
+        <p className="text-xs text-zinc-400">Prêmio fixo da casa ao top 5 (elegível quem joga as 3 quedas). Prêmio fica retido até você liberar.</p>
         <TabelaPremio />
       </div>
 
@@ -170,10 +249,8 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
       {!evento && (
         <div className="ff-card p-5 space-y-3">
           <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Nenhum evento ativo</span>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome do evento" className="flex-1 px-4 py-2.5 rounded-xl bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none" />
-            <button disabled={busy} onClick={() => guard(() => apiService.criarBonus(nome.trim() || 'Queda Bônus'), 'Evento criado')} className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white font-bold text-sm hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"><Plus className="w-4 h-4" />Criar evento bônus</button>
-          </div>
+          {configCampos}
+          <button disabled={busy} onClick={() => guard(() => apiService.criarBonus(buildConfig()), 'Evento criado')} className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white font-bold text-sm hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"><Plus className="w-4 h-4" />Criar evento bônus</button>
         </div>
       )}
 
@@ -195,6 +272,11 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
           {/* INSCRIÇÃO */}
           {evento.status === 'inscricao' && (
             <div className="space-y-4">
+              <div className="p-4 rounded-xl border border-zinc-800 bg-zinc-950/30 space-y-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Ajustes do evento (só enquanto as inscrições estão abertas)</span>
+                {configCampos}
+                <button disabled={busy} onClick={() => guard(() => apiService.configurarBonus(evento.id, buildConfig()), 'Ajustes salvos')} className="px-4 py-2 rounded-lg bg-zinc-800 text-white text-xs font-bold hover:bg-zinc-700 transition-all cursor-pointer disabled:opacity-50">Salvar ajustes</button>
+              </div>
               {evento.inscritos < evento.min_jogadores && (
                 <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-center gap-2"><AlertTriangle className="w-4 h-4" />Faltam {evento.min_jogadores - evento.inscritos} inscritos para poder iniciar.</div>
               )}

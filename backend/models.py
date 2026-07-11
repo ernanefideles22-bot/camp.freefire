@@ -201,6 +201,12 @@ class EventoBonusModel(Base):
     status: Mapped[str] = mapped_column(String, default='inscricao', index=True)
     min_jogadores: Mapped[int] = mapped_column(Integer, default=20)
     premio_total: Mapped[float] = mapped_column(Float, default=100.0)
+    # Data/hora do evento (texto livre, ex: '15/07 20:00') e premio por colocacao (1o..5o),
+    # configuraveis pelo admin. Default = tabela padrao (50/20/15/10/5 = 100).
+    data_hora: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # JSON com os premios absolutos por colocacao (qualquer nº de posicoes),
+    # ex: "[50,20,15,10,5]" (top 5) ou "[60,40]" (top 2). Vazio = padrao 50/20/15/10/5.
+    premios_json: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     # Credenciais de sala de cada uma das 3 quedas (preenchidas pelo admin)
     sala1_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
