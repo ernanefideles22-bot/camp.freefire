@@ -605,6 +605,22 @@ export const apiService = {
     const res = await api.post('/agente/executar', { acao, dados });
     return res.data;
   },
+  async configurarPago(id: number, payload: any): Promise<EventoBonus> { return (await api.post('/admin/pago/' + id + '/config', payload)).data; },
+  // ---------- TORNEIO PAGO (melhor de 3) ----------
+  async obterPagoAtual(): Promise<EventoBonus | null> { const r = await api.get('/pago/atual'); return r.data?.evento ?? null; },
+  async obterPlacarPago(id: number): Promise<PlacarBonus> { return (await api.get(`/pago/${id}/placar`)).data; },
+  async inscreverPago(id: number): Promise<any> { return (await api.post(`/pago/${id}/inscrever`)).data; },
+  async obterMinhaInscricaoPaga(id: number): Promise<MinhaInscricaoBonus> { return (await api.get(`/pago/${id}/minha-inscricao`)).data; },
+  async criarPago(payload: any): Promise<EventoBonus> { return (await api.post('/admin/pago/criar', payload)).data; },
+  async iniciarPago(id: number): Promise<any> { return (await api.post(`/admin/pago/${id}/iniciar`)).data; },
+  async definirSalaPaga(id: number, ordem: number, sala_id: string, sala_senha: string, horario?: string): Promise<any> { return (await api.post(`/admin/pago/${id}/sala`, { ordem, sala_id, sala_senha, horario })).data; },
+  async lancarResultadoPago(id: number, ordem: number, resultados: BonusResultadoInput[]): Promise<any> { return (await api.post(`/admin/pago/${id}/resultado`, { ordem, resultados })).data; },
+  async apurarPago(id: number): Promise<any> { return (await api.post(`/admin/pago/${id}/apurar`)).data; },
+  async cancelarPago(id: number): Promise<any> { return (await api.post(`/admin/pago/${id}/cancelar`)).data; },
+  async listarInscritosPago(id: number): Promise<{ jogadores: BonusInscrito[] }> { return (await api.get(`/admin/pago/${id}/inscritos`)).data; },
+  async listarPagamentosPago(id: number): Promise<{ pagamentos: PagamentoBonus[] }> { return (await api.get(`/admin/pago/${id}/pagamentos`)).data; },
+  async liberarPagamentoPago(id: number): Promise<any> { return (await api.post(`/admin/pago/pagamento/${id}/liberar`)).data; },
+  async rejeitarPagamentoPago(id: number): Promise<any> { return (await api.post(`/admin/pago/pagamento/${id}/rejeitar`)).data; },
 };
 
 export default api;

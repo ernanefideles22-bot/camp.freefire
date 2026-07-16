@@ -2071,3 +2071,177 @@ def bonus_rejeitar_pagamento(pagamento_id: int, _admin: JogadorModel = Depends(r
     _fechar_evento_bonus_se_completo(db, pg.evento_id)
     db.commit()
     return {'message': 'Premio rejeitado (nao pago).'}
+
+# ====================== TORNEIO PAGO (melhor de 3) ======================
+from models import EventoPagoModel, InscricaoPagaModel, ResultadoPagoModel, PagamentoPagoModel
+
+class CriarPagoBody(BaseModel):
+    nome: str = 'Torneio Pago'
+    data_hora: Optional[str] = None
+    min_jogadores: Optional[int] = None
+    taxa_inscricao: Optional[float] = None
+
+def _pago_atual(db):
+    return db.scalar(select(EventoPagoModel).where(EventoPagoModel.status.notin_(['pago', 'cancelado'])).order_by(EventoPagoModel.id.desc()))
+
+def _pago_inscritos(db, evento_id):
+    return db.scalar(select(func.count()).select_from(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id)) or 0
+
+def _pago_premios(db, ev):
+    # O premio sempre nasce do pote pago: 2/3 voltam aos cinco primeiros.
+    total = round(_pago_inscritos(db, ev.id) * ev.taxa_inscricao * (1 - RAKE), 2)
+    pesos = [0.50, 0.20, 0.15, 0.10, 0.05]
+    valores = [round(total * p, 2) for p in pesos]
+    if valores:
+        valores[0] = round(valores[0] + total - sum(valores), 2)
+    return valores
+
+def _pago_placar(db, evento_id):
+    linhas = []
+    for ins in db.scalars(select(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id)).all():
+        j = db.get(JogadorModel, ins.jogador_id)
+        rs = db.scalars(select(ResultadoPagoModel).where(ResultadoPagoModel.evento_id == evento_id, ResultadoPagoModel.jogador_id == ins.jogador_id)).all()
+        ordens = {r.ordem for r in rs}
+        linhas.append({'jogador_id': j.id, 'nick': j.nick, 'nome': j.nome,
+            'pontos': sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in rs),
+            'kills': sum(r.abates for r in rs), 'quedas_jogadas': len(ordens),
+            'melhor_colocacao': min((r.colocacao for r in rs), default=None),
+            'elegivel': {1, 2, 3}.issubset(ordens)})
+    linhas.sort(key=lambda x: (not x['elegivel'], -x['pontos'], -x['kills'], x['melhor_colocacao'] or 999))
+    for pos, linha in enumerate(linhas, 1): linha['posicao'] = pos
+    return linhas
+
+def _pago_serializar(db, ev):
+    premios = _pago_premios(db, ev)
+    return {'id': ev.id, 'nome': ev.nome, 'status': ev.status, 'min_jogadores': ev.min_jogadores,
+            'taxa_inscricao': ev.taxa_inscricao, 'data_hora': ev.data_hora,
+            'inscritos': _pago_inscritos(db, ev.id), 'premio_total': round(sum(premios), 2),
+            'premio_top5': premios}
+
+@app.get('/pago/atual')
+def pago_atual(db: Session = Depends(get_db)):
+    ev = _pago_atual(db)
+    return {'evento': _pago_serializar(db, ev) if ev else None}
+
+@app.get('/pago/{evento_id}/placar')
+def pago_placar(evento_id: int, db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev: raise HTTPException(404, 'Torneio nao encontrado')
+    return {'evento_id': ev.id, 'status': ev.status, 'premio_top5': _pago_premios(db, ev), 'jogadores': _pago_placar(db, ev.id)}
+
+@app.get('/pago/{evento_id}/minha-inscricao')
+def pago_minha_inscricao(evento_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev: raise HTTPException(404, 'Torneio nao encontrado')
+    inscrito = db.scalar(select(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id, InscricaoPagaModel.jogador_id == jogador.id)) is not None
+    salas = []
+    if inscrito:
+        for ordem in (1, 2, 3):
+            sala_id = getattr(ev, f'sala{ordem}_id')
+            if sala_id: salas.append({'ordem': ordem, 'sala_id': sala_id, 'senha': getattr(ev, f'sala{ordem}_senha'), 'horario': getattr(ev, f'sala{ordem}_horario')})
+    return {'inscrito': inscrito, 'salas': salas}
+
+@app.post('/pago/{evento_id}/inscrever')
+def pago_inscrever(evento_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev or ev.status != 'inscricao': raise HTTPException(400, 'Inscricoes indisponiveis.')
+    if db.scalar(select(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id, InscricaoPagaModel.jogador_id == jogador.id)): raise HTTPException(400, 'Voce ja esta inscrito.')
+    jogador = _lock_jogador(db, jogador.id)
+    if jogador.saldo < ev.taxa_inscricao: raise HTTPException(400, f'Saldo insuficiente. Necessario R$ {ev.taxa_inscricao:.2f}')
+    if _pago_inscritos(db, evento_id) >= LIMITE_QUEDA: raise HTTPException(400, f'Torneio lotado ({LIMITE_QUEDA} jogadores).')
+    registrar_transacao(db, jogador, tipo='inscricao_torneio', delta_saldo=-ev.taxa_inscricao, ref=f'torneio:{ev.id}')
+    db.add(InscricaoPagaModel(evento_id=ev.id, jogador_id=jogador.id)); db.commit()
+    return {'message': f'Inscricao confirmada! R$ {ev.taxa_inscricao:.2f} debitados.'}
+
+@app.post('/admin/pago/criar')
+def pago_criar(body: CriarPagoBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    if _pago_atual(db): raise HTTPException(400, 'Ja existe um torneio pago ativo.')
+    ev = EventoPagoModel(nome=body.nome.strip() or 'Torneio Pago', data_hora=(body.data_hora or '').strip() or None,
+        min_jogadores=max(2, int(body.min_jogadores or 2)), taxa_inscricao=round(max(0.01, float(body.taxa_inscricao or TAXA_INSCRICAO)), 2))
+    db.add(ev); db.commit(); db.refresh(ev); return _pago_serializar(db, ev)
+
+@app.post('/admin/pago/{evento_id}/iniciar')
+def pago_iniciar(evento_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev or ev.status != 'inscricao': raise HTTPException(400, 'Torneio nao pode ser iniciado.')
+    total = _pago_inscritos(db, ev.id)
+    if total < ev.min_jogadores: raise HTTPException(400, f'Faltam inscritos: {total}/{ev.min_jogadores}.')
+    ev.status = 'em_andamento'; db.commit(); return {'message': 'Torneio iniciado.', 'total': total}
+
+@app.post('/admin/pago/{evento_id}/sala')
+def pago_sala(evento_id: int, body: BonusSalaBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev or body.ordem not in (1, 2, 3): raise HTTPException(400, 'Sala ou ordem invalida.')
+    setattr(ev, f'sala{body.ordem}_id', body.sala_id.strip()); setattr(ev, f'sala{body.ordem}_senha', body.sala_senha.strip()); setattr(ev, f'sala{body.ordem}_horario', (body.horario or '').strip() or None)
+    db.commit(); return {'message': f'Sala {body.ordem} salva.'}
+
+@app.post('/admin/pago/{evento_id}/resultado')
+def pago_resultado(evento_id: int, body: BonusResultadoBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev or ev.status != 'em_andamento' or body.ordem not in (1, 2, 3): raise HTTPException(400, 'Torneio ou ordem invalida.')
+    existentes = db.scalars(select(ResultadoPagoModel).where(ResultadoPagoModel.evento_id == evento_id, ResultadoPagoModel.ordem == body.ordem)).all()
+    usados, colocacoes = {r.jogador_id for r in existentes}, {r.colocacao for r in existentes}
+    for r in body.resultados:
+        inscrito = db.scalar(select(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id, InscricaoPagaModel.jogador_id == r.jogador_id))
+        if not inscrito or r.jogador_id in usados or r.colocacao in colocacoes or not 1 <= r.colocacao <= MAX_COLOCACAO or not 0 <= r.abates <= MAX_ABATES: raise HTTPException(400, 'Resultado invalido ou duplicado.')
+        usados.add(r.jogador_id); colocacoes.add(r.colocacao); db.add(ResultadoPagoModel(evento_id=evento_id, ordem=body.ordem, jogador_id=r.jogador_id, colocacao=r.colocacao, abates=r.abates))
+    db.commit(); return {'message': f'Resultados da queda {body.ordem} salvos.'}
+
+@app.post('/admin/pago/{evento_id}/apurar')
+def pago_apurar(evento_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev or ev.status != 'em_andamento': raise HTTPException(400, 'Torneio nao esta em andamento.')
+    ordens = set(db.scalars(select(ResultadoPagoModel.ordem).where(ResultadoPagoModel.evento_id == evento_id)).all())
+    if not {1, 2, 3}.issubset(ordens): raise HTTPException(400, 'Lance resultados das tres quedas antes de apurar.')
+    placar, premios = [x for x in _pago_placar(db, evento_id) if x['elegivel']], _pago_premios(db, ev)
+    for pos, linha in enumerate(placar[:5], 1): db.add(PagamentoPagoModel(evento_id=ev.id, jogador_id=linha['jogador_id'], colocacao_final=pos, pontos_total=linha['pontos'], valor=premios[pos-1]))
+    ev.status = 'aguardando_revisao'; db.commit(); return {'message': 'Apuracao concluida. Premios aguardam revisao.'}
+
+@app.post('/admin/pago/{evento_id}/cancelar')
+def pago_cancelar(evento_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev or ev.status in ('pago', 'cancelado'): raise HTTPException(400, 'Torneio ja finalizado.')
+    for ins in db.scalars(select(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id)).all():
+        j = _lock_jogador(db, ins.jogador_id); registrar_transacao(db, j, tipo='estorno_torneio', delta_saldo=ev.taxa_inscricao, ref=f'torneio:{ev.id}'); db.delete(ins)
+    ev.status = 'cancelado'; db.commit(); return {'message': 'Torneio cancelado e inscricoes reembolsadas.'}
+
+@app.get('/admin/pago/{evento_id}/inscritos')
+def pago_inscritos(evento_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    itens = db.scalars(select(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id).order_by(InscricaoPagaModel.criado_em)).all()
+    return {'evento_id': evento_id, 'total': len(itens), 'jogadores': [{'jogador_id': i.jogador_id, 'nick': db.get(JogadorModel, i.jogador_id).nick, 'nome': db.get(JogadorModel, i.jogador_id).nome, 'entrou_em': i.criado_em.strftime('%d/%m %H:%M')} for i in itens]}
+
+@app.get('/admin/pago/{evento_id}/pagamentos')
+def pago_pagamentos(evento_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    pgs = db.scalars(select(PagamentoPagoModel).where(PagamentoPagoModel.evento_id == evento_id).order_by(PagamentoPagoModel.colocacao_final)).all()
+    return {'evento_id': evento_id, 'pagamentos': [{'id': p.id, 'jogador_id': p.jogador_id, 'nick': db.get(JogadorModel, p.jogador_id).nick, 'nome': db.get(JogadorModel, p.jogador_id).nome, 'colocacao': p.colocacao_final, 'pontos': p.pontos_total, 'valor': p.valor, 'status': p.status, 'ip_compartilhado': False, 'device_compartilhado': False} for p in pgs]}
+
+@app.post('/admin/pago/pagamento/{pagamento_id}/{acao}')
+def pago_pagamento(pagamento_id: int, acao: str, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    pg = db.get(PagamentoPagoModel, pagamento_id)
+    if not pg or pg.status != 'pendente' or acao not in ('liberar', 'rejeitar'): raise HTTPException(400, 'Pagamento invalido.')
+    if acao == 'liberar':
+        j = _lock_jogador(db, pg.jogador_id); registrar_transacao(db, j, tipo='premio_torneio', delta_saldo=pg.valor, delta_sacavel=pg.valor, ref=f'torneio:{pg.evento_id}'); pg.status = 'liberado'; pg.liberado_em = _utcnow_bonus()
+    else: pg.status = 'rejeitado'
+    pend = db.scalar(select(func.count()).select_from(PagamentoPagoModel).where(PagamentoPagoModel.evento_id == pg.evento_id, PagamentoPagoModel.status == 'pendente')) or 0
+    if not pend: db.get(EventoPagoModel, pg.evento_id).status = 'pago'
+    db.commit(); return {'message': f'Premio {acao}.'}
+
+
+
+class ConfigPagoBody(BaseModel):
+    nome: Optional[str] = None
+    data_hora: Optional[str] = None
+    min_jogadores: Optional[int] = None
+    taxa_inscricao: Optional[float] = None
+
+@app.post('/admin/pago/{evento_id}/config')
+def pago_config(evento_id: int, body: ConfigPagoBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev or ev.status != 'inscricao':
+        raise HTTPException(400, 'So e possivel ajustar torneios com inscricoes abertas.')
+    if body.nome is not None and body.nome.strip(): ev.nome = body.nome.strip()
+    if body.data_hora is not None: ev.data_hora = body.data_hora.strip() or None
+    if body.min_jogadores is not None: ev.min_jogadores = max(2, int(body.min_jogadores))
+    if body.taxa_inscricao is not None: ev.taxa_inscricao = round(max(0.01, float(body.taxa_inscricao)), 2)
+    db.commit(); db.refresh(ev)
+    return _pago_serializar(db, ev)

@@ -7,6 +7,7 @@ import { Spinner } from './Spinner';
 interface QuedaBonusProps {
   currentUser: Jogador | null;
   onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void;
+  tipo?: 'bonus' | 'pago';
 }
 
 const brl = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
@@ -28,7 +29,7 @@ const statusLabel: Record<string, string> = {
   cancelado: 'Cancelado',
 };
 
-export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast }) => {
+export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast, tipo = 'bonus' }) => {
   const [evento, setEvento] = useState<EventoBonus | null>(null);
   const [placar, setPlacar] = useState<PlacarBonusItem[]>([]);
   const [minha, setMinha] = useState<MinhaInscricaoBonus | null>(null);
@@ -38,16 +39,17 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
   const [historico, setHistorico] = useState<HistoricoBonusItem[]>([]);
   const [rankingAberto, setRankingAberto] = useState<number | null>(null);
   const [rankings, setRankings] = useState<Record<number, PlacarBonusItem[]>>({});
+  const pago = tipo === 'pago';
 
   const fetchAll = useCallback(async () => {
     try {
-      const ev = await apiService.obterBonusAtual();
+      const ev = pago ? await apiService.obterPagoAtual() : await apiService.obterBonusAtual();
       setEvento(ev);
       if (ev) {
-        const plc = await apiService.obterPlacarBonus(ev.id).catch(() => null);
+        const plc = await (pago ? apiService.obterPlacarPago(ev.id) : apiService.obterPlacarBonus(ev.id)).catch(() => null);
         if (plc) setPlacar(plc.jogadores);
         if (currentUser) {
-          const mi = await apiService.obterMinhaInscricaoBonus(ev.id).catch(() => null);
+          const mi = await (pago ? apiService.obterMinhaInscricaoPaga(ev.id) : apiService.obterMinhaInscricaoBonus(ev.id)).catch(() => null);
           setMinha(mi);
         } else { setMinha(null); }
       } else { setPlacar([]); setMinha(null); }
@@ -62,7 +64,7 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
   }, [fetchAll]);
 
   useEffect(() => {
-    apiService.obterHistoricoBonus().then(setHistorico).catch(() => {});
+    if (pago) setHistorico([]); else apiService.obterHistoricoBonus().then(setHistorico).catch(() => {});
   }, []);
 
   const handleParticipar = async () => {
@@ -70,7 +72,7 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
     if (!evento) return;
     setBusy(true);
     try {
-      const r = await apiService.inscreverBonus(evento.id, deviceHash());
+      const r = await (pago ? apiService.inscreverPago(evento.id) : apiService.inscreverBonus(evento.id, deviceHash()));
       onAddToast('success', 'Você está dentro!', r?.message || 'Inscrição confirmada. Boa sorte!');
       await fetchAll();
     } catch (e: any) { onAddToast('error', 'Não foi possível entrar', e.message || 'Falha ao inscrever.'); }
@@ -88,7 +90,7 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast 
     if (rankingAberto === id) { setRankingAberto(null); return; }
     setRankingAberto(id);
     if (!rankings[id]) {
-      try { const p = await apiService.obterPlacarBonus(id); setRankings(r => ({ ...r, [id]: p.jogadores })); }
+      try { const p = await (pago ? apiService.obterPlacarPago(id) : apiService.obterPlacarBonus(id)); setRankings(r => ({ ...r, [id]: p.jogadores })); }
       catch { /* silencioso */ }
     }
   };

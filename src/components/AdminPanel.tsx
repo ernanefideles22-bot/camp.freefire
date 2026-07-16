@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { UserPlus, Users, Gift, Calendar, Plus, Trash2, Send, Key, Lock, Check, X, Upload, AlertTriangle, RefreshCw, Landmark, Copy, QrCode } from 'lucide-react';
+import { UserPlus, Users, Gift, Trophy, Calendar, Plus, Trash2, Send, Key, Lock, Check, X, Upload, AlertTriangle, RefreshCw, Landmark, Copy, QrCode } from 'lucide-react';
 import { apiService } from '../services/api';
 import type { Jogador, ResultadoQuedaInput, DepositoRequisicao, SaqueRequisicao, PremiacaoQueda, InscritosQueda } from '../services/api';
 import { Spinner } from './Spinner';
 import { gerarPixCopiaECola, gerarQrDataUrl } from '../utils/pix';
 import { AdminAgentChat } from './AdminAgentChat';
 import { AdminBonus } from './AdminBonus';
+import { AdminPago } from './AdminPago';
 import { AdminApagarJogadores } from './AdminApagarJogadores';
 
 interface AdminPanelProps {
@@ -22,7 +23,7 @@ interface LinhaResultado {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser: _currentUser }) => {
-  const [activeTab, setActiveTab] = useState<'geral' | 'lancar' | 'depositos' | 'retidos' | 'bonus'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'lancar' | 'depositos' | 'retidos' | 'bonus' | 'pago'>('geral');
   const [salaQueda, setSalaQueda] = useState<string>('1');
   const [salaId, setSalaId] = useState<string>('');
   const [salaSenha, setSalaSenha] = useState<string>('');
@@ -362,6 +363,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
           <Gift className="w-4 h-4 text-primary" />
           Bônus
         </button>
+        <button onClick={() => setActiveTab('pago')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'pago' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
+          <Trophy className="w-4 h-4 text-amber-400" />
+          Torneio Pago
+        </button>
       </div>
       <div className="p-5">
         {activeTab === 'geral' && (
@@ -642,6 +647,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
               </div>
             )}
           </div>
+        )}
+        {activeTab === 'pago' && (
+          <AdminPago onAddToast={onAddToast} />
         )}
         {activeTab === 'bonus' && (
           <AdminBonus onAddToast={onAddToast} />

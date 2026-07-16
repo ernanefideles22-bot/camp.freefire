@@ -9,7 +9,7 @@ import { ToastContainer } from './components/Toast';
 import type { ToastMessage, ToastType } from './components/Toast';
 import type { Jogador } from './services/api';
 
-type TabType = 'leaderboard' | 'player_portal' | 'admin' | 'bonus';
+type TabType = 'leaderboard' | 'player_portal' | 'admin' | 'bonus' | 'pago';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<Jogador | null>(() => {
@@ -78,7 +78,11 @@ function App() {
               <Gift className="w-4 h-4" />
               Queda Bônus
             </button>
-            {currentUser?.is_admin && (
+            <button onClick={() => setActiveTab('pago')} className={tabClasses('pago')}>
+              <Trophy className="w-4 h-4" />
+              Torneio Pago
+            </button>
+        {currentUser?.is_admin && (
             <button onClick={() => setActiveTab('admin')} className={tabClasses('admin')}>
               <Sliders className="w-4 h-4" />
               Painel Admin
@@ -139,6 +143,10 @@ function App() {
         <div className="animate-in fade-in slide-in-from-bottom-3 duration-300">
           {activeTab === 'leaderboard' && (
             <Leaderboard onAddToast={handleAddToast} />
+          )}
+
+          {activeTab === 'pago' && (
+            <QuedaBonus tipo="pago" currentUser={currentUser} onAddToast={handleAddToast} />
           )}
 
           {activeTab === 'bonus' && (
