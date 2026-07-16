@@ -22,6 +22,7 @@ export const AdminPago: React.FC<AdminPagoProps> = ({ onAddToast }) => {
   const [nome, setNome] = useState<string>('Queda Bônus');
   const [dataHora, setDataHora] = useState<string>('');
   const [minimo, setMinimo] = useState<string>('20');
+  const [taxa, setTaxa] = useState<string>('3');
   const [numPos, setNumPos] = useState<string>('5');
   const [modo, setModo] = useState<'valor' | 'pct'>('valor');
   const [totalPool, setTotalPool] = useState<string>('100');
@@ -68,6 +69,7 @@ export const AdminPago: React.FC<AdminPagoProps> = ({ onAddToast }) => {
       setNome(evento.nome);
       setDataHora(evento.data_hora ?? '');
       setMinimo(String(evento.min_jogadores));
+      setTaxa(String((evento as any).taxa_inscricao ?? 3));
       const lst = evento.premio_top5 ?? [50, 20, 15, 10, 5];
       setNumPos(String(lst.length));
       setModo('valor');
@@ -188,7 +190,7 @@ export const AdminPago: React.FC<AdminPagoProps> = ({ onAddToast }) => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div><label className={lbl}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} className={inp} /></div>
         <div><label className={lbl}>Data e hora</label><input value={dataHora} onChange={e => setDataHora(e.target.value)} placeholder="ex: 15/07 20:00" className={inp} /></div>
-        <div><label className={lbl}>Mínimo de jogadores</label><input type="number" min="2" value={minimo} onChange={e => setMinimo(e.target.value)} className={inp} /></div>
+        <div><label className={lbl}>Mínimo de jogadores</label><input type="number" min="2" value={minimo} onChange={e => setMinimo(e.target.value)} className={inp} /></div><div><label className={lbl}>Entrada (R$)</label><input type="number" min="0.01" step="0.01" value={taxa} onChange={e => setTaxa(e.target.value)} className={inp} /></div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div><label className={lbl}>Posições premiadas (top N)</label><input type="number" min="1" max="20" value={numPos} onChange={e => setNumPos(e.target.value)} className={inp} /></div>

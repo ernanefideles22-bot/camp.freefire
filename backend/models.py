@@ -306,3 +306,11 @@ class PagamentoPagoModel(Base):
     status: Mapped[str] = mapped_column(String, default='pendente', index=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     liberado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PremioConfigPagoModel(Base):
+    __tablename__ = 'premios_config_pagos'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    evento_id: Mapped[int] = mapped_column(ForeignKey('eventos_pagos.id'), unique=True, nullable=False, index=True)
+    # Pesos da divisao do pote por colocacao, em JSON. Ex.: [50, 20, 15, 10, 5].
+    pesos_json: Mapped[Optional[str]] = mapped_column(String, nullable=True)

@@ -2073,13 +2073,14 @@ def bonus_rejeitar_pagamento(pagamento_id: int, _admin: JogadorModel = Depends(r
     return {'message': 'Premio rejeitado (nao pago).'}
 
 # ====================== TORNEIO PAGO (melhor de 3) ======================
-from models import EventoPagoModel, InscricaoPagaModel, ResultadoPagoModel, PagamentoPagoModel
+from models import EventoPagoModel, InscricaoPagaModel, ResultadoPagoModel, PagamentoPagoModel, PremioConfigPagoModel
 
 class CriarPagoBody(BaseModel):
     nome: str = 'Torneio Pago'
     data_hora: Optional[str] = None
     min_jogadores: Optional[int] = None
     taxa_inscricao: Optional[float] = None
+    premios: Optional[List[float]] = None
 
 def _pago_atual(db):
     return db.scalar(select(EventoPagoModel).where(EventoPagoModel.status.notin_(['pago', 'cancelado'])).order_by(EventoPagoModel.id.desc()))
@@ -2088,12 +2089,18 @@ def _pago_inscritos(db, evento_id):
     return db.scalar(select(func.count()).select_from(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id)) or 0
 
 def _pago_premios(db, ev):
-    # O premio sempre nasce do pote pago: 2/3 voltam aos cinco primeiros.
+    # O admin define os pesos; o total continua limitado ao pote arrecadado.
     total = round(_pago_inscritos(db, ev.id) * ev.taxa_inscricao * (1 - RAKE), 2)
-    pesos = [0.50, 0.20, 0.15, 0.10, 0.05]
-    valores = [round(total * p, 2) for p in pesos]
-    if valores:
-        valores[0] = round(valores[0] + total - sum(valores), 2)
+    cfg = db.scalar(select(PremioConfigPagoModel).where(PremioConfigPagoModel.evento_id == ev.id))
+    try:
+        pesos = json.loads(cfg.pesos_json) if cfg and cfg.pesos_json else [50, 20, 15, 10, 5]
+        pesos = [max(0.0, float(p)) for p in pesos][:20]
+    except Exception:
+        pesos = [50, 20, 15, 10, 5]
+    soma = sum(pesos)
+    if soma <= 0: pesos, soma = [50, 20, 15, 10, 5], 100.0
+    valores = [round(total * p / soma, 2) for p in pesos]
+    if valores: valores[0] = round(valores[0] + total - sum(valores), 2)
     return valores
 
 def _pago_placar(db, evento_id):
@@ -2158,7 +2165,10 @@ def pago_criar(body: CriarPagoBody, _admin: JogadorModel = Depends(require_admin
     if _pago_atual(db): raise HTTPException(400, 'Ja existe um torneio pago ativo.')
     ev = EventoPagoModel(nome=body.nome.strip() or 'Torneio Pago', data_hora=(body.data_hora or '').strip() or None,
         min_jogadores=max(2, int(body.min_jogadores or 2)), taxa_inscricao=round(max(0.01, float(body.taxa_inscricao or TAXA_INSCRICAO)), 2))
-    db.add(ev); db.commit(); db.refresh(ev); return _pago_serializar(db, ev)
+    db.add(ev); db.flush()
+    pesos = [max(0.0, float(v)) for v in (body.premios or [50, 20, 15, 10, 5])][:20]
+    db.add(PremioConfigPagoModel(evento_id=ev.id, pesos_json=json.dumps(pesos)))
+    db.commit(); db.refresh(ev); return _pago_serializar(db, ev)
 
 @app.post('/admin/pago/{evento_id}/iniciar')
 def pago_iniciar(evento_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
@@ -2233,6 +2243,7 @@ class ConfigPagoBody(BaseModel):
     data_hora: Optional[str] = None
     min_jogadores: Optional[int] = None
     taxa_inscricao: Optional[float] = None
+    premios: Optional[List[float]] = None
 
 @app.post('/admin/pago/{evento_id}/config')
 def pago_config(evento_id: int, body: ConfigPagoBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
@@ -2243,5 +2254,10 @@ def pago_config(evento_id: int, body: ConfigPagoBody, _admin: JogadorModel = Dep
     if body.data_hora is not None: ev.data_hora = body.data_hora.strip() or None
     if body.min_jogadores is not None: ev.min_jogadores = max(2, int(body.min_jogadores))
     if body.taxa_inscricao is not None: ev.taxa_inscricao = round(max(0.01, float(body.taxa_inscricao)), 2)
+    if body.premios is not None:
+        pesos = [max(0.0, float(v)) for v in body.premios][:20]
+        cfg = db.scalar(select(PremioConfigPagoModel).where(PremioConfigPagoModel.evento_id == ev.id))
+        if cfg: cfg.pesos_json = json.dumps(pesos)
+        else: db.add(PremioConfigPagoModel(evento_id=ev.id, pesos_json=json.dumps(pesos)))
     db.commit(); db.refresh(ev)
     return _pago_serializar(db, ev)
