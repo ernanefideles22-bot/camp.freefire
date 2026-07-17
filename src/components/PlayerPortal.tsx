@@ -102,6 +102,23 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
   const taxa = premiacao?.taxa_inscricao ?? 3;
   const pagoTaxa = pagoEvento ? Number((pagoEvento as any).taxa_inscricao ?? 3) : 3;
 
+  const handleCancelarPago = async () => {
+    if (!pagoEvento) return;
+    if (!window.confirm('Cancelar sua inscrição e receber o valor de volta no saldo?')) return;
+    setBusyPago(true);
+    try {
+      await apiService.cancelarInscricaoPago(pagoEvento.id);
+      onAddToast('success', 'Inscrição cancelada', brl(pagoTaxa) + ' devolvidos ao seu saldo.');
+      const updatedUser = { ...currentUser, saldo: (currentUser.saldo || 0) + pagoTaxa };
+      onUpdateUser(updatedUser);
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      setPagoInscrito(false);
+      fetchPago(); fetchPlayerStats();
+    } catch (err: any) {
+      onAddToast('error', 'Erro ao cancelar', err.message || 'Tente novamente.');
+    } finally { setBusyPago(false); }
+  };
+
   const handleInscreverPago = async () => {
     if (!pagoEvento) return;
     setBusyPago(true);
@@ -189,7 +206,12 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
             </div>
           </div>
           {pagoInscrito ? (
-            <div className="w-full py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-sm text-center flex items-center justify-center gap-2"><Check className="w-4 h-4" />Você está no torneio — boa sorte!</div>
+            <div className="space-y-2">
+              <div className="w-full py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-sm text-center flex items-center justify-center gap-2"><Check className="w-4 h-4" />Você está no torneio — boa sorte!</div>
+              {pagoEvento.status === 'inscricao' && (
+                <button disabled={busyPago} onClick={handleCancelarPago} className="w-full py-2 rounded-xl border border-zinc-800 text-zinc-400 hover:text-rose-400 hover:border-rose-500/40 text-xs font-bold transition-all cursor-pointer disabled:opacity-50">Desistir e receber {brl(pagoTaxa)} de volta</button>
+              )}
+            </div>
           ) : pagoEvento.status === 'inscricao' ? (
             saldo < pagoTaxa ? (
               <div className="space-y-2">
