@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Gamepad2, Wallet, Trophy, Users, Check, Copy, RefreshCw, Crown, Clock, DollarSign } from 'lucide-react';
 import { apiService } from '../services/api';
-import type { Jogador, SalaData, StatusQueda, PremiacaoQueda, QuedaAberta, MeuConvite } from '../services/api';
+import type { Jogador, SalaData, StatusQueda, PremiacaoQueda, QuedaAberta, MeuConvite, EventoBonus, PlacarBonus } from '../services/api';
 import { Spinner } from './Spinner';
 import PixDeposito from './PixDeposito';
 import PixSaque from './PixSaque';
@@ -28,6 +28,10 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
   const [loadingStatus, setLoadingStatus] = useState<boolean>(false);
   const [loadingInscricao, setLoadingInscricao] = useState<boolean>(false);
   const [copied, setCopied] = useState<string>('');
+  const [pagoEvento, setPagoEvento] = useState<EventoBonus | null>(null);
+  const [pagoInscrito, setPagoInscrito] = useState<boolean>(false);
+  const [pagoPlacar, setPagoPlacar] = useState<PlacarBonus | null>(null);
+  const [busyPago, setBusyPago] = useState<boolean>(false);
 
   const fetchPlayerStats = async () => {
     setLoadingHistory(true);
@@ -70,10 +74,23 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
     }
   };
 
+  const fetchPago = async () => {
+    try {
+      const ev = await apiService.obterPagoAtual();
+      setPagoEvento(ev);
+      if (ev) {
+        apiService.obterMinhaInscricaoPaga(ev.id).then((m) => setPagoInscrito(!!(m && m.inscrito))).catch(() => {});
+        if (ev.status === 'em_andamento') { apiService.obterPlacarPago(ev.id).then(setPagoPlacar).catch(() => setPagoPlacar(null)); }
+        else { setPagoPlacar(null); }
+      } else { setPagoInscrito(false); setPagoPlacar(null); }
+    } catch { /* silencioso */ }
+  };
+
   useEffect(() => {
     fetchPlayerStats();
     fetchQuedaStatus();
-    const interval = setInterval(() => { fetchQuedaStatus(true); }, 6000);
+    fetchPago();
+    const interval = setInterval(() => { fetchQuedaStatus(true); fetchPago(); }, 6000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedQueda, currentUser.id]);
@@ -83,6 +100,23 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
   }, [currentUser.id]);
 
   const taxa = premiacao?.taxa_inscricao ?? 3;
+  const pagoTaxa = pagoEvento ? Number((pagoEvento as any).taxa_inscricao ?? 3) : 3;
+
+  const handleInscreverPago = async () => {
+    if (!pagoEvento) return;
+    setBusyPago(true);
+    try {
+      await apiService.inscreverPago(pagoEvento.id);
+      onAddToast('success', 'Você está no torneio!', brl(pagoTaxa) + ' debitados do seu saldo.');
+      const updatedUser = { ...currentUser, saldo: (currentUser.saldo || 0) - pagoTaxa };
+      onUpdateUser(updatedUser);
+      localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+      setPagoInscrito(true);
+      fetchPago(); fetchPlayerStats();
+    } catch (err: any) {
+      onAddToast('error', 'Erro na inscrição', err.message || 'Verifique seu saldo e tente novamente.');
+    } finally { setBusyPago(false); }
+  };
 
   const handleInscricao = async () => {
     setLoadingInscricao(true);
@@ -121,6 +155,73 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
   // ---------- ARENA ----------
   const arena = (
     <div className="space-y-5">
+      {pagoEvento && (pagoEvento.status === 'inscricao' || pagoEvento.status === 'em_andamento') && (
+        <div className="p-5 rounded-2xl border border-amber-500/30 bg-gradient-to-b from-amber-500/10 to-transparent space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1"><Trophy className="w-3.5 h-3.5" />Torneio oficial FlowFire</span>
+              <h2 className="text-lg font-black text-white truncate">{pagoEvento.nome}</h2>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-primary">{pagoEvento.status === 'inscricao' ? 'Inscrições abertas' : 'Em andamento'}{pagoEvento.data_hora ? ' • ' + pagoEvento.data_hora : ''}</span>
+            </div>
+            <button onClick={() => { fetchPago(); fetchPlayerStats(); }} className="p-2 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer" title="Atualizar"><RefreshCw className="w-4 h-4" /></button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-300">
+            <span className="px-2.5 py-1 rounded-lg bg-accent-orange/10 border border-accent-orange/30 text-accent-orange font-bold flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" />Entrada {brl(pagoTaxa)}</span>
+            <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 font-bold">Premiação {brl(pagoEvento.premio_total)}</span>
+            <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 font-bold text-zinc-400">Melhor de 3</span>
+          </div>
+          {pagoEvento.premio_top5 && pagoEvento.premio_top5.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {pagoEvento.premio_top5.map((v, i) => (
+                <span key={i} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-300 flex items-center gap-1">
+                  {i === 0 && <Crown className="w-3 h-3 text-amber-400" />}{i + 1}º <b className="text-emerald-400">{brl(v)}</b>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <Users className="w-4 h-4 text-primary" />
+              <b className="text-white">{pagoEvento.inscritos}</b> / mín. {pagoEvento.min_jogadores} inscritos
+            </div>
+            <div className="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-zinc-800/80">
+              <div className="h-full rounded-full bg-primary transition-all duration-500" style={{ width: Math.min(100, (pagoEvento.inscritos / Math.max(1, pagoEvento.min_jogadores)) * 100) + '%' }} />
+            </div>
+          </div>
+          {pagoInscrito ? (
+            <div className="w-full py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-sm text-center flex items-center justify-center gap-2"><Check className="w-4 h-4" />Você está no torneio — boa sorte!</div>
+          ) : pagoEvento.status === 'inscricao' ? (
+            saldo < pagoTaxa ? (
+              <div className="space-y-2">
+                <button disabled className="w-full py-3 rounded-xl bg-zinc-800 text-zinc-500 border border-zinc-700/50 font-black text-sm cursor-not-allowed">Saldo insuficiente ({brl(saldo)})</button>
+                <button onClick={() => setAba('carteira')} className="w-full py-2.5 rounded-xl bg-accent-cyan/90 text-zinc-950 font-black text-sm hover:bg-accent-cyan transition-all cursor-pointer flex items-center justify-center gap-2"><Wallet className="w-4 h-4" />Adicionar saldo via PIX</button>
+              </div>
+            ) : (
+              <button disabled={busyPago} onClick={handleInscreverPago} className="w-full py-3 rounded-xl bg-primary text-white font-black text-sm hover:opacity-90 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
+                {busyPago ? <Spinner size="sm" /> : <Trophy className="w-4 h-4" />}{busyPago ? 'Confirmando...' : 'Entrar no torneio • ' + brl(pagoTaxa)}
+              </button>
+            )
+          ) : (
+            <div className="w-full py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 font-bold text-sm text-center">Inscrições encerradas</div>
+          )}
+          {pagoPlacar && pagoPlacar.jogadores && pagoPlacar.jogadores.length > 0 && (
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Ranking do torneio (ao vivo)</span>
+              <div className="space-y-1">
+                {pagoPlacar.jogadores.slice(0, 5).map((l) => (
+                  <div key={l.jogador_id} className="flex items-center gap-3 p-2 rounded-lg border border-zinc-800 bg-zinc-950/40">
+                    <span className={'text-xs font-black w-6 text-center ' + placementColor(l.posicao)}>{l.posicao}º</span>
+                    <span className="flex-1 min-w-0 truncate text-sm font-bold text-white">{l.nick}</span>
+                    <span className="text-xs text-zinc-300"><b className="text-white">{l.pontos}</b> pts</span>
+                    <span className="text-[11px] text-zinc-500 w-12 text-right">{l.kills}k</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Seletor de queda */}
       {quedasAbertas.length > 0 && (
         <div className="flex flex-wrap gap-2 justify-center">
