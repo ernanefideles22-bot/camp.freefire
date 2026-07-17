@@ -2168,6 +2168,22 @@ def pago_inscrever(evento_id: int, jogador: JogadorModel = Depends(obter_usuario
     db.add(InscricaoPagaModel(evento_id=ev.id, jogador_id=jogador.id)); db.commit()
     return {'message': f'Inscricao confirmada! R$ {ev.taxa_inscricao:.2f} debitados.'}
 
+@app.post('/pago/{evento_id}/cancelar-inscricao')
+def pago_cancelar_inscricao(evento_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Torneio nao encontrado')
+    if ev.status != 'inscricao':
+        raise HTTPException(400, 'O torneio ja comecou. Fale com o organizador para sair.')
+    ins = db.scalar(select(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id, InscricaoPagaModel.jogador_id == jogador.id))
+    if not ins:
+        raise HTTPException(400, 'Voce nao esta inscrito neste torneio.')
+    jogador = _lock_jogador(db, jogador.id)
+    registrar_transacao(db, jogador, tipo='estorno_inscricao_torneio', delta_saldo=ev.taxa_inscricao, ref=f'torneio {ev.id}')
+    db.delete(ins); db.commit()
+    return {'message': f'Inscricao cancelada. R$ {ev.taxa_inscricao:.2f} devolvidos ao seu saldo.'}
+
+
 @app.post('/admin/pago/criar')
 def pago_criar(body: CriarPagoBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     if _pago_atual(db): raise HTTPException(400, 'Ja existe um torneio pago ativo.')
