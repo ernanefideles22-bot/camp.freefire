@@ -2101,18 +2101,14 @@ def _pago_inscritos(db, evento_id):
     return db.scalar(select(func.count()).select_from(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id)) or 0
 
 def _pago_premios(db, ev):
-    # O admin define os pesos; o total continua limitado ao pote arrecadado.
-    total = round(_pago_inscritos(db, ev.id) * ev.taxa_inscricao * (1 - RAKE), 2)
+    # Premio fixo: o valor definido pelo admin e exatamente o que aparece e sera pago.
     cfg = db.scalar(select(PremioConfigPagoModel).where(PremioConfigPagoModel.evento_id == ev.id))
     try:
         pesos = json.loads(cfg.pesos_json) if cfg and cfg.pesos_json else [50, 20, 15, 10, 5]
         pesos = [max(0.0, float(p)) for p in pesos][:20]
     except Exception:
         pesos = [50, 20, 15, 10, 5]
-    soma = sum(pesos)
-    if soma <= 0: pesos, soma = [50, 20, 15, 10, 5], 100.0
-    valores = [round(total * p / soma, 2) for p in pesos]
-    if valores: valores[0] = round(valores[0] + total - sum(valores), 2)
+    valores = [round(p, 2) for p in pesos]
     return valores
 
 def _pago_placar(db, evento_id):
