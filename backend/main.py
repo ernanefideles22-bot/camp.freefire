@@ -602,14 +602,26 @@ def classificacao(db: Session = Depends(get_db)):
                                      ResultadoQuedaModel.numero_queda >= _desde)).all()
         total_pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in res_list)
         colocacoes = [r.colocacao for r in res_list]
+        # --- Torneio Pago entra no ranking: pontos/kills contam; ganhos = premios liberados ---
+        pg_rs = db.scalars(select(ResultadoPagoModel)
+                           .join(EventoPagoModel, ResultadoPagoModel.evento_id == EventoPagoModel.id)
+                           .where(ResultadoPagoModel.jogador_id == j.id,
+                                  EventoPagoModel.status != 'cancelado')).all()
+        pg_pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in pg_rs)
+        pg_kills = sum(r.abates for r in pg_rs)
+        pg_quedas = len({(r.evento_id, r.ordem) for r in pg_rs})
+        pg_ganhos = db.scalar(select(func.coalesce(func.sum(PagamentoPagoModel.valor), 0.0))
+                              .where(PagamentoPagoModel.jogador_id == j.id,
+                                     PagamentoPagoModel.status == 'liberado')) or 0.0
+        colocacoes = colocacoes + [r.colocacao for r in pg_rs]
         resultado.append({
             'id': j.id, 'jogador_id': j.id, 'nick': j.nick, 'nome': j.nome, 'saldo': j.saldo,
-            'total_premios': sum(r.premio for r in res_list),
-            'ganhos_reais': sum(r.premio for r in res_list),
-            'total_abates': sum(r.abates for r in res_list),
-            'total_quedas': len(res_list),
-            'quedas_jogadas': len(res_list),
-            'total_pontos': total_pontos,
+            'total_premios': sum(r.premio for r in res_list) + pg_ganhos,
+            'ganhos_reais': sum(r.premio for r in res_list) + pg_ganhos,
+            'total_abates': sum(r.abates for r in res_list) + pg_kills,
+            'total_quedas': len(res_list) + pg_quedas,
+            'quedas_jogadas': len(res_list) + pg_quedas,
+            'total_pontos': total_pontos + pg_pontos,
             'melhor_colocacao': min(colocacoes) if colocacoes else None,
         })
     # Liga de PONTOS: pontos > kills > premios (dinheiro nao define posicao no ranking)
