@@ -184,6 +184,7 @@ export const AdminPago: React.FC<AdminPagoProps> = ({ onAddToast }) => {
     nome: nome.trim() || 'Queda Bônus',
     data_hora: dataHora.trim() || undefined,
     min_jogadores: parseInt(minimo) || undefined,
+    taxa_inscricao: parseFloat(taxa) || undefined,
     premios: premiosAbs,
   });
   const configCampos = (
