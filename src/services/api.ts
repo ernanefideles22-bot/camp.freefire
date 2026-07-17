@@ -610,6 +610,7 @@ export const apiService = {
   async obterPagoAtual(): Promise<EventoBonus | null> { const r = await api.get('/pago/atual'); return r.data?.evento ?? null; },
   async obterPlacarPago(id: number): Promise<PlacarBonus> { return (await api.get(`/pago/${id}/placar`)).data; },
   async inscreverPago(id: number): Promise<any> { return (await api.post(`/pago/${id}/inscrever`)).data; },
+  async cancelarInscricaoPago(id: number): Promise<any> { return (await api.post(`/pago/${id}/cancelar-inscricao`)).data; },
   async obterMinhaInscricaoPaga(id: number): Promise<MinhaInscricaoBonus> { return (await api.get(`/pago/${id}/minha-inscricao`)).data; },
   async criarPago(payload: any): Promise<EventoBonus> { return (await api.post('/admin/pago/criar', payload)).data; },
   async iniciarPago(id: number): Promise<any> { return (await api.post(`/admin/pago/${id}/iniciar`)).data; },
