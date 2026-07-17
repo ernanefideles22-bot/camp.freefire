@@ -163,7 +163,6 @@ export const AdminPago: React.FC<AdminPagoProps> = ({ onAddToast }) => {
 
   if (loading) return (<div className="ff-card p-8 flex justify-center"><Spinner size="md" className="text-primary" /></div>);
 
-  const premioTop5 = evento?.premio_top5 ?? [50, 20, 15, 10, 5];
   const podeIniciar = !!evento && evento.status === 'inscricao' && evento.inscritos >= evento.min_jogadores;
 
   const nPos = Math.max(1, Math.min(20, parseInt(numPos) || 1));
@@ -176,6 +175,8 @@ export const AdminPago: React.FC<AdminPagoProps> = ({ onAddToast }) => {
     return Math.round(raw * 100) / 100;
   });
   const totalPremios = premiosAbs.reduce((a, b) => a + b, 0);
+  const premioTop5 = evento?.premio_top5 ?? premiosAbs;
+  const taxaAtual = evento ? (Number((evento as any).taxa_inscricao) || 0) : (parseFloat(taxa) || 0);
   const somaPct = modo === 'pct'
     ? Array.from({ length: nPos }, (_, i) => parseFloat(valores[i] ?? '') || 0).reduce((a, b) => a + b, 0)
     : 100;
@@ -240,10 +241,10 @@ export const AdminPago: React.FC<AdminPagoProps> = ({ onAddToast }) => {
       {/* Cabeçalho */}
       <div className="ff-card p-5 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2"><Gift className="w-4 h-4 text-primary" />Queda Bônus — melhor de 3 (entrada grátis)</h2>
+          <h2 className="text-sm font-bold text-white flex items-center gap-2"><Gift className="w-4 h-4 text-primary" />{evento?.nome ?? (nome.trim() || 'Queda Bônus')} — melhor de 3 (entrada {brl(taxaAtual)})</h2>
           <button onClick={fetchAll} className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer" title="Atualizar"><RefreshCw className="w-3.5 h-3.5" /></button>
         </div>
-        <p className="text-xs text-zinc-400">Prêmio fixo da casa ao top 5 (elegível quem joga as 3 quedas). Prêmio fica retido até você liberar.</p>
+        <p className="text-xs text-zinc-400">Prêmios do top {premioTop5.length} conforme configurado (elegível quem joga as 3 quedas). Prêmio fica retido até você liberar.</p>
         <TabelaPremio />
       </div>
 
