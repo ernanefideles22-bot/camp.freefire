@@ -80,7 +80,7 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
       setPagoEvento(ev);
       if (ev) {
         apiService.obterMinhaInscricaoPaga(ev.id).then((m) => setPagoInscrito(!!(m && m.inscrito))).catch(() => {});
-        if (ev.status === 'em_andamento') { apiService.obterPlacarPago(ev.id).then(setPagoPlacar).catch(() => setPagoPlacar(null)); }
+        if (ev.status === 'inscricao' || ev.status === 'em_andamento') { apiService.obterPlacarPago(ev.id).then(setPagoPlacar).catch(() => setPagoPlacar(null)); }
         else { setPagoPlacar(null); }
       } else { setPagoInscrito(false); setPagoPlacar(null); }
     } catch { /* silencioso */ }
@@ -206,16 +206,19 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
           )}
           {pagoPlacar && pagoPlacar.jogadores && pagoPlacar.jogadores.length > 0 && (
             <div className="space-y-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Ranking do torneio (ao vivo)</span>
-              <div className="space-y-1">
-                {pagoPlacar.jogadores.slice(0, 5).map((l) => (
-                  <div key={l.jogador_id} className="flex items-center gap-3 p-2 rounded-lg border border-zinc-800 bg-zinc-950/40">
-                    <span className={'text-xs font-black w-6 text-center ' + placementColor(l.posicao)}>{l.posicao}º</span>
-                    <span className="flex-1 min-w-0 truncate text-sm font-bold text-white">{l.nick}</span>
-                    <span className="text-xs text-zinc-300"><b className="text-white">{l.pontos}</b> pts</span>
-                    <span className="text-[11px] text-zinc-500 w-12 text-right">{l.kills}k</span>
-                  </div>
-                ))}
+              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">{pagoEvento.status === 'em_andamento' ? 'Ranking do torneio (ao vivo)' : 'Inscritos (' + pagoPlacar.jogadores.length + ')'}</span>
+              <div className="max-h-56 overflow-y-auto pr-1 space-y-1">
+                {pagoPlacar.jogadores.map((l) => {
+                  const isMe = l.jogador_id === currentUser.id;
+                  return (
+                    <div key={l.jogador_id} className={'flex items-center gap-3 p-2 rounded-lg border ' + (isMe ? 'border-primary/50 bg-primary/10' : 'border-zinc-800 bg-zinc-950/40')}>
+                      {pagoEvento.status === 'em_andamento' && <span className={'text-xs font-black w-6 text-center ' + placementColor(l.posicao)}>{l.posicao}º</span>}
+                      <span className="flex-1 min-w-0 truncate text-sm font-bold text-white">{l.nick}{isMe && <span className="ml-2 text-[9px] font-black uppercase text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded">você</span>}</span>
+                      {pagoEvento.status === 'em_andamento' && <span className="text-xs text-zinc-300"><b className="text-white">{l.pontos}</b> pts</span>}
+                      {pagoEvento.status === 'em_andamento' && <span className="text-[11px] text-zinc-500 w-12 text-right">{l.kills}k</span>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
