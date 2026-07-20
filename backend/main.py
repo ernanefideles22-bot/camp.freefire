@@ -595,6 +595,8 @@ def _ranking_desde(db: Session) -> int:
 def classificacao(db: Session = Depends(get_db)):
     jogadores = db.scalars(select(JogadorModel)).all()
     _desde = _ranking_desde(db)
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    _semana = _dt.now(_tz.utc) - _td(days=7)  # torneios/bonus contam so os ultimos 7 dias
     resultado = []
     for j in jogadores:
         res_list = db.scalars(select(ResultadoQuedaModel)
@@ -606,25 +608,29 @@ def classificacao(db: Session = Depends(get_db)):
         pg_rs = db.scalars(select(ResultadoPagoModel)
                            .join(EventoPagoModel, ResultadoPagoModel.evento_id == EventoPagoModel.id)
                            .where(ResultadoPagoModel.jogador_id == j.id,
-                                  EventoPagoModel.status != 'cancelado')).all()
+                                  EventoPagoModel.status != 'cancelado',
+                                  ResultadoPagoModel.criado_em >= _semana)).all()
         pg_pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in pg_rs)
         pg_kills = sum(r.abates for r in pg_rs)
         pg_quedas = len({(r.evento_id, r.ordem) for r in pg_rs})
         pg_ganhos = db.scalar(select(func.coalesce(func.sum(PagamentoPagoModel.valor), 0.0))
                               .where(PagamentoPagoModel.jogador_id == j.id,
-                                     PagamentoPagoModel.status == 'liberado')) or 0.0
+                                     PagamentoPagoModel.status == 'liberado',
+                                     PagamentoPagoModel.criado_em >= _semana)) or 0.0
         colocacoes = colocacoes + [r.colocacao for r in pg_rs]
         # --- Eventos Bonus tambem entram no ranking geral ---
         bn_rs = db.scalars(select(ResultadoBonusModel)
                            .join(EventoBonusModel, ResultadoBonusModel.evento_id == EventoBonusModel.id)
                            .where(ResultadoBonusModel.jogador_id == j.id,
-                                  EventoBonusModel.status != 'cancelado')).all()
+                                  EventoBonusModel.status != 'cancelado',
+                                  ResultadoBonusModel.criado_em >= _semana)).all()
         bn_pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in bn_rs)
         bn_kills = sum(r.abates for r in bn_rs)
         bn_quedas = len({(r.evento_id, r.ordem) for r in bn_rs})
         bn_ganhos = db.scalar(select(func.coalesce(func.sum(PagamentoBonusModel.valor), 0.0))
                               .where(PagamentoBonusModel.jogador_id == j.id,
-                                     PagamentoBonusModel.status == 'liberado')) or 0.0
+                                     PagamentoBonusModel.status == 'liberado',
+                                     PagamentoBonusModel.criado_em >= _semana)) or 0.0
         colocacoes = colocacoes + [r.colocacao for r in bn_rs]
         resultado.append({
             'id': j.id, 'jogador_id': j.id, 'nick': j.nick, 'nome': j.nome, 'saldo': j.saldo,
