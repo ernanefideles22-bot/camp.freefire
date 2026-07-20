@@ -2228,7 +2228,13 @@ def pago_apurar(evento_id: int, _admin: JogadorModel = Depends(require_admin), d
     ordens = set(db.scalars(select(ResultadoPagoModel.ordem).where(ResultadoPagoModel.evento_id == evento_id)).all())
     if not {1, 2, 3}.issubset(ordens): raise HTTPException(400, 'Lance resultados das tres quedas antes de apurar.')
     placar, premios = [x for x in _pago_placar(db, evento_id) if x['elegivel']], _pago_premios(db, ev)
-    for pos, linha in enumerate(placar[:5], 1): db.add(PagamentoPagoModel(evento_id=ev.id, jogador_id=linha['jogador_id'], colocacao_final=pos, pontos_total=linha['pontos'], valor=premios[pos-1]))
+    premiados = min(len(placar), len(premios))
+    for pos in range(1, premiados + 1):
+        valor = premios[pos - 1]
+        if valor <= 0:
+            continue
+        linha = placar[pos - 1]
+        db.add(PagamentoPagoModel(evento_id=ev.id, jogador_id=linha['jogador_id'], colocacao_final=pos, pontos_total=linha['pontos'], valor=valor))
     ev.status = 'aguardando_revisao'; db.commit(); return {'message': 'Apuracao concluida. Premios aguardam revisao.'}
 
 @app.post('/admin/pago/{evento_id}/cancelar')
