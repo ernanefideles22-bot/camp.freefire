@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Gamepad2, Wallet, Trophy, Users, Check, Copy, RefreshCw, Crown, Clock, DollarSign } from 'lucide-react';
 import { apiService } from '../services/api';
-import type { Jogador, SalaData, StatusQueda, PremiacaoQueda, QuedaAberta, MeuConvite, EventoBonus, PlacarBonus } from '../services/api';
+import type { Jogador, SalaData, StatusQueda, PremiacaoQueda, QuedaAberta, MeuConvite, EventoBonus, PlacarBonus, HistoricoPagoItem } from '../services/api';
 import { Spinner } from './Spinner';
 import PixDeposito from './PixDeposito';
 import PixSaque from './PixSaque';
@@ -32,6 +32,7 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
   const [pagoInscrito, setPagoInscrito] = useState<boolean>(false);
   const [pagoPlacar, setPagoPlacar] = useState<PlacarBonus | null>(null);
   const [busyPago, setBusyPago] = useState<boolean>(false);
+  const [pagoHistorico, setPagoHistorico] = useState<HistoricoPagoItem[]>([]);
 
   const fetchPlayerStats = async () => {
     setLoadingHistory(true);
@@ -83,6 +84,7 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
         if (ev.status === 'inscricao' || ev.status === 'em_andamento') { apiService.obterPlacarPago(ev.id).then(setPagoPlacar).catch(() => setPagoPlacar(null)); }
         else { setPagoPlacar(null); }
       } else { setPagoInscrito(false); setPagoPlacar(null); }
+      apiService.obterHistoricoPago().then(setPagoHistorico).catch(() => {});
     } catch { /* silencioso */ }
   };
 
@@ -406,6 +408,26 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
             )}
           </div>
         </>
+      )}
+      {pagoHistorico.length > 0 && (
+        <div className="p-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 space-y-3">
+          <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5"><Trophy className="w-4 h-4 text-amber-400" />Histórico de torneios</span>
+          {pagoHistorico.map((ev) => (
+            <div key={ev.id} className="p-3 rounded-xl border border-zinc-800 bg-zinc-950/40 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h4 className="text-sm font-black text-white truncate">{ev.nome} <span className="text-zinc-500">#{ev.id}</span></h4>
+                <span className="text-[10px] text-zinc-500 whitespace-nowrap">{ev.data_hora || ''}<span className={'ml-1.5 font-bold px-1.5 py-0.5 rounded ' + (ev.status === 'pago' ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10')}>{ev.status === 'pago' ? 'pago' : 'em revisão'}</span></span>
+              </div>
+              {ev.vencedores.length > 0 ? ev.vencedores.slice(0, 3).map((v) => (
+                <div key={v.colocacao} className="flex items-center justify-between gap-2 text-sm">
+                  <span className={'font-bold ' + placementColor(v.colocacao)}>{v.colocacao}º <span className="text-white">{v.nick}</span></span>
+                  <span className="font-bold font-mono text-emerald-400">{brl(v.valor)}</span>
+                </div>
+              )) : (<div className="text-[11px] text-zinc-500">Sem vencedores registrados.</div>)}
+              <div className="text-[10px] text-zinc-500 pt-1 border-t border-zinc-900">{ev.inscritos} inscritos · total {brl(ev.premio_total)}</div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
