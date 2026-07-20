@@ -1739,6 +1739,7 @@ def _placar_bonus(db: Session, evento_id: int) -> list:
 def _fechar_evento_bonus_se_completo(db: Session, evento_id: int):
     """Se nao ha mais pagamento pendente, marca o evento como pago."""
     db.flush()  # sessao usa autoflush=False: garante que status recem-alterado seja contado
+    db.flush()  # sem isso, a contagem nao ve o pagamento recem-alterado (autoflush=False)
     pend = db.scalar(select(func.count()).select_from(PagamentoBonusModel)
                      .where(PagamentoBonusModel.evento_id == evento_id,
                             PagamentoBonusModel.status == 'pendente')) or 0
@@ -2310,6 +2311,7 @@ def pago_pagamento(pagamento_id: int, acao: str, _admin: JogadorModel = Depends(
     if acao == 'liberar':
         j = _lock_jogador(db, pg.jogador_id); registrar_transacao(db, j, tipo='premio_torneio', delta_saldo=pg.valor, delta_sacavel=pg.valor, ref=f'torneio:{pg.evento_id}'); pg.status = 'liberado'; pg.liberado_em = _utcnow_bonus()
     else: pg.status = 'rejeitado'
+    db.flush()  # sem isso, a contagem nao ve o pagamento recem-alterado (autoflush=False)
     pend = db.scalar(select(func.count()).select_from(PagamentoPagoModel).where(PagamentoPagoModel.evento_id == pg.evento_id, PagamentoPagoModel.status == 'pendente')) or 0
     if not pend: db.get(EventoPagoModel, pg.evento_id).status = 'pago'
     db.commit(); return {'message': f'Premio {acao}.'}
