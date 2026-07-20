@@ -117,7 +117,7 @@ function App() {
         <button onClick={() => setActiveTab('leaderboard')}
           className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'leaderboard' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}>
           <Trophy className="w-5 h-5" />
-          <span className="text-[10px]">Leaderboard</span>
+          <span className="text-[10px]">Resultados Gerais</span>
         </button>
         <button onClick={() => setActiveTab('player_portal')}
           className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'player_portal' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}>
