@@ -2291,3 +2291,4 @@ def pago_config(evento_id: int, body: ConfigPagoBody, _admin: JogadorModel = Dep
         else: db.add(PremioConfigPagoModel(evento_id=ev.id, pesos_json=json.dumps(pesos)))
     db.commit(); db.refresh(ev)
     return _pago_serializar(db, ev)
+# redeploy nudge
