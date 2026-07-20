@@ -296,6 +296,9 @@ export interface PagamentoBonus {
 export interface BonusResultadoInput { jogador_id: number; colocacao: number; abates: number; }
 
 // ====================== API SERVICE ======================
+export interface HistoricoPagoVencedor { colocacao: number; nick: string | null; valor: number; status: string; }
+export interface HistoricoPagoItem { id: number; nome: string; data_hora: string | null; status: string; inscritos: number; premio_total: number; vencedores: HistoricoPagoVencedor[]; }
+
 export const apiService = {
   // AUTH
   async loginJogador(nick: string, senha: string): Promise<Jogador> {
@@ -611,6 +614,7 @@ export const apiService = {
   async obterPlacarPago(id: number): Promise<PlacarBonus> { return (await api.get(`/pago/${id}/placar`)).data; },
   async inscreverPago(id: number): Promise<any> { return (await api.post(`/pago/${id}/inscrever`)).data; },
   async cancelarInscricaoPago(id: number): Promise<any> { return (await api.post(`/pago/${id}/cancelar-inscricao`)).data; },
+  async obterHistoricoPago(): Promise<HistoricoPagoItem[]> { const r = await api.get(`/pago/historico`); return (r.data && r.data.eventos) || []; },
   async obterMinhaInscricaoPaga(id: number): Promise<MinhaInscricaoBonus> { return (await api.get(`/pago/${id}/minha-inscricao`)).data; },
   async criarPago(payload: any): Promise<EventoBonus> { return (await api.post('/admin/pago/criar', payload)).data; },
   async iniciarPago(id: number): Promise<any> { return (await api.post(`/admin/pago/${id}/iniciar`)).data; },
