@@ -614,14 +614,26 @@ def classificacao(db: Session = Depends(get_db)):
                               .where(PagamentoPagoModel.jogador_id == j.id,
                                      PagamentoPagoModel.status == 'liberado')) or 0.0
         colocacoes = colocacoes + [r.colocacao for r in pg_rs]
+        # --- Eventos Bonus tambem entram no ranking geral ---
+        bn_rs = db.scalars(select(ResultadoBonusModel)
+                           .join(EventoBonusModel, ResultadoBonusModel.evento_id == EventoBonusModel.id)
+                           .where(ResultadoBonusModel.jogador_id == j.id,
+                                  EventoBonusModel.status != 'cancelado')).all()
+        bn_pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in bn_rs)
+        bn_kills = sum(r.abates for r in bn_rs)
+        bn_quedas = len({(r.evento_id, r.ordem) for r in bn_rs})
+        bn_ganhos = db.scalar(select(func.coalesce(func.sum(PagamentoBonusModel.valor), 0.0))
+                              .where(PagamentoBonusModel.jogador_id == j.id,
+                                     PagamentoBonusModel.status == 'liberado')) or 0.0
+        colocacoes = colocacoes + [r.colocacao for r in bn_rs]
         resultado.append({
             'id': j.id, 'jogador_id': j.id, 'nick': j.nick, 'nome': j.nome, 'saldo': j.saldo,
-            'total_premios': sum(r.premio for r in res_list) + pg_ganhos,
-            'ganhos_reais': sum(r.premio for r in res_list) + pg_ganhos,
-            'total_abates': sum(r.abates for r in res_list) + pg_kills,
-            'total_quedas': len(res_list) + pg_quedas,
-            'quedas_jogadas': len(res_list) + pg_quedas,
-            'total_pontos': total_pontos + pg_pontos,
+            'total_premios': sum(r.premio for r in res_list) + pg_ganhos + bn_ganhos,
+            'ganhos_reais': sum(r.premio for r in res_list) + pg_ganhos + bn_ganhos,
+            'total_abates': sum(r.abates for r in res_list) + pg_kills + bn_kills,
+            'total_quedas': len(res_list) + pg_quedas + bn_quedas,
+            'quedas_jogadas': len(res_list) + pg_quedas + bn_quedas,
+            'total_pontos': total_pontos + pg_pontos + bn_pontos,
             'melhor_colocacao': min(colocacoes) if colocacoes else None,
         })
     # Liga de PONTOS: pontos > kills > premios (dinheiro nao define posicao no ranking)
@@ -2138,6 +2150,27 @@ def pago_atual(db: Session = Depends(get_db)):
     ev = _pago_atual(db)
     return {'evento': _pago_serializar(db, ev) if ev else None}
 
+@app.get('/pago/historico')
+def pago_historico(db: Session = Depends(get_db)):
+    """Torneios pagos ja encerrados (pago/aguardando_revisao), com o podio."""
+    evs = db.scalars(select(EventoPagoModel)
+                     .where(EventoPagoModel.status.in_(['pago', 'aguardando_revisao']))
+                     .order_by(EventoPagoModel.id.desc()).limit(20)).all()
+    out = []
+    for ev in evs:
+        pgs = db.scalars(select(PagamentoPagoModel)
+                         .where(PagamentoPagoModel.evento_id == ev.id)
+                         .order_by(PagamentoPagoModel.colocacao_final)).all()
+        vencedores = []
+        for p in pgs:
+            j = db.get(JogadorModel, p.jogador_id)
+            vencedores.append({'colocacao': p.colocacao_final, 'nick': j.nick if j else None, 'valor': p.valor, 'status': p.status})
+        out.append({'id': ev.id, 'nome': ev.nome, 'data_hora': ev.data_hora, 'status': ev.status,
+                    'inscritos': _pago_inscritos(db, ev.id), 'premio_total': round(sum(p.valor for p in pgs), 2),
+                    'vencedores': vencedores})
+    return {'eventos': out}
+
+
 @app.get('/pago/{evento_id}/placar')
 def pago_placar(evento_id: int, db: Session = Depends(get_db)):
     ev = db.get(EventoPagoModel, evento_id)
@@ -2291,4 +2324,3 @@ def pago_config(evento_id: int, body: ConfigPagoBody, _admin: JogadorModel = Dep
         else: db.add(PremioConfigPagoModel(evento_id=ev.id, pesos_json=json.dumps(pesos)))
     db.commit(); db.refresh(ev)
     return _pago_serializar(db, ev)
-# redeploy nudge
