@@ -593,56 +593,65 @@ def _ranking_desde(db: Session) -> int:
 
 @app.get('/classificacao')
 def classificacao(db: Session = Depends(get_db)):
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    from collections import defaultdict
     jogadores = db.scalars(select(JogadorModel)).all()
     _desde = _ranking_desde(db)
-    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
     _semana = _dt.now(_tz.utc) - _td(days=7)  # torneios/bonus contam so os ultimos 7 dias
+
+    agg = defaultdict(lambda: {'pontos': 0, 'kills': 0, 'premios': 0.0, 'quedas': 0, 'colocacoes': []})
+
+    for jid, col, ab, premio in db.execute(select(
+            ResultadoQuedaModel.jogador_id, ResultadoQuedaModel.colocacao,
+            ResultadoQuedaModel.abates, ResultadoQuedaModel.premio)
+            .where(ResultadoQuedaModel.numero_queda >= _desde)).all():
+        a = agg[jid]
+        a['pontos'] += calcular_pontos_lbff(col, ab); a['kills'] += ab
+        a['premios'] += (premio or 0.0); a['quedas'] += 1; a['colocacoes'].append(col)
+
+    pg_quedas = defaultdict(set)
+    for jid, col, ab, eid, ordem in db.execute(select(
+            ResultadoPagoModel.jogador_id, ResultadoPagoModel.colocacao, ResultadoPagoModel.abates,
+            ResultadoPagoModel.evento_id, ResultadoPagoModel.ordem)
+            .join(EventoPagoModel, ResultadoPagoModel.evento_id == EventoPagoModel.id)
+            .where(EventoPagoModel.status != 'cancelado', ResultadoPagoModel.criado_em >= _semana)).all():
+        a = agg[jid]
+        a['pontos'] += calcular_pontos_lbff(col, ab); a['kills'] += ab; a['colocacoes'].append(col)
+        pg_quedas[jid].add((eid, ordem))
+    for jid, s in pg_quedas.items():
+        agg[jid]['quedas'] += len(s)
+
+    bn_quedas = defaultdict(set)
+    for jid, col, ab, eid, ordem in db.execute(select(
+            ResultadoBonusModel.jogador_id, ResultadoBonusModel.colocacao, ResultadoBonusModel.abates,
+            ResultadoBonusModel.evento_id, ResultadoBonusModel.ordem)
+            .join(EventoBonusModel, ResultadoBonusModel.evento_id == EventoBonusModel.id)
+            .where(EventoBonusModel.status != 'cancelado', ResultadoBonusModel.criado_em >= _semana)).all():
+        a = agg[jid]
+        a['pontos'] += calcular_pontos_lbff(col, ab); a['kills'] += ab; a['colocacoes'].append(col)
+        bn_quedas[jid].add((eid, ordem))
+    for jid, s in bn_quedas.items():
+        agg[jid]['quedas'] += len(s)
+
+    for jid, tot in db.execute(select(PagamentoPagoModel.jogador_id, func.sum(PagamentoPagoModel.valor))
+            .where(PagamentoPagoModel.status == 'liberado', PagamentoPagoModel.criado_em >= _semana)
+            .group_by(PagamentoPagoModel.jogador_id)).all():
+        agg[jid]['premios'] += (tot or 0.0)
+    for jid, tot in db.execute(select(PagamentoBonusModel.jogador_id, func.sum(PagamentoBonusModel.valor))
+            .where(PagamentoBonusModel.status == 'liberado', PagamentoBonusModel.criado_em >= _semana)
+            .group_by(PagamentoBonusModel.jogador_id)).all():
+        agg[jid]['premios'] += (tot or 0.0)
+
     resultado = []
     for j in jogadores:
-        res_list = db.scalars(select(ResultadoQuedaModel)
-                              .where(ResultadoQuedaModel.jogador_id == j.id,
-                                     ResultadoQuedaModel.numero_queda >= _desde)).all()
-        total_pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in res_list)
-        colocacoes = [r.colocacao for r in res_list]
-        # --- Torneio Pago entra no ranking: pontos/kills contam; ganhos = premios liberados ---
-        pg_rs = db.scalars(select(ResultadoPagoModel)
-                           .join(EventoPagoModel, ResultadoPagoModel.evento_id == EventoPagoModel.id)
-                           .where(ResultadoPagoModel.jogador_id == j.id,
-                                  EventoPagoModel.status != 'cancelado',
-                                  ResultadoPagoModel.criado_em >= _semana)).all()
-        pg_pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in pg_rs)
-        pg_kills = sum(r.abates for r in pg_rs)
-        pg_quedas = len({(r.evento_id, r.ordem) for r in pg_rs})
-        pg_ganhos = db.scalar(select(func.coalesce(func.sum(PagamentoPagoModel.valor), 0.0))
-                              .where(PagamentoPagoModel.jogador_id == j.id,
-                                     PagamentoPagoModel.status == 'liberado',
-                                     PagamentoPagoModel.criado_em >= _semana)) or 0.0
-        colocacoes = colocacoes + [r.colocacao for r in pg_rs]
-        # --- Eventos Bonus tambem entram no ranking geral ---
-        bn_rs = db.scalars(select(ResultadoBonusModel)
-                           .join(EventoBonusModel, ResultadoBonusModel.evento_id == EventoBonusModel.id)
-                           .where(ResultadoBonusModel.jogador_id == j.id,
-                                  EventoBonusModel.status != 'cancelado',
-                                  ResultadoBonusModel.criado_em >= _semana)).all()
-        bn_pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in bn_rs)
-        bn_kills = sum(r.abates for r in bn_rs)
-        bn_quedas = len({(r.evento_id, r.ordem) for r in bn_rs})
-        bn_ganhos = db.scalar(select(func.coalesce(func.sum(PagamentoBonusModel.valor), 0.0))
-                              .where(PagamentoBonusModel.jogador_id == j.id,
-                                     PagamentoBonusModel.status == 'liberado',
-                                     PagamentoBonusModel.criado_em >= _semana)) or 0.0
-        colocacoes = colocacoes + [r.colocacao for r in bn_rs]
+        a = agg.get(j.id) or {'pontos': 0, 'kills': 0, 'premios': 0.0, 'quedas': 0, 'colocacoes': []}
         resultado.append({
             'id': j.id, 'jogador_id': j.id, 'nick': j.nick, 'nome': j.nome, 'saldo': j.saldo,
-            'total_premios': sum(r.premio for r in res_list) + pg_ganhos + bn_ganhos,
-            'ganhos_reais': sum(r.premio for r in res_list) + pg_ganhos + bn_ganhos,
-            'total_abates': sum(r.abates for r in res_list) + pg_kills + bn_kills,
-            'total_quedas': len(res_list) + pg_quedas + bn_quedas,
-            'quedas_jogadas': len(res_list) + pg_quedas + bn_quedas,
-            'total_pontos': total_pontos + pg_pontos + bn_pontos,
-            'melhor_colocacao': min(colocacoes) if colocacoes else None,
+            'total_premios': a['premios'], 'ganhos_reais': a['premios'],
+            'total_abates': a['kills'], 'total_quedas': a['quedas'], 'quedas_jogadas': a['quedas'],
+            'total_pontos': a['pontos'],
+            'melhor_colocacao': min(a['colocacoes']) if a['colocacoes'] else None,
         })
-    # Liga de PONTOS: pontos > kills > premios (dinheiro nao define posicao no ranking)
     resultado.sort(key=lambda x: (-x['total_pontos'], -x['total_abates'], -x['total_premios']))
     for i, item in enumerate(resultado, start=1):
         item['posicao'] = i
