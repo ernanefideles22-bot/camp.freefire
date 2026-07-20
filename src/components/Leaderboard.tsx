@@ -112,7 +112,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <Trophy className="w-6 h-6 text-primary animate-neon" />
-            Classificação Geral
+            Resultados Gerais
           </h2>
           <p className="text-sm text-zinc-400">
             Acompanhe o ranking e os prêmios acumulados do campeonato.
