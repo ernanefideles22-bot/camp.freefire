@@ -161,6 +161,28 @@
   -webkit-text-fill-color: transparent;
 }
 
+/* ====== Landing cinematografica ====== */
+.ff-home { max-width: 1180px; margin: 0 auto; }
+.ff-home-hero { position: relative; min-height: min(680px, 76vh); display: flex; align-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.12); background: #080a0e url('/flowfire-arena-hero.png') center/cover no-repeat; box-shadow: 0 35px 80px -45px #000; }
+.ff-home-hero::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(3,5,8,.98) 0%, rgba(3,5,8,.88) 32%, rgba(3,5,8,.22) 70%, rgba(3,5,8,.18)), linear-gradient(0deg, rgba(3,5,8,.82), transparent 50%); }
+.ff-home-hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px); background-size: 48px 48px; mask-image: linear-gradient(90deg, black, transparent 72%); }
+.ff-home-vignette { position: absolute; inset: auto 0 0; height: 5px; background: linear-gradient(90deg, transparent, var(--color-primary) 25%, var(--color-accent-cyan) 50%, var(--color-primary) 75%, transparent); box-shadow: 0 0 22px rgba(255,90,31,.8); z-index: 2; }
+.ff-home-content { position: relative; z-index: 3; width: min(590px, 100%); padding: clamp(2rem, 7vw, 5.5rem); }
+.ff-home-content h1, .ff-home-final h2, .ff-home-player h2 { margin: .65rem 0 1rem; font: 900 clamp(2.8rem, 7vw, 5.8rem)/.84 var(--font-display); letter-spacing: -.06em; color: #fff; text-transform: uppercase; text-shadow: 0 7px 30px rgba(0,0,0,.6); }
+.ff-home-content h1 span, .ff-home-player h2 span { color: var(--color-primary); }
+.ff-home-content p { color: #bac0cb; max-width: 450px; font-size: .98rem; line-height: 1.65; }
+.ff-home-cta, .ff-home-ghost { display: inline-flex; align-items: center; gap: .6rem; min-height: 46px; padding: .75rem 1rem; border-radius: 3px; font-size: .75rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; transition: transform .18s, filter .18s, background .18s; }
+.ff-home-cta { color: #fff; background: linear-gradient(135deg, #ff6d2c, #b92c16); box-shadow: 0 8px 24px rgba(255,90,31,.3); }.ff-home-cta:hover { transform: translateY(-2px); filter: brightness(1.12); }
+.ff-home-ghost { color: #e7e9ed; border: 1px solid rgba(255,255,255,.25); background: rgba(7,9,13,.45); backdrop-filter: blur(6px); }.ff-home-ghost:hover { border-color: var(--color-accent-cyan); color: var(--color-accent-cyan); }
+.ff-home-hud { position: absolute; z-index: 4; right: 1.2rem; bottom: 1.3rem; display: flex; align-items: flex-end; gap: 1rem; color: #c5cad2; font-size: .58rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }.ff-home-hud span { display: flex; gap: .4rem; align-items: center; }.ff-home-hud i { width: .45rem; height: .45rem; border-radius: 100%; background: #4ade80; box-shadow: 0 0 12px #4ade80; }.ff-home-hud b { padding: .55rem .65rem; border: 1px solid rgba(255,255,255,.22); color: var(--color-accent-cyan); font: 900 1rem/.85 var(--font-display); }
+.ff-section-title { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 1.3rem; }.ff-section-title h2 { margin-top: .3rem; color: #fff; font: 900 clamp(1.8rem, 4vw, 3rem)/.9 var(--font-display); letter-spacing: -.05em; }.ff-section-title p { max-width: 280px; color: #7e8795; font-size: .8rem; line-height: 1.55; }
+.ff-home-modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.1); }
+.ff-home-mode { position: relative; isolation: isolate; min-height: 310px; padding: 1.5rem; overflow: hidden; background: #101318; background-size: cover; background-position: center; }.ff-home-mode-1 { background-image: url('/flowfire-player-hero.png'); background-position: 28% center; }.ff-home-mode-2 { background-image: url('/flowfire-arena-hero.png'); background-position: 73% center; }.ff-home-mode-3 { background-image: url('/flowfire-player-hero.png'); background-position: 62% center; }
+.ff-home-mode-shade { position: absolute; inset: 0; z-index: -1; background: linear-gradient(0deg, rgba(6,8,12,.98), rgba(6,8,12,.42) 70%, rgba(6,8,12,.18)); transition: background .25s; }.ff-home-mode:hover .ff-home-mode-shade { background: linear-gradient(0deg, rgba(28,12,8,.94), rgba(6,8,12,.22)); }
+.ff-home-mode-icon { display: flex; align-items: center; justify-content: center; width: 2.45rem; height: 2.45rem; margin-bottom: 3.7rem; color: var(--color-accent-cyan); background: rgba(255,90,31,.2); border: 1px solid rgba(255,160,85,.4); }.ff-home-mode span { color: var(--color-accent-cyan); font-size: .58rem; font-weight: 900; letter-spacing: .13em; }.ff-home-mode h3 { margin: .45rem 0; color: #fff; font: 900 1.6rem/.9 var(--font-display); text-transform: uppercase; }.ff-home-mode p { max-width: 235px; color: #bac0cb; font-size: .76rem; line-height: 1.55; }.ff-home-link { display: inline-flex; align-items: center; gap: .4rem; margin-top: 1.2rem; color: #fff; font-size: .64rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.ff-home-player { position: relative; min-height: 470px; display: flex; align-items: center; overflow: hidden; padding: clamp(1.6rem, 5vw, 4rem); border: 1px solid rgba(255,255,255,.1); background: #080a0e url('/flowfire-player-hero.png') center/cover no-repeat; }.ff-home-player::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(5,7,10,.18), rgba(5,7,10,.86) 48%, rgba(5,7,10,.98) 100%); }.ff-home-player-copy { position: relative; z-index: 1; width: min(470px, 57%); margin-left: auto; }.ff-home-player h2 { font-size: clamp(2.2rem, 5vw, 4rem); }.ff-home-player p { color: #b6bec9; font-size: .85rem; line-height: 1.7; }.ff-home-points { display: grid; gap: .6rem; margin: 1.25rem 0; }.ff-home-points span { display: flex; align-items: center; gap: .55rem; color: #e3e6eb; font-size: .72rem; font-weight: 700; }.ff-home-points svg { width: 1rem; color: var(--color-primary); }
+.ff-home-final { display: flex; align-items: end; justify-content: space-between; gap: 2rem; padding: clamp(1.5rem, 4vw, 3.3rem); border-top: 1px solid rgba(255,255,255,.15); border-bottom: 1px solid rgba(255,255,255,.1); background: radial-gradient(circle at 82% 20%, rgba(255,90,31,.2), transparent 30%); }.ff-home-final h2 { font-size: clamp(2.2rem, 5vw, 4.4rem); }
+
 /* ====== Animacoes ====== */
 @keyframes neonPulse {
   0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px rgba(255, 90, 31, 0.6)); }
@@ -194,4 +216,14 @@
   .ff-hero-art .ff-hero-copy { max-width: 21rem; }
   .ff-hero-stats { gap: .3rem; }
   .ff-hero-stat { padding: .5rem; }
+  .ff-home { margin-inline: -1rem; }
+  .ff-home-hero { min-height: 610px; background-position: 66% center; }
+  .ff-home-content { align-self: flex-end; padding: 1.5rem; padding-bottom: 4.5rem; }
+  .ff-home-content h1 { font-size: 3.2rem; }
+  .ff-home-hud { right: 1rem; bottom: 1rem; }
+  .ff-section-title { align-items: start; flex-direction: column; gap: .7rem; padding-inline: 1rem; }
+  .ff-home-modes { grid-template-columns: 1fr; margin-inline: 1rem; }
+  .ff-home-mode { min-height: 260px; }
+  .ff-home-player { min-height: 570px; align-items: end; background-position: 28% center; }.ff-home-player::before { background: linear-gradient(0deg, rgba(5,7,10,.99), rgba(5,7,10,.7) 52%, rgba(5,7,10,.12)); }.ff-home-player-copy { width: 100%; margin-left: 0; }
+  .ff-home-final { align-items: start; flex-direction: column; margin-inline: 1rem; }
 }
