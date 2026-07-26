@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trophy, User, Sliders, Shield, Award, LogOut, Swords, House, Crown } from 'lucide-react';
+import { Trophy, User, Sliders, Shield, Award, LogOut, Swords, House, Crown, Megaphone } from 'lucide-react';
 import { Leaderboard } from './components/Leaderboard';
 import { PlayerPortal } from './components/PlayerPortal';
 import { AdminPanel } from './components/AdminPanel';
@@ -7,11 +7,12 @@ import { AuthPortal } from './components/AuthPortal';
 import { Campeonatos } from './components/Campeonatos';
 import { Inicio } from './components/Inicio';
 import { GuildaFlowFire } from './components/GuildaFlowFire';
+import { Criadores } from './components/Criadores';
 import { ToastContainer } from './components/Toast';
 import type { ToastMessage, ToastType } from './components/Toast';
 import type { Jogador } from './services/api';
 
-type TabType = 'home' | 'leaderboard' | 'player_portal' | 'admin' | 'campeonatos' | 'guilda';
+type TabType = 'home' | 'leaderboard' | 'player_portal' | 'admin' | 'campeonatos' | 'guilda' | 'criadores';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<Jogador | null>(() => {
@@ -20,7 +21,7 @@ function App() {
     if (userJson && token) { try { return JSON.parse(userJson); } catch { return null; } }
     return null;
   });
-  const [activeTab, setActiveTab] = useState<TabType>(() => currentUser ? (currentUser.is_admin ? 'admin' : 'player_portal') : 'home');
+  const [activeTab, setActiveTab] = useState<TabType>(() => window.location.hash.startsWith('#criador/') ? 'criadores' : (currentUser ? (currentUser.is_admin ? 'admin' : 'player_portal') : 'home'));
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const handleAddToast = (type: ToastType, title: string, description?: string) => {
@@ -50,6 +51,7 @@ function App() {
           <button onClick={() => setActiveTab('leaderboard')} className={tabClasses('leaderboard')}><Trophy className="w-4 h-4" />Leaderboard</button>
           <button onClick={() => setActiveTab('campeonatos')} className={tabClasses('campeonatos')}><Swords className="w-4 h-4" />Campeonatos</button>
           <button onClick={() => setActiveTab('guilda')} className={tabClasses('guilda')}><Crown className="w-4 h-4" />Guilda</button>
+          <button onClick={() => setActiveTab('criadores')} className={tabClasses('criadores')}><Megaphone className="w-4 h-4" />Criadores</button>
           <button onClick={() => setActiveTab('player_portal')} className={tabClasses('player_portal')}><User className="w-4 h-4" />Portal do Jogador</button>
           {currentUser?.is_admin && <button onClick={() => setActiveTab('admin')} className={tabClasses('admin')}><Sliders className="w-4 h-4" />Painel Admin</button>}
         </nav>
@@ -63,6 +65,7 @@ function App() {
       <button onClick={() => setActiveTab('leaderboard')} className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'leaderboard' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}><Trophy className="w-5 h-5" /><span className="text-[10px]">Ranking</span></button>
       <button onClick={() => setActiveTab('campeonatos')} className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'campeonatos' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}><Swords className="w-5 h-5" /><span className="text-[10px]">Campeonatos</span></button>
       <button onClick={() => setActiveTab('player_portal')} className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'player_portal' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}><User className="w-5 h-5" /><span className="text-[10px]">Portal</span></button>
+      <button onClick={() => setActiveTab('criadores')} className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'criadores' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}><Megaphone className="w-5 h-5" /><span className="text-[10px]">Criar</span></button>
       {currentUser?.is_admin && <button onClick={() => setActiveTab('admin')} className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'admin' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}><Sliders className="w-5 h-5" /><span className="text-[10px]">Admin</span></button>}
     </div>
     <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-7 pb-28 md:pb-9"><div className="ff-page-frame animate-in fade-in slide-in-from-bottom-3 duration-300">
@@ -70,6 +73,7 @@ function App() {
       {activeTab === 'leaderboard' && <Leaderboard onAddToast={handleAddToast} />}
       {activeTab === 'campeonatos' && <Campeonatos currentUser={currentUser} onAddToast={handleAddToast} />}
       {activeTab === 'guilda' && <GuildaFlowFire />}
+      {activeTab === 'criadores' && <Criadores currentUser={currentUser} onAddToast={handleAddToast} />}
       {activeTab === 'player_portal' && portal}
       {activeTab === 'admin' && (currentUser?.is_admin ? <AdminPanel onAddToast={handleAddToast} currentUser={currentUser} /> : portal)}
     </div></main>

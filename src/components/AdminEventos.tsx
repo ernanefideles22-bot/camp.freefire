@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Gift, Swords, Trophy } from 'lucide-react';
+import { Crown, Gift, Swords, Trophy } from 'lucide-react';
 import { AdminBonus } from './AdminBonus';
 import { AdminEquipes } from './AdminEquipes';
 import { AdminPago } from './AdminPago';
+import { AdminCriadores } from './AdminCriadores';
 
-type Categoria = 'bonus' | 'individual' | 'equipes';
+type Categoria = 'bonus' | 'individual' | 'equipes' | 'criadores';
 interface Props { onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void; }
 
 export function AdminEventos({ onAddToast }: Props) {
@@ -13,6 +14,7 @@ export function AdminEventos({ onAddToast }: Props) {
     { id: 'individual', label: 'Individual', Icone: Trophy },
     { id: 'equipes', label: 'Equipes', Icone: Swords },
     { id: 'bonus', label: 'Bônus', Icone: Gift },
+    { id: 'criadores', label: 'Criadores', Icone: Crown },
   ];
   return <div className="space-y-5 ff-event-command">
     <div className="ff-command-hero">
@@ -25,5 +27,6 @@ export function AdminEventos({ onAddToast }: Props) {
     {categoria === 'individual' && <AdminPago onAddToast={onAddToast} />}
     {categoria === 'equipes' && <AdminEquipes onAddToast={onAddToast} />}
     {categoria === 'bonus' && <AdminBonus onAddToast={onAddToast} />}
+    {categoria === 'criadores' && <AdminCriadores onAddToast={onAddToast} />}
   </div>;
 }

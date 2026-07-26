@@ -413,3 +413,68 @@ class ResultadoEquipeRodadaModel(Base):
     colocacao: Mapped[int] = mapped_column(Integer, nullable=False)
     abates: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# ====================== CRIADORES FLOWFIRE ======================
+# Os criadores nao recebem saldo automaticamente. A arrecadacao fica registrada
+# no evento e os pagamentos sao liberados manualmente pelo FlowFire.
+class CriadorFlowFireModel(Base):
+    __tablename__ = 'criadores_flowfire'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), unique=True, nullable=False, index=True)
+    slug: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    bio: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, default='pendente', index=True)  # pendente|aprovado|suspenso
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    aprovado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CampeonatoCriadorModel(Base):
+    __tablename__ = 'campeonatos_criadores'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    criador_id: Mapped[int] = mapped_column(ForeignKey('criadores_flowfire.id'), nullable=False, index=True)
+    nome: Mapped[str] = mapped_column(String, nullable=False)
+    slug: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    formato: Mapped[str] = mapped_column(String, default='BR Solo')
+    descricao: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, default='rascunho', index=True)  # rascunho|inscricao|em_andamento|aguardando_revisao|pagamentos_pendentes|encerrado|cancelado
+    max_jogadores: Mapped[int] = mapped_column(Integer, default=48)
+    taxa_inscricao: Mapped[float] = mapped_column(Float, default=3.0)
+    premios_percentuais_json: Mapped[str] = mapped_column(String, default='[]')
+    percentual_criador: Mapped[float] = mapped_column(Float, default=0.0)
+    data_hora: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sala_senha: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class InscricaoCampeonatoCriadorModel(Base):
+    __tablename__ = 'inscricoes_campeonatos_criadores'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_criadores.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    valor_pago: Mapped[float] = mapped_column(Float, nullable=False)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ResultadoCampeonatoCriadorModel(Base):
+    __tablename__ = 'resultados_campeonatos_criadores'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_criadores.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    colocacao: Mapped[int] = mapped_column(Integer, nullable=False)
+    abates: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PagamentoCampeonatoCriadorModel(Base):
+    __tablename__ = 'pagamentos_campeonatos_criadores'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_criadores.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    tipo: Mapped[str] = mapped_column(String, nullable=False)  # premio|criador
+    colocacao: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    valor: Mapped[float] = mapped_column(Float, nullable=False)
+    status: Mapped[str] = mapped_column(String, default='pendente', index=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    liberado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
