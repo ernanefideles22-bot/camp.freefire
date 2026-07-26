@@ -2516,6 +2516,23 @@ def iniciar_campeonato_equipe(campeonato_id: int, _admin: JogadorModel = Depends
     ev.status = 'em_andamento'; db.commit(); return {'message': 'Campeonato iniciado.'}
 
 
+@app.post('/admin/equipes/{campeonato_id}/cancelar')
+def cancelar_campeonato_equipe(campeonato_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    """Cancela um campeonato que ainda nao foi apurado e devolve a taxa ao capitao de cada equipe."""
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    if not ev or ev.status in ('pago', 'cancelado', 'aguardando_revisao'):
+        raise HTTPException(400, 'Esse campeonato nao pode mais ser cancelado.')
+    equipes = db.scalars(select(EquipeCampeonatoModel)
+                         .where(EquipeCampeonatoModel.campeonato_id == ev.id)).all()
+    for equipe in equipes:
+        capitao = _lock_jogador(db, equipe.capitao_id)
+        registrar_transacao(db, capitao, tipo='estorno_inscricao_equipe',
+                            delta_saldo=ev.taxa_inscricao, ref=f'equipe:{ev.id}')
+    ev.status = 'cancelado'
+    db.commit()
+    return {'message': 'Campeonato cancelado. Inscricoes reembolsadas.'}
+
+
 @app.get('/admin/equipes/{campeonato_id}/inscritos')
 def equipes_inscritas(campeonato_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     equipes = db.scalars(select(EquipeCampeonatoModel).where(EquipeCampeonatoModel.campeonato_id == campeonato_id)).all()

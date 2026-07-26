@@ -370,6 +370,7 @@ export const apiService = {
     return (await api.post('/admin/equipes/criar', payload)).data as CampeonatoEquipe;
   },
   async iniciarCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/iniciar`)).data; },
+  async cancelarCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/cancelar`)).data; },
   async listarEquipesInscritas(id: number): Promise<EquipeCampeonato[]> { return (await api.get(`/admin/equipes/${id}/inscritos`)).data.equipes ?? []; },
   async lancarResultadoEquipe(id: number, resultados: { equipe_id: number; colocacao: number; abates: number }[]): Promise<any> {
     return (await api.post(`/admin/equipes/${id}/resultado`, { resultados })).data;
