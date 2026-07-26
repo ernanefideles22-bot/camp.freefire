@@ -58,6 +58,22 @@ export function Criadores({ currentUser, onAddToast }: Props) {
       }
     }
   }, [aba, meu.criador?.status]);
+  useEffect(() => {
+    if (aba !== 'painel' || meu.criador?.status !== 'aprovado') return;
+    const explicacoes: [string, string][] = [
+      ['input[placeholder="Nome do campeonato"]', 'Nome do campeonato — exemplo: Copa FlowFire de Domingo'],
+      ['input[placeholder="Data e hora"]', 'Data e hora — exemplo: 10/08 às 19h'],
+      ['input[placeholder="Vagas"]', 'Vagas — número máximo de jogadores ou equipes'],
+      ['input[placeholder="Inscrição (R$)"]', 'Inscrição (R$) — valor pago por cada participante'],
+      ['textarea[placeholder="Descrição e regras"]', 'Descrição e regras — informe mapa, horário, regras, pontuação e proibições'],
+      ['input[placeholder="Prêmios em %: 60, 30"]', 'Prêmios em % — exemplo: 60, 30 (1º e 2º lugar)'],
+      ['input[placeholder="Parte do criador em %"]', 'Parte do criador — percentual dos 88% do cofre destinado a você'],
+    ];
+    for (const [seletor, texto] of explicacoes) {
+      const campo = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(seletor);
+      if (campo) campo.placeholder = texto;
+    }
+  }, [aba, meu.criador?.status]);
   const executar = async (acao: () => Promise<any>, titulo: string) => { setBusy(true); try { const resposta = await acao(); onAddToast('success', titulo, resposta?.message); await carregar(); } catch (erro: any) { onAddToast('error', 'Não foi possível concluir', erro.message); } finally { setBusy(false); } };
   const criar = () => { const percentuais = premios.split(',').map(item => Number(item.trim())).filter(valor => valor > 0); executar(() => apiService.criarEventoCriador({ nome, slug: slugDoNome(nome), formato, descricao, max_jogadores: Number(vagas), taxa_inscricao: Number(taxa), premios_percentuais: percentuais, percentual_criador: Number(parteCriador), data_hora: dataHora }), 'Campeonato criado como rascunho'); };
   const compartilharEvento = (evento: CampeonatoCriador) => compartilhar(evento.nome, `Confira o ranking do campeonato ${evento.nome} no FlowFire.`, linkCriador(evento.criador.slug, evento.slug), () => onAddToast('success', 'Link copiado', 'Envie o resultado onde quiser.'));

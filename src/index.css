@@ -369,7 +369,7 @@
 }
 
 /* Formulário convertido em estação tática */
-.ff-card:has(input[placeholder="Nome do campeonato"]) {
+.ff-card:has(input[placeholder*="Nome do campeonato"]) {
   isolation: isolate;
   min-height: 520px;
   border-color: rgba(255,90,31,.6);
@@ -377,7 +377,7 @@
   box-shadow: 0 28px 65px -38px #000, inset 0 1px 0 rgba(255,255,255,.08), 0 0 42px rgba(255,90,31,.08);
 }
 
-.ff-card:has(input[placeholder="Nome do campeonato"])::after {
+.ff-card:has(input[placeholder*="Nome do campeonato"])::after {
   content: '';
   position: absolute;
   z-index: 0;
@@ -391,19 +391,19 @@
   pointer-events: none;
 }
 
-.ff-card:has(input[placeholder="Nome do campeonato"]) > * {
+.ff-card:has(input[placeholder*="Nome do campeonato"]) > * {
   position: relative;
   z-index: 1;
 }
 
-.ff-card:has(input[placeholder="Nome do campeonato"]) > .ff-kicker {
+.ff-card:has(input[placeholder*="Nome do campeonato"]) > .ff-kicker {
   display: flex;
   align-items: center;
   gap: .6rem;
   color: #fff1bd;
 }
 
-.ff-card:has(input[placeholder="Nome do campeonato"]) > .ff-kicker::before {
+.ff-card:has(input[placeholder*="Nome do campeonato"]) > .ff-kicker::before {
   content: '01';
   display: grid;
   place-items: center;
@@ -414,22 +414,22 @@
   font: 900 .65rem var(--font-display);
 }
 
-.ff-card:has(input[placeholder="Nome do campeonato"]) > .ff-kicker::after {
+.ff-card:has(input[placeholder*="Nome do campeonato"]) > .ff-kicker::after {
   content: 'CONFIGURE A PRÓXIMA BATALHA';
   color: rgba(255,255,255,.48);
   font-size: .58rem;
   letter-spacing: .14em;
 }
 
-.ff-card:has(input[placeholder="Nome do campeonato"]) .ff-input {
+.ff-card:has(input[placeholder*="Nome do campeonato"]) .ff-input {
   position: relative;
   background: rgba(5,7,10,.82);
   border-color: rgba(255,255,255,.14);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
 }
 
-.ff-card:has(input[placeholder="Nome do campeonato"]) input::placeholder,
-.ff-card:has(input[placeholder="Nome do campeonato"]) textarea::placeholder {
+.ff-card:has(input[placeholder*="Nome do campeonato"]) input::placeholder,
+.ff-card:has(input[placeholder*="Nome do campeonato"]) textarea::placeholder {
   color: #8e97a3;
   font-size: .74rem;
   font-weight: 800;
@@ -437,7 +437,7 @@
   text-transform: uppercase;
 }
 
-.ff-card:has(input[placeholder="Nome do campeonato"]) > p.text-\[10px\] {
+.ff-card:has(input[placeholder*="Nome do campeonato"]) > p.text-\[10px\] {
   width: min(680px, 100%);
   padding: .7rem .8rem;
   border-left: 2px solid var(--color-accent-cyan);
@@ -446,13 +446,37 @@
   font-size: .67rem;
 }
 
-.ff-card:has(input[placeholder="Nome do campeonato"]) .ff-btn-primary {
+.ff-card:has(input[placeholder*="Nome do campeonato"]) .ff-btn-primary {
   min-height: 50px;
   padding-inline: 1.2rem;
   border: 1px solid rgba(255,209,102,.35);
   font-size: .8rem;
   letter-spacing: .04em;
   text-transform: uppercase;
+}
+
+.ff-card:has(input[placeholder*="Nome do campeonato"]) .grid:has(> select.ff-input)::before {
+  content: 'MODALIDADE: escolha BR para partidas individuais (Solo, Duo ou Squad) ou CS para confrontos por time de 1x1 a 4x4.  •  VAGAS: limite total de participantes.  •  INSCRIÇÃO: valor que cada participante paga para entrar.';
+  grid-column: 1 / -1;
+  padding: .7rem .8rem;
+  border: 1px solid rgba(255,209,102,.16);
+  border-left: 2px solid var(--color-accent-cyan);
+  background: rgba(5,7,10,.56);
+  color: #b8c0ca;
+  font-size: .66rem;
+  line-height: 1.5;
+}
+
+.ff-card:has(input[placeholder*="Nome do campeonato"]) .grid:has(input[placeholder*="Prêmios"])::before {
+  content: 'DIVISÃO DO COFRE: informe primeiro os percentuais dos vencedores separados por vírgula. Depois informe a parte do criador. Os dois campos precisam somar 100% dos 88% que ficam protegidos no cofre.';
+  grid-column: 1 / -1;
+  padding: .7rem .8rem;
+  border: 1px solid rgba(255,209,102,.16);
+  border-left: 2px solid var(--color-primary);
+  background: rgba(255,90,31,.055);
+  color: #c7cdd5;
+  font-size: .66rem;
+  line-height: 1.5;
 }
 
 /* Status vazio também faz parte da narrativa da arena. */
@@ -477,7 +501,7 @@
 
 @media (max-width: 640px) {
   .ff-ranking-hero:has(+ .ff-command-tabs) { min-height: 210px; background-position: 60% center; }
-  .ff-card:has(input[placeholder="Nome do campeonato"]) { min-height: auto; background-size: auto 62%; background-position: 135% 18%; }
-  .ff-card:has(input[placeholder="Nome do campeonato"])::after { width: 135px; height: 135px; right: -1.5rem; top: 3.5rem; }
-  .ff-card:has(input[placeholder="Nome do campeonato"]) > .ff-kicker::after { display: none; }
+  .ff-card:has(input[placeholder*="Nome do campeonato"]) { min-height: auto; background-size: auto 62%; background-position: 135% 18%; }
+  .ff-card:has(input[placeholder*="Nome do campeonato"])::after { width: 135px; height: 135px; right: -1.5rem; top: 3.5rem; }
+  .ff-card:has(input[placeholder*="Nome do campeonato"]) > .ff-kicker::after { display: none; }
 }
