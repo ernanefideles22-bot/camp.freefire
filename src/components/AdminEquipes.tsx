@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Ban, Check, Play, Plus, Trophy, Users } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AlertTriangle, Ban, Check, Play, Plus, RefreshCw, Swords, Trophy, Upload, Users } from 'lucide-react';
 import { apiService } from '../services/api';
 import type { CampeonatoEquipe, EquipeCampeonato, PagamentoEquipe } from '../services/api';
 import { Spinner } from './Spinner';
 
 interface Props { onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void; }
+const brl = (v: number) => `R$ ${v.toFixed(2).replace('.', ',')}`;
 
 export function AdminEquipes({ onAddToast }: Props) {
   const [eventos, setEventos] = useState<CampeonatoEquipe[]>([]);
@@ -12,45 +13,99 @@ export function AdminEquipes({ onAddToast }: Props) {
   const [pagamentos, setPagamentos] = useState<PagamentoEquipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [loadingOcr, setLoadingOcr] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [tipo, setTipo] = useState<'cs_4x4' | 'br'>('cs_4x4');
   const [modo, setModo] = useState<'solo' | 'duo' | 'squad'>('solo');
   const [nome, setNome] = useState('CS 4x4');
   const [dataHora, setDataHora] = useState('');
-  const [minimo, setMinimo] = useState('2'); const [maximo, setMaximo] = useState('12'); const [taxa, setTaxa] = useState('10');
-  const [premios, setPremios] = useState('50,30,20');
-  const [resultados, setResultados] = useState<Record<number, { colocacao: string; abates: string }>>({});
+  const [minimo, setMinimo] = useState('2');
+  const [maximo, setMaximo] = useState('12');
+  const [taxa, setTaxa] = useState('10');
+  const [numPos, setNumPos] = useState('3');
+  const [valores, setValores] = useState(['50', '30', '20']);
+  const [resultados, setResultados] = useState<Record<number, { colocacao: string; abates: string; ocrNick?: string }>>({});
 
   const carregar = useCallback(async () => {
     try {
-      const lista = await apiService.obterCampeonatosEquipe(); setEventos(lista);
-      const evento = lista[0];
-      if (evento) {
-        setEquipes(await apiService.listarEquipesInscritas(evento.id));
-        if (evento.status === 'aguardando_revisao') setPagamentos(await apiService.listarPagamentosEquipe(evento.id)); else setPagamentos([]);
-      } else { setEquipes([]); setPagamentos([]); }
-    } catch { onAddToast('error', 'Erro ao carregar', 'Não foi possível buscar os campeonatos por equipe.'); }
+      const lista = await apiService.obterCampeonatosEquipe();
+      setEventos(lista);
+      const atual = lista[0];
+      if (!atual) { setEquipes([]); setPagamentos([]); return; }
+      const [inscritas, premios] = await Promise.all([
+        apiService.listarEquipesInscritas(atual.id),
+        atual.status === 'aguardando_revisao' ? apiService.listarPagamentosEquipe(atual.id) : Promise.resolve([]),
+      ]);
+      setEquipes(inscritas); setPagamentos(premios);
+    } catch { onAddToast('error', 'Erro ao carregar', 'Nao foi possivel buscar os campeonatos por equipe.'); }
     finally { setLoading(false); }
   }, [onAddToast]);
-  useEffect(() => { carregar(); }, [carregar]);
-  const evento = eventos[0];
-  const executar = async (acao: () => Promise<any>, mensagem: string) => { setBusy(true); try { const r = await acao(); onAddToast('success', mensagem, r?.message); await carregar(); } catch (e: any) { onAddToast('error', 'Erro', e.message); } finally { setBusy(false); } };
+  useEffect(() => { carregar(); const timer = setInterval(carregar, 15000); return () => clearInterval(timer); }, [carregar]);
 
-  const criar = () => executar(() => apiService.criarCampeonatoEquipe({ nome, tipo, modo, data_hora: dataHora || undefined, min_equipes: Number(minimo), max_equipes: Number(maximo), taxa_inscricao: Number(taxa), premios: premios.split(',').map(v => Number(v.trim())).filter(v => !Number.isNaN(v)) }), 'Campeonato criado');
+  const evento = eventos[0];
+  const executar = async (acao: () => Promise<any>, titulo: string) => {
+    setBusy(true);
+    try { const resposta = await acao(); onAddToast('success', titulo, resposta?.message); await carregar(); }
+    catch (e: any) { onAddToast('error', 'Erro', e.message || 'Falha na operacao.'); }
+    finally { setBusy(false); }
+  };
+  const nPos = Math.max(1, Math.min(20, Number(numPos) || 1));
+  const premios = Array.from({ length: nPos }, (_, i) => Math.max(0, Number(valores[i] || 0)));
+  const setValor = (indice: number, valor: string) => setValores(prev => { const proximo = [...prev]; proximo[indice] = valor; return proximo; });
+  const campo = 'w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none';
+  const label = 'text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1';
+
+  const criar = () => executar(() => apiService.criarCampeonatoEquipe({ nome: nome.trim() || 'Campeonato por equipes', tipo, modo, data_hora: dataHora.trim() || undefined, min_equipes: Number(minimo) || 2, max_equipes: Number(maximo) || 12, taxa_inscricao: Number(taxa) || 0.01, premios }), 'Campeonato criado');
   const salvarResultado = () => {
     if (!evento) return;
-    const itens = equipes.map(e => ({ equipe_id: e.id, colocacao: Number(resultados[e.id]?.colocacao), abates: Number(resultados[e.id]?.abates || 0) }));
-    if (itens.some(i => !i.colocacao)) { onAddToast('warning', 'Resultado incompleto', 'Informe a colocação de cada equipe.'); return; }
-    executar(() => apiService.lancarResultadoEquipe(evento.id, itens), 'Resultados salvos');
+    const linhas = equipes.map(equipe => ({ equipe_id: equipe.id, colocacao: Number(resultados[equipe.id]?.colocacao), abates: Number(resultados[equipe.id]?.abates || 0) }));
+    if (linhas.some(linha => !linha.colocacao)) { onAddToast('warning', 'Resultado incompleto', 'Informe a colocacao de todas as equipes.'); return; }
+    if (new Set(linhas.map(linha => linha.colocacao)).size !== linhas.length) { onAddToast('warning', 'Colocacoes repetidas', 'Cada equipe precisa ter uma colocacao diferente.'); return; }
+    executar(() => apiService.lancarResultadoEquipe(evento.id, linhas), 'Resultado salvo');
+  };
+  const processarOcr = async (arquivo: File) => {
+    if (!evento) return;
+    setLoadingOcr(true);
+    try {
+      const data = await apiService.processarOcrResultado(evento.id, arquivo);
+      const detectadas: Record<number, { colocacao: string; abates: string; ocrNick?: string }> = {};
+      for (const resultado of data?.resultados ?? []) {
+        const equipe = equipes.find(item => item.membros.some(membro => membro.id === resultado.jogador_id));
+        if (equipe && !detectadas[equipe.id]) detectadas[equipe.id] = { colocacao: String(resultado.colocacao), abates: String(resultado.abates ?? 0), ocrNick: resultado.jogador_nick };
+      }
+      if (!Object.keys(detectadas).length) { onAddToast('warning', 'OCR sem vinculo', 'Nao encontrei integrantes das equipes no print. Preencha manualmente.'); return; }
+      setResultados(prev => ({ ...prev, ...detectadas }));
+      onAddToast('success', 'Print lido por OCR', `${Object.keys(detectadas).length} equipe(s) preenchida(s). Revise antes de salvar.`);
+    } catch (e: any) { onAddToast('error', 'Erro no OCR', e.message || 'Nao foi possivel ler o print.'); }
+    finally { setLoadingOcr(false); if (fileInputRef.current) fileInputRef.current.value = ''; }
   };
 
-  const campo = 'w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm text-white';
-  if (loading) return <div className="py-8 flex justify-center"><Spinner size="md" /></div>;
-  return <div className="space-y-5">
-    {!evento && <section className="ff-card p-5 space-y-4"><h2 className="text-sm font-black text-white flex gap-2 items-center"><Plus className="w-4 h-4 text-primary" />Novo campeonato por equipe</h2><div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><input value={nome} onChange={e => setNome(e.target.value)} className={campo} placeholder="Nome" /><select value={tipo} onChange={e => { const v = e.target.value as 'cs_4x4' | 'br'; setTipo(v); setNome(v === 'cs_4x4' ? 'CS 4x4' : 'BR'); }} className={campo}><option value="cs_4x4">CS 4x4</option><option value="br">BR</option></select>{tipo === 'br' && <select value={modo} onChange={e => setModo(e.target.value as any)} className={campo}><option value="solo">BR Solo</option><option value="duo">BR Duo</option><option value="squad">BR Squad</option></select>}<input value={dataHora} onChange={e => setDataHora(e.target.value)} className={campo} placeholder="Data e hora" /><input type="number" value={minimo} onChange={e => setMinimo(e.target.value)} className={campo} placeholder="Mínimo de equipes" /><input type="number" value={maximo} onChange={e => setMaximo(e.target.value)} className={campo} placeholder="Máximo de equipes" /><input type="number" step="0.01" value={taxa} onChange={e => setTaxa(e.target.value)} className={campo} placeholder="Taxa por equipe" /><input value={premios} onChange={e => setPremios(e.target.value)} className={campo} placeholder="Prêmios: 50,30,20" /></div><p className="text-[11px] text-zinc-500">Informe os prêmios por posição separados por vírgula. A inscrição é cobrada uma vez do capitão da equipe.</p><button disabled={busy} onClick={criar} className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-white disabled:opacity-50 cursor-pointer">Criar campeonato</button></section>}
-    {evento && <section className="ff-card p-5 space-y-5"><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-black text-white">{evento.nome}</h2><p className="text-xs text-primary font-bold uppercase">{evento.tipo === 'cs_4x4' ? 'CS 4x4' : `BR ${evento.modo}`} · {evento.tamanho_equipe} por equipe</p></div><span className="text-xs text-zinc-400">{equipes.length}/{evento.max_equipes} equipes</span></div>{evento.status === 'inscricao' && <div className="flex flex-wrap gap-2"><button disabled={busy || equipes.length < evento.min_equipes} onClick={() => executar(() => apiService.iniciarCampeonatoEquipe(evento.id), 'Campeonato iniciado')} className="rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-bold text-zinc-950 disabled:opacity-40 cursor-pointer flex items-center gap-2"><Play className="w-4 h-4" />Iniciar ({equipes.length}/{evento.min_equipes})</button><button disabled={busy} onClick={() => window.confirm('Cancelar este campeonato? As inscricoes serao reembolsadas.') && executar(() => apiService.cancelarCampeonatoEquipe(evento.id), 'Campeonato cancelado')} className="rounded-xl border border-rose-500/40 px-4 py-2.5 text-sm font-bold text-rose-400 hover:bg-rose-500/10 cursor-pointer disabled:opacity-50 flex items-center gap-2"><Ban className="w-4 h-4" />Cancelar</button></div>}
-      <div className="space-y-2"><h3 className="text-xs font-bold uppercase text-zinc-500 flex items-center gap-1"><Users className="w-4 h-4" />Equipes inscritas</h3>{equipes.length ? equipes.map(e => <div key={e.id} className="rounded-lg bg-zinc-950/60 border border-zinc-800 px-3 py-2 text-xs"><b className="text-white">{e.nome}</b><span className="text-zinc-500"> — {e.membros.map(m => m.nick).join(', ')}</span></div>) : <p className="text-xs text-zinc-600">Nenhuma equipe inscrita.</p>}</div>
-      {evento.status === 'em_andamento' && <div className="space-y-3 border-t border-zinc-800 pt-4"><h3 className="text-xs font-bold uppercase text-zinc-500">Lançar resultado final</h3>{equipes.map(e => <div key={e.id} className="grid grid-cols-[1fr_90px_90px] gap-2 items-center"><span className="text-sm font-bold text-white">{e.nome}</span><input type="number" min="1" placeholder="Posição" value={resultados[e.id]?.colocacao ?? ''} onChange={x => setResultados(v => ({ ...v, [e.id]: { ...v[e.id], colocacao: x.target.value } }))} className={campo} /><input type="number" min="0" placeholder="Abates" value={resultados[e.id]?.abates ?? ''} onChange={x => setResultados(v => ({ ...v, [e.id]: { ...v[e.id], abates: x.target.value } }))} className={campo} /></div>)}<button disabled={busy} onClick={salvarResultado} className="rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white cursor-pointer">Salvar resultado</button><button disabled={busy} onClick={() => executar(() => apiService.apurarCampeonatoEquipe(evento.id), 'Prêmios apurados')} className="ml-2 rounded-xl border border-amber-500/40 px-4 py-2.5 text-sm font-bold text-amber-400 cursor-pointer">Apurar prêmios</button></div>}
-      {evento.status === 'aguardando_revisao' && <div className="space-y-2 border-t border-zinc-800 pt-4"><h3 className="text-xs font-bold uppercase text-zinc-500 flex gap-1"><Trophy className="w-4 h-4" />Premiação por equipe</h3>{pagamentos.map(p => <div key={p.id} className="flex items-center gap-3 rounded-lg border border-zinc-800 p-3 text-xs"><span className="font-bold text-white flex-1">{p.colocacao}º · {p.equipe}</span><span className="text-emerald-400 font-bold">R$ {p.valor.toFixed(2)}</span><button disabled={busy || p.status !== 'pendente'} onClick={() => executar(() => apiService.processarPagamentoEquipe(p.id, 'liberar'), 'Prêmio distribuído')} className="px-3 py-1.5 rounded bg-emerald-500 text-zinc-950 font-bold disabled:opacity-40 cursor-pointer"><Check className="w-3 h-3 inline mr-1" />Liberar</button></div>)}</div>}
-    </section>}
+  if (loading) return <div className="ff-card p-8 flex justify-center"><Spinner size="md" className="text-primary" /></div>;
+  const formato = evento?.tipo === 'cs_4x4' ? 'CS 4x4' : `BR ${evento?.modo || ''}`;
+  const podeIniciar = !!evento && evento.status === 'inscricao' && equipes.length >= evento.min_equipes;
+
+  const configCampos = <div className="space-y-3">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div><label className={label}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} className={campo} /></div>
+      <div><label className={label}>Formato</label><select value={tipo} onChange={e => { const novo = e.target.value as 'cs_4x4' | 'br'; setTipo(novo); setNome(novo === 'cs_4x4' ? 'CS 4x4' : 'BR'); }} className={campo}><option value="cs_4x4">CS 4x4</option><option value="br">Battle Royale</option></select></div>
+      {tipo === 'br' ? <div><label className={label}>Modo BR</label><select value={modo} onChange={e => setModo(e.target.value as typeof modo)} className={campo}><option value="solo">Solo</option><option value="duo">Duo</option><option value="squad">Squad</option></select></div> : <div><label className={label}>Equipe</label><div className={`${campo} text-zinc-400`}>4 jogadores por equipe</div></div>}
+      <div><label className={label}>Data e hora</label><input value={dataHora} onChange={e => setDataHora(e.target.value)} placeholder="ex: 15/07 20:00" className={campo} /></div>
+      <div><label className={label}>Minimo de equipes</label><input type="number" min="2" value={minimo} onChange={e => setMinimo(e.target.value)} className={campo} /></div>
+      <div><label className={label}>Maximo de equipes</label><input type="number" min="2" value={maximo} onChange={e => setMaximo(e.target.value)} className={campo} /></div>
+      <div><label className={label}>Entrada por equipe (R$)</label><input type="number" min="0.01" step="0.01" value={taxa} onChange={e => setTaxa(e.target.value)} className={campo} /></div>
+      <div><label className={label}>Posicoes premiadas</label><input type="number" min="1" max="20" value={numPos} onChange={e => setNumPos(e.target.value)} className={campo} /></div>
+    </div>
+    <div><label className={label}>Premio por colocacao (R$)</label><div className="grid grid-cols-4 sm:grid-cols-6 gap-2">{Array.from({ length: nPos }, (_, i) => <div key={i}><span className="text-[9px] text-zinc-500 block text-center mb-1">{i + 1}o</span><input type="number" min="0" step="0.01" value={valores[i] || ''} onChange={e => setValor(i, e.target.value)} className={`${campo} text-center px-1`} /></div>)}</div><p className="text-[10px] text-zinc-500 mt-1">Total: <b className="text-emerald-400">{brl(premios.reduce((soma, valor) => soma + valor, 0))}</b></p></div>
+  </div>;
+
+  return <div className="space-y-6">
+    <div className="ff-card p-5 space-y-3"><div className="flex items-center justify-between gap-3"><h2 className="text-sm font-bold text-white flex items-center gap-2"><Swords className="w-4 h-4 text-primary" />Campeonatos por equipe</h2><button onClick={carregar} className="p-1.5 text-zinc-500 hover:text-white rounded-lg cursor-pointer" title="Atualizar"><RefreshCw className="w-3.5 h-3.5" /></button></div><p className="text-xs text-zinc-400">Crie CS 4x4 ou BR Solo, Duo e Squad. Inscricao e premio sao por equipe.</p>{evento && <div className="flex flex-wrap gap-2">{evento.premios.map((premio, i) => <span key={i} className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-300">{i + 1}o <b className="text-emerald-400">{brl(premio)}</b></span>)}</div>}</div>
+    {!evento && <div className="ff-card p-5 space-y-4"><span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Nenhum campeonato ativo</span>{configCampos}<button disabled={busy} onClick={criar} className="w-full flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white font-bold text-sm disabled:opacity-50 cursor-pointer"><Plus className="w-4 h-4" />Criar campeonato por equipe</button></div>}
+    {evento && <div className="ff-card p-5 space-y-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-sm font-black text-white">{evento.nome} <span className="text-zinc-500">#{evento.id}</span></h3><span className="text-[10px] font-bold uppercase tracking-wider text-primary">{formato} - {evento.tamanho_equipe} por equipe - {evento.status.replace('_', ' ')}</span></div><div className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 px-3 py-1.5 rounded-xl"><Users className="w-4 h-4 text-primary" /><span className="text-sm font-black text-white">{equipes.length}</span><span className="text-[10px] text-zinc-500">/ min. {evento.min_equipes}</span></div></div>
+      {evento.status === 'inscricao' && <div className="space-y-4"><div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 flex items-center gap-2"><AlertTriangle className="w-4 h-4" />{podeIniciar ? 'Minimo atingido. O campeonato pode ser iniciado.' : `Faltam ${Math.max(0, evento.min_equipes - equipes.length)} equipe(s) para iniciar.`}</div><div className="flex gap-2"><button disabled={busy || !podeIniciar} onClick={() => executar(() => apiService.iniciarCampeonatoEquipe(evento.id), 'Campeonato iniciado')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 text-zinc-950 font-bold text-sm disabled:opacity-40 cursor-pointer"><Play className="w-4 h-4" />Iniciar</button><button disabled={busy} onClick={() => window.confirm('Cancelar este campeonato? As inscricoes serao reembolsadas.') && executar(() => apiService.cancelarCampeonatoEquipe(evento.id), 'Campeonato cancelado')} className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-rose-500/40 text-rose-400 text-sm font-bold cursor-pointer"><Ban className="w-4 h-4" />Cancelar</button></div></div>}
+      <div className="space-y-2"><span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Equipes inscritas</span>{equipes.length ? equipes.map(equipe => <div key={equipe.id} className="p-3 rounded-xl border border-zinc-800 bg-zinc-950/40 text-xs"><b className="text-white">{equipe.nome}</b><span className="text-zinc-500"> - {equipe.membros.map(membro => membro.nick).join(', ')}</span></div>) : <p className="text-xs text-zinc-600 py-3 text-center">Nenhuma equipe inscrita.</p>}</div>
+      {evento.status === 'em_andamento' && <div className="space-y-4 border-t border-zinc-800 pt-5"><div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Lancar resultado final</span></div><div className="p-4 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/20 space-y-3"><div className="flex items-center justify-between"><span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5"><Upload className="w-4 h-4 text-primary" />Carregar print de placar (OCR)</span><span className="text-[9px] text-zinc-500">preenche equipes detectadas</span></div><div onClick={() => fileInputRef.current?.click()} onDragOver={e => e.preventDefault()} onDrop={async e => { e.preventDefault(); if (e.dataTransfer.files[0]) await processarOcr(e.dataTransfer.files[0]); }} className="border border-dashed border-zinc-800 hover:border-primary/50 rounded-xl p-5 text-center cursor-pointer bg-zinc-950/40"><input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={async e => { if (e.target.files?.[0]) await processarOcr(e.target.files[0]); }} />{loadingOcr ? <Spinner size="md" className="mx-auto text-primary" /> : <><Upload className="w-7 h-7 text-zinc-600 mx-auto mb-2" /><p className="text-xs text-zinc-300"><b className="text-primary">Arraste o print</b> ou clique para selecionar</p><p className="text-[10px] text-zinc-500">Revise os dados antes de salvar</p></>}</div></div><div className="space-y-2">{equipes.map(equipe => <div key={equipe.id} className="grid grid-cols-[1fr_82px_82px] gap-2 items-center p-2 rounded-lg border border-zinc-900 bg-zinc-950/20"><div><span className="text-sm font-bold text-white">{equipe.nome}</span>{resultados[equipe.id]?.ocrNick && <span className="block text-[9px] text-amber-400">OCR: {resultados[equipe.id].ocrNick}</span>}</div><input type="number" min="1" placeholder="Pos." value={resultados[equipe.id]?.colocacao || ''} onChange={e => setResultados(prev => ({ ...prev, [equipe.id]: { ...prev[equipe.id], colocacao: e.target.value } }))} className={campo} /><input type="number" min="0" placeholder="Abates" value={resultados[equipe.id]?.abates || ''} onChange={e => setResultados(prev => ({ ...prev, [equipe.id]: { ...prev[equipe.id], abates: e.target.value } }))} className={campo} /></div>)}</div><div className="flex flex-wrap gap-2"><button disabled={busy} onClick={salvarResultado} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white text-sm font-bold cursor-pointer"><Check className="w-4 h-4" />Salvar resultado</button><button disabled={busy || evento.placar.length === 0} onClick={() => executar(() => apiService.apurarCampeonatoEquipe(evento.id), 'Premios apurados')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 text-zinc-950 text-sm font-bold disabled:opacity-40 cursor-pointer"><Trophy className="w-4 h-4" />Apurar premios</button></div></div>}
+      {evento.status === 'aguardando_revisao' && <div className="space-y-2 border-t border-zinc-800 pt-5"><span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Premiacao por equipe</span>{pagamentos.map(pagamento => <div key={pagamento.id} className="flex items-center gap-3 rounded-xl border border-zinc-800 p-3 text-xs"><span className="font-bold text-white flex-1">{pagamento.colocacao}o - {pagamento.equipe}</span><span className="text-emerald-400 font-bold">{brl(pagamento.valor)}</span><button disabled={busy || pagamento.status !== 'pendente'} onClick={() => executar(() => apiService.processarPagamentoEquipe(pagamento.id, 'liberar'), 'Premio distribuido')} className="px-3 py-1.5 rounded-lg bg-emerald-500 text-zinc-950 font-bold disabled:opacity-40 cursor-pointer"><Check className="w-3 h-3 inline mr-1" />Liberar</button></div>)}</div>}
+    </div>}
   </div>;
 }
