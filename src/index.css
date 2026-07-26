@@ -319,3 +319,165 @@
     padding-left: 5.4rem !important;
   }
 }
+
+/* ====== Creator Hub: central de comando de campeonatos ====== */
+.ff-ranking-hero:has(+ .ff-command-tabs) {
+  min-height: 250px;
+  display: flex;
+  align-items: end;
+  isolation: isolate;
+  background-image: linear-gradient(90deg, rgba(5,7,10,.98) 0%, rgba(5,7,10,.82) 39%, rgba(5,7,10,.2) 72%), linear-gradient(0deg, rgba(255,90,31,.22), transparent 55%), url('/flowfire-player-hero.png');
+  background-position: center;
+}
+
+.ff-ranking-hero:has(+ .ff-command-tabs)::before {
+  content: 'CREATOR\\AOPS';
+  white-space: pre;
+  right: 2.1rem;
+  bottom: 1.4rem;
+  color: rgba(255,255,255,.12);
+  font-size: clamp(3.5rem, 10vw, 8rem);
+  line-height: .68;
+  letter-spacing: -.1em;
+}
+
+.ff-command-tabs.max-w-md {
+  max-width: 100%;
+  background: linear-gradient(90deg, rgba(255,90,31,.12), rgba(5,7,10,.94) 42%, rgba(255,209,102,.08));
+}
+
+/* Cartão de identidade do criador */
+.ff-card:has(> .flex > div > h2) {
+  min-height: 154px;
+  border-color: rgba(255,157,46,.32);
+  background-image: linear-gradient(90deg, rgba(9,11,15,.98) 0%, rgba(9,11,15,.84) 48%, rgba(9,11,15,.28)), url('/flowfire-arena-hero.png');
+  background-position: center;
+  background-size: cover;
+}
+
+.ff-card:has(> .flex > div > h2) h2 {
+  font: 900 clamp(1.7rem, 4vw, 2.6rem)/.85 var(--font-display);
+  letter-spacing: -.05em;
+  text-transform: uppercase;
+  text-shadow: 0 3px 18px #000;
+}
+
+.ff-card:has(> .flex > div > h2) .ff-kicker::after {
+  content: ' // CREDENCIAL ATIVA';
+  color: #f5f5f4;
+  opacity: .7;
+}
+
+/* Formulário convertido em estação tática */
+.ff-card:has(input[placeholder="Nome do campeonato"]) {
+  isolation: isolate;
+  min-height: 520px;
+  border-color: rgba(255,90,31,.6);
+  background: linear-gradient(90deg, rgba(8,10,14,.98) 0%, rgba(8,10,14,.94) 51%, rgba(8,10,14,.54) 76%, rgba(8,10,14,.9)), url('/flowfire-player-hero.png') right center/auto 112% no-repeat;
+  box-shadow: 0 28px 65px -38px #000, inset 0 1px 0 rgba(255,255,255,.08), 0 0 42px rgba(255,90,31,.08);
+}
+
+.ff-card:has(input[placeholder="Nome do campeonato"])::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  right: 4%;
+  top: 8%;
+  width: 220px;
+  height: 220px;
+  border: 1px solid rgba(255,209,102,.24);
+  border-radius: 50%;
+  box-shadow: 0 0 0 22px rgba(255,90,31,.035), 0 0 0 45px rgba(255,209,102,.025);
+  pointer-events: none;
+}
+
+.ff-card:has(input[placeholder="Nome do campeonato"]) > * {
+  position: relative;
+  z-index: 1;
+}
+
+.ff-card:has(input[placeholder="Nome do campeonato"]) > .ff-kicker {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  color: #fff1bd;
+}
+
+.ff-card:has(input[placeholder="Nome do campeonato"]) > .ff-kicker::before {
+  content: '01';
+  display: grid;
+  place-items: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  color: #0a0c10;
+  background: var(--color-accent-cyan);
+  font: 900 .65rem var(--font-display);
+}
+
+.ff-card:has(input[placeholder="Nome do campeonato"]) > .ff-kicker::after {
+  content: 'CONFIGURE A PRÓXIMA BATALHA';
+  color: rgba(255,255,255,.48);
+  font-size: .58rem;
+  letter-spacing: .14em;
+}
+
+.ff-card:has(input[placeholder="Nome do campeonato"]) .ff-input {
+  position: relative;
+  background: rgba(5,7,10,.82);
+  border-color: rgba(255,255,255,.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+
+.ff-card:has(input[placeholder="Nome do campeonato"]) input::placeholder,
+.ff-card:has(input[placeholder="Nome do campeonato"]) textarea::placeholder {
+  color: #8e97a3;
+  font-size: .74rem;
+  font-weight: 800;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+}
+
+.ff-card:has(input[placeholder="Nome do campeonato"]) > p.text-\[10px\] {
+  width: min(680px, 100%);
+  padding: .7rem .8rem;
+  border-left: 2px solid var(--color-accent-cyan);
+  background: rgba(255,209,102,.06);
+  color: #c3c9d0;
+  font-size: .67rem;
+}
+
+.ff-card:has(input[placeholder="Nome do campeonato"]) .ff-btn-primary {
+  min-height: 50px;
+  padding-inline: 1.2rem;
+  border: 1px solid rgba(255,209,102,.35);
+  font-size: .8rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+/* Status vazio também faz parte da narrativa da arena. */
+.space-y-3 > h2.text-lg.font-black.text-white {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  margin-top: 1.6rem;
+  padding-bottom: .7rem;
+  border-bottom: 1px solid rgba(255,255,255,.11);
+  font-family: var(--font-display);
+  letter-spacing: -.025em;
+  text-transform: uppercase;
+}
+
+.space-y-3 > h2.text-lg.font-black.text-white::before {
+  content: '02';
+  color: var(--color-accent-cyan);
+  font: 900 .8rem var(--font-display);
+  letter-spacing: 0;
+}
+
+@media (max-width: 640px) {
+  .ff-ranking-hero:has(+ .ff-command-tabs) { min-height: 210px; background-position: 60% center; }
+  .ff-card:has(input[placeholder="Nome do campeonato"]) { min-height: auto; background-size: auto 62%; background-position: 135% 18%; }
+  .ff-card:has(input[placeholder="Nome do campeonato"])::after { width: 135px; height: 135px; right: -1.5rem; top: 3.5rem; }
+  .ff-card:has(input[placeholder="Nome do campeonato"]) > .ff-kicker::after { display: none; }
+}
