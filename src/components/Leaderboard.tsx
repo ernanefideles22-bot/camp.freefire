@@ -108,8 +108,8 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
   return (
     <div className="space-y-6">
       {/* Header controls & stats */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+      <div className="ff-hero flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="relative z-10">
           <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <Trophy className="w-6 h-6 text-primary animate-neon" />
             Resultados Gerais
@@ -119,7 +119,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="relative z-10 flex items-center gap-3">
           {/* Status Badge */}
           {connected ? (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-400">
@@ -152,6 +152,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
 
       {/* Main Table */}
       <div className="relative overflow-hidden ff-card">
+        <div className="h-1 ff-topbar" />
         <div className="overflow-x-auto">
           {data.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center">

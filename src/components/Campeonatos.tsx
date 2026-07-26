@@ -22,16 +22,20 @@ export function Campeonatos({ currentUser, onAddToast }: Props) {
 
   return (
     <div className="space-y-6">
-      <div className="max-w-3xl mx-auto text-center space-y-2">
-        <h1 className="text-2xl font-black text-white">Campeonatos</h1>
-        <p className="text-sm text-zinc-500">Escolha o formato em que quer jogar.</p>
+      <div className="ff-hero max-w-5xl mx-auto">
+        <div className="relative z-10 max-w-xl space-y-2">
+          <span className="ff-kicker">Central de combate</span>
+          <h1 className="text-3xl sm:text-4xl font-black text-white">Escolha sua <span className="text-gradient-neon">arena</span>.</h1>
+          <p className="text-sm text-zinc-400">Entre na modalidade, acompanhe o placar ao vivo e lute pela premiação.</p>
+        </div>
       </div>
-      <div className="max-w-3xl mx-auto grid grid-cols-3 gap-2 rounded-2xl border border-zinc-800 bg-zinc-950/50 p-2">
+      <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-3">
         {opcoes.map(({ id, titulo, descricao, Icone }) => (
-          <button key={id} onClick={() => setCategoria(id)} className={`rounded-xl px-3 py-3 text-left transition-all cursor-pointer ${categoria === id ? 'bg-primary text-white shadow-lg' : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'}`}>
-            <Icone className="w-4 h-4 mb-2" />
-            <span className="block text-xs font-black">{titulo}</span>
-            <span className={`block text-[10px] mt-0.5 ${categoria === id ? 'text-white/75' : 'text-zinc-600'}`}>{descricao}</span>
+          <button key={id} onClick={() => setCategoria(id)} className={`ff-mode-card rounded-xl px-4 py-4 text-left transition-all cursor-pointer ${categoria === id ? 'is-active text-white' : 'text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'}`}>
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-4 ${categoria === id ? 'bg-white/15 text-accent-cyan' : 'bg-zinc-900 text-zinc-500'}`}><Icone className="w-5 h-5" /></div>
+            <span className="block text-sm font-black uppercase tracking-wide">{titulo}</span>
+            <span className={`block text-[11px] mt-1 ${categoria === id ? 'text-white/70' : 'text-zinc-600'}`}>{descricao}</span>
+            <span className={`block mt-4 text-[10px] font-black uppercase tracking-[.15em] ${categoria === id ? 'text-accent-cyan' : 'text-zinc-700'}`}>{categoria === id ? 'Selecionado // jogar' : 'Selecionar modo'}</span>
           </button>
         ))}
       </div>
