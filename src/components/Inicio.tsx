@@ -35,15 +35,17 @@ export function Inicio({ onAbrirCampeonatos, onAbrirRanking, onAbrirGuilda, onAb
       <div className="ff-home-guild-art" aria-hidden="true"><img className="ff-home-guild-alfa" src="/guilda-time-alfa.jpeg" alt="" /><img className="ff-home-guild-beta" src="/guilda-time-beta.jpeg" alt="" /><div>FLOWFIRE<br /><b>GUILDA</b></div></div>
     </section>
 
-    <section className="ff-home-creator max-w-6xl mx-auto">
-      <div className="ff-home-creator-copy">
-        <span className="ff-kicker flex items-center gap-2"><Megaphone className="w-3.5 h-3.5" /> FlowFire Creator Hub</span>
-        <h2>CRIE A SUA<br /><span>PRÓPRIA ARENA.</span></h2>
-        <p>Transforme sua ideia em campeonato. Configure BR ou CS de 1x1 até 4x4, defina inscrições, premiação, regras e divulgue com seu link personalizado.</p>
-        <div className="ff-home-creator-stats"><span><b>12%</b> FlowFire protegido</span><span><b>88%</b> Cofre do evento</span><span><b>OCR</b> Revisão por IA</span></div>
-        <button onClick={onAbrirCriadores} className="ff-home-cta cursor-pointer"><Megaphone className="w-4 h-4" /> Abrir Creator Hub <ArrowRight className="w-4 h-4" /></button>
+    <section className="ff-home-create-card max-w-6xl mx-auto">
+      <div className="ff-home-create-head"><span className="ff-kicker flex items-center gap-2"><Megaphone className="w-3.5 h-3.5" /> Creator Hub // criação rápida</span><span>SEU EVENTO, SUA ARENA</span></div>
+      <div className="ff-home-create-grid">
+        <div><label>Nome do campeonato</label><div className="ff-home-create-input">Crie seu camp</div></div>
+        <div><label>Modalidade</label><div className="ff-home-create-input">BR Solo ou CS 1x1–4x4</div></div>
+        <div><label>Vagas</label><div className="ff-home-create-input">Defina seus participantes</div></div>
+        <div><label>Entrada (R$)</label><div className="ff-home-create-input">Valor por inscrição</div></div>
+        <div><label>Premiação</label><div className="ff-home-create-input">Distribua os 88% do cofre</div></div>
+        <div><label>Seu link</label><div className="ff-home-create-input text-primary">camp-freefas.com.br/#criador/</div></div>
       </div>
-      <div className="ff-home-creator-hud" aria-hidden="true"><span>FLOWFIRE</span><b>CREATE<br />PLAY<br />LEAD</b><i>LIVE</i></div>
+      <div className="ff-home-create-footer"><p><b>12%</b> ficam protegidos para o FlowFire. Os outros <b>88%</b> ficam presos no cofre até o fim do campeonato.</p><button onClick={onAbrirCriadores} className="ff-home-cta cursor-pointer"><Megaphone className="w-4 h-4" /> Criar meu campeonato <ArrowRight className="w-4 h-4" /></button></div>
     </section>
 
     <section className="max-w-6xl mx-auto px-1">
