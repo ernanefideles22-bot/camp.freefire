@@ -25,7 +25,7 @@ from models import (JogadorModel, QuedaModel, InscricaoModel,
                     SalaEventoModel, ResultadoEquipeRodadaModel,
                     CriadorFlowFireModel, CampeonatoCriadorModel,
                     InscricaoCampeonatoCriadorModel, ResultadoCampeonatoCriadorModel,
-                    PagamentoCampeonatoCriadorModel, utcnow)
+                    PagamentoCampeonatoCriadorModel, TemporadaRankingModel, utcnow)
 from auth import (hash_senha, verificar_senha, criar_access_token, criar_refresh_token,
                   decodificar_token, obter_usuario_atual, require_admin)
 from jose import jwt as jose_jwt
@@ -602,6 +602,138 @@ def _ranking_desde(db: Session) -> int:
     return cfg.ranking_desde_queda if cfg else 0
 
 
+def _temporada_ranking_atual(db: Session) -> TemporadaRankingModel:
+    """Retorna a temporada ativa; a primeira nasce zerada no lançamento do mural."""
+    temporada = db.scalar(select(TemporadaRankingModel)
+                          .where(TemporadaRankingModel.status == 'ativa')
+                          .order_by(TemporadaRankingModel.id.desc()))
+    if temporada:
+        return temporada
+    ultima_queda = int(db.scalar(select(func.max(ResultadoQuedaModel.numero_queda))) or 0)
+    proximo_numero = int(db.scalar(select(func.max(TemporadaRankingModel.id))) or 0) + 1
+    temporada = TemporadaRankingModel(
+        nome=f'Temporada {proximo_numero:02d}', inicio_queda=ultima_queda + 1,
+        iniciado_em=utcnow(), status='ativa',
+    )
+    db.add(temporada)
+    db.commit()
+    db.refresh(temporada)
+    return temporada
+
+
+def _linhas_ranking(linhas: dict, chave_nome: str) -> list[dict]:
+    saida = []
+    for chave, linha in linhas.items():
+        saida.append({
+            chave_nome: linha[chave_nome], 'pontos': round(linha['pontos'], 2),
+            'abates': linha['abates'], 'partidas': linha['partidas'],
+            'ganhos': round(linha['ganhos'], 2),
+            'status': 'provisorio' if linha['provisorio'] else 'oficial',
+        })
+    saida.sort(key=lambda item: (-item['pontos'], -item['abates'], -item['ganhos'], item[chave_nome].lower()))
+    for posicao, item in enumerate(saida, 1):
+        item['posicao'] = posicao
+    return saida
+
+
+@app.get('/ranking/mural')
+def mural_dos_campeoes(db: Session = Depends(get_db)):
+    """Ranking por área da temporada ativa. Dados antigos não entram na nova temporada."""
+    from collections import defaultdict
+    temporada = _temporada_ranking_atual(db)
+    desde = temporada.iniciado_em
+    jogadores = {j.id: j for j in db.scalars(select(JogadorModel)).all()}
+
+    individual = defaultdict(lambda: {'jogador': '', 'pontos': 0.0, 'abates': 0, 'partidas': 0, 'ganhos': 0.0, 'provisorio': False})
+    def adicionar_individual(jogador_id: int, colocacao: int, abates: int, ganho: float = 0.0, provisorio: bool = False):
+        jogador = jogadores.get(jogador_id)
+        if not jogador:
+            return
+        linha = individual[jogador_id]
+        linha['jogador'] = jogador.nick
+        linha['pontos'] += calcular_pontos_lbff(colocacao, abates)
+        linha['abates'] += abates
+        linha['partidas'] += 1
+        linha['ganhos'] += ganho or 0.0
+        linha['provisorio'] = linha['provisorio'] or provisorio
+
+    # Quedas avulsas usam o número de queda, porque o registro legado não possui data de criação.
+    for jogador_id, colocacao, abates, premio in db.execute(select(
+            ResultadoQuedaModel.jogador_id, ResultadoQuedaModel.colocacao,
+            ResultadoQuedaModel.abates, ResultadoQuedaModel.premio)
+            .where(ResultadoQuedaModel.numero_queda >= temporada.inicio_queda)).all():
+        adicionar_individual(jogador_id, colocacao, abates, premio)
+
+    for jogador_id, colocacao, abates, status in db.execute(select(
+            ResultadoBonusModel.jogador_id, ResultadoBonusModel.colocacao,
+            ResultadoBonusModel.abates, EventoBonusModel.status)
+            .join(EventoBonusModel, EventoBonusModel.id == ResultadoBonusModel.evento_id)
+            .where(ResultadoBonusModel.criado_em >= desde, EventoBonusModel.status != 'cancelado')).all():
+        adicionar_individual(jogador_id, colocacao, abates, provisorio=status != 'pago')
+
+    for jogador_id, colocacao, abates, status in db.execute(select(
+            ResultadoPagoModel.jogador_id, ResultadoPagoModel.colocacao,
+            ResultadoPagoModel.abates, EventoPagoModel.status)
+            .join(EventoPagoModel, EventoPagoModel.id == ResultadoPagoModel.evento_id)
+            .where(ResultadoPagoModel.criado_em >= desde, EventoPagoModel.status != 'cancelado')).all():
+        adicionar_individual(jogador_id, colocacao, abates, provisorio=status != 'pago')
+
+    for jogador_id, colocacao, abates, status in db.execute(select(
+            ResultadoCampeonatoCriadorModel.jogador_id, ResultadoCampeonatoCriadorModel.colocacao,
+            ResultadoCampeonatoCriadorModel.abates, CampeonatoCriadorModel.status)
+            .join(CampeonatoCriadorModel, CampeonatoCriadorModel.id == ResultadoCampeonatoCriadorModel.campeonato_id)
+            .where(ResultadoCampeonatoCriadorModel.criado_em >= desde, CampeonatoCriadorModel.status != 'cancelado')).all():
+        adicionar_individual(jogador_id, colocacao, abates, provisorio=status != 'encerrado')
+
+    for jogador_id, valor in db.execute(select(PagamentoBonusModel.jogador_id, PagamentoBonusModel.valor)
+            .where(PagamentoBonusModel.status == 'liberado', PagamentoBonusModel.liberado_em >= desde)).all():
+        if jogador_id in individual: individual[jogador_id]['ganhos'] += valor or 0.0
+    for jogador_id, valor in db.execute(select(PagamentoPagoModel.jogador_id, PagamentoPagoModel.valor)
+            .where(PagamentoPagoModel.status == 'liberado', PagamentoPagoModel.liberado_em >= desde)).all():
+        if jogador_id in individual: individual[jogador_id]['ganhos'] += valor or 0.0
+    for jogador_id, valor in db.execute(select(PagamentoCampeonatoCriadorModel.jogador_id, PagamentoCampeonatoCriadorModel.valor)
+            .where(PagamentoCampeonatoCriadorModel.status == 'liberado', PagamentoCampeonatoCriadorModel.tipo == 'premio', PagamentoCampeonatoCriadorModel.liberado_em >= desde)).all():
+        if jogador_id in individual: individual[jogador_id]['ganhos'] += valor or 0.0
+
+    equipes = defaultdict(lambda: {'equipe': '', 'pontos': 0.0, 'abates': 0, 'partidas': 0, 'ganhos': 0.0, 'provisorio': False})
+    eventos_equipe = db.scalars(select(CampeonatoEquipeModel)
+                                .where(CampeonatoEquipeModel.criado_em >= desde,
+                                       CampeonatoEquipeModel.status != 'cancelado')).all()
+    for evento in eventos_equipe:
+        for placar in _placar_equipes(db, evento.id):
+            chave = placar['equipe'].strip().lower()
+            linha = equipes[chave]
+            linha['equipe'] = placar['equipe']
+            linha['pontos'] += placar['pontos']; linha['abates'] += placar['abates']; linha['partidas'] += placar['partidas']
+            linha['provisorio'] = linha['provisorio'] or evento.status != 'pago'
+    for equipe_id, valor in db.execute(select(PagamentoEquipeCampeonatoModel.equipe_id, PagamentoEquipeCampeonatoModel.valor)
+            .where(PagamentoEquipeCampeonatoModel.status == 'liberado', PagamentoEquipeCampeonatoModel.liberado_em >= desde)).all():
+        equipe = db.get(EquipeCampeonatoModel, equipe_id)
+        if equipe and equipe.nome.strip().lower() in equipes: equipes[equipe.nome.strip().lower()]['ganhos'] += valor or 0.0
+
+    criadores = []
+    for criador in db.scalars(select(CriadorFlowFireModel).where(CriadorFlowFireModel.status == 'aprovado')).all():
+        eventos_criador = db.scalars(select(CampeonatoCriadorModel)
+                                    .where(CampeonatoCriadorModel.criador_id == criador.id,
+                                           CampeonatoCriadorModel.criado_em >= desde,
+                                           CampeonatoCriadorModel.status != 'cancelado')).all()
+        if not eventos_criador:
+            continue
+        participantes = sum(db.scalar(select(func.count()).select_from(InscricaoCampeonatoCriadorModel)
+                                      .where(InscricaoCampeonatoCriadorModel.campeonato_id == evento.id)) or 0 for evento in eventos_criador)
+        arrecadacao = sum((db.scalar(select(func.sum(InscricaoCampeonatoCriadorModel.valor_pago))
+                                            .where(InscricaoCampeonatoCriadorModel.campeonato_id == evento.id)) or 0.0) for evento in eventos_criador)
+        dono = jogadores.get(criador.jogador_id)
+        criadores.append({'criador': f'@{criador.slug}', 'pontos': len([e for e in eventos_criador if e.status == 'encerrado']),
+                          'abates': 0, 'partidas': participantes, 'ganhos': round(arrecadacao, 2),
+                          'provisorio': any(e.status != 'encerrado' for e in eventos_criador), 'nick': dono.nick if dono else criador.slug})
+    criadores.sort(key=lambda item: (-item['pontos'], -item['partidas'], -item['ganhos'], item['criador']))
+    for posicao, item in enumerate(criadores, 1): item['posicao'] = posicao; item['status'] = 'provisorio' if item.pop('provisorio') else 'oficial'
+
+    return {'temporada': {'id': temporada.id, 'nome': temporada.nome, 'iniciada_em': temporada.iniciado_em.isoformat(), 'status': temporada.status},
+            'individual': _linhas_ranking(individual, 'jogador'), 'equipes': _linhas_ranking(equipes, 'equipe'), 'criadores': criadores}
+
+
 @app.get('/classificacao')
 def classificacao(db: Session = Depends(get_db)):
     from datetime import datetime as _dt, timedelta as _td, timezone as _tz
@@ -672,7 +804,9 @@ def classificacao(db: Session = Depends(get_db)):
 @app.get('/admin/ranking/info')
 def admin_ranking_info(_admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     max_q = db.scalar(select(func.max(ResultadoQuedaModel.numero_queda))) or 0
-    return {'ranking_desde_queda': _ranking_desde(db), 'ultima_queda': int(max_q)}
+    temporada = _temporada_ranking_atual(db)
+    return {'ranking_desde_queda': temporada.inicio_queda, 'ultima_queda': int(max_q),
+            'temporada': {'id': temporada.id, 'nome': temporada.nome, 'iniciada_em': temporada.iniciado_em.isoformat()}}
 
 
 @app.post('/admin/ranking/resetar')
@@ -684,9 +818,16 @@ def admin_ranking_resetar(_admin: JogadorModel = Depends(require_admin), db: Ses
         db.add(cfg)
     max_q = int(db.scalar(select(func.max(ResultadoQuedaModel.numero_queda))) or 0)
     cfg.ranking_desde_queda = max_q + 1
+    atual = _temporada_ranking_atual(db)
+    atual.status = 'encerrada'
+    atual.encerrado_em = utcnow()
+    proximo_numero = int(db.scalar(select(func.max(TemporadaRankingModel.id))) or 0) + 1
+    nova = TemporadaRankingModel(nome=f'Temporada {proximo_numero:02d}', inicio_queda=max_q + 1,
+                                 iniciado_em=utcnow(), status='ativa')
+    db.add(nova)
     db.commit()
-    return {'message': f'Ranking zerado! A nova semana conta a partir da queda {max_q + 1}.',
-            'ranking_desde_queda': cfg.ranking_desde_queda}
+    return {'message': f'Ranking zerado! {nova.nome} começou agora.',
+            'ranking_desde_queda': cfg.ranking_desde_queda, 'temporada': nova.nome}
 
 
 # ====================== JOGADORES ======================

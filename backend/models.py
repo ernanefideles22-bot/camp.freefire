@@ -189,6 +189,17 @@ class AppConfigModel(Base):
     ranking_desde_queda: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
+class TemporadaRankingModel(Base):
+    """Marco oficial do Mural dos Campeões sem apagar histórico financeiro."""
+    __tablename__ = 'temporadas_ranking'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    nome: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default='ativa', index=True)
+    inicio_queda: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    iniciado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    encerrado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 # ====================== QUEDA BONUS (evento promocional, melhor de 3) ======================
 # Tudo isolado do fluxo de dinheiro (pote/rake). NAO usa InscricaoModel nem
 # ResultadoQuedaModel -> logo NAO entra no ranking semanal nem na premiacao proporcional.

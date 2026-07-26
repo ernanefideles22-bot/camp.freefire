@@ -96,6 +96,26 @@ export interface ClassificacaoItem {
   melhor_colocacao: number | null;
 }
 
+export interface LinhaMuralRanking {
+  posicao: number;
+  pontos: number;
+  abates: number;
+  partidas: number;
+  ganhos: number;
+  status: 'oficial' | 'provisorio';
+  jogador?: string;
+  equipe?: string;
+  criador?: string;
+  nick?: string;
+}
+
+export interface MuralRanking {
+  temporada: { id: number; nome: string; iniciada_em: string; status: string };
+  individual: LinhaMuralRanking[];
+  equipes: LinhaMuralRanking[];
+  criadores: LinhaMuralRanking[];
+}
+
 export interface MeuConvite {
   codigo: string;
   link: string;
@@ -377,6 +397,10 @@ export const apiService = {
   async obterClassificacao(): Promise<ClassificacaoItem[]> {
     const res = await api.get('/classificacao');
     return res.data as ClassificacaoItem[];
+  },
+  async obterMuralRanking(): Promise<MuralRanking> {
+    const res = await api.get('/ranking/mural');
+    return res.data as MuralRanking;
   },
 
   // ---------- CAMPEONATOS POR EQUIPE ----------

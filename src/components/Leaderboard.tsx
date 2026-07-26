@@ -1,252 +1,82 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { Trophy, RefreshCw, ShieldAlert, Award } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Crown, RefreshCw, Share2, ShieldAlert, Swords, Trophy, Users } from 'lucide-react';
 import { apiService } from '../services/api';
-import type { ClassificacaoItem } from '../services/api';
+import type { LinhaMuralRanking, MuralRanking } from '../services/api';
 import { Spinner } from './Spinner';
 
 interface LeaderboardProps {
   onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void;
 }
 
+type Area = 'individual' | 'equipes' | 'criadores';
+
+const areas: { id: Area; titulo: string; descricao: string; icone: typeof Trophy }[] = [
+  { id: 'individual', titulo: 'Individual', descricao: 'BR Solo, quedas e eventos individuais', icone: Trophy },
+  { id: 'equipes', titulo: 'Equipes / CS', descricao: 'Times de 1x1 até 4x4', icone: Swords },
+  { id: 'criadores', titulo: 'Criadores', descricao: 'Eventos aprovados pela comunidade', icone: Crown },
+];
+
+const dinheiro = (valor: number) => `R$ ${(valor || 0).toFixed(2).replace('.', ',')}`;
+
 export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
-  const [data, setData] = useState<ClassificacaoItem[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [connected, setConnected] = useState<boolean>(true);
-  const [countdown, setCountdown] = useState<number>(30);
+  const [mural, setMural] = useState<MuralRanking | null>(null);
+  const [area, setArea] = useState<Area>('individual');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [connected, setConnected] = useState(true);
+  const [countdown, setCountdown] = useState(30);
 
-  // FIX 1.9: loadData aceita suppressToast=false para autorefresh silencioso
-  const loadData = useCallback(async (isSilent = false, suppressToast = false) => {
-    if (!isSilent) setLoading(true);
-    else setRefreshing(true);
-
+  const carregar = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true); else setLoading(true);
     try {
-      const result = await apiService.obterClassificacao();
-      setData(result);
-      setConnected(true);
-      setCountdown(30);
-      // Toast apenas em refresh manual (nao no polling automatico)
-      if (isSilent && !suppressToast) {
-        onAddToast('success', 'Tabela Atualizada', 'Os dados de classificacao foram atualizados com sucesso.');
-      }
-    } catch (err) {
-      // Em refresh automatico, falha silenciosa (sem spam de toasts)
-      if (!suppressToast) {
-        setConnected(false);
-        onAddToast('error', 'Erro ao Carregar Dados', 'Nao foi possivel buscar a classificacao do campeonato.');
-      } else {
-        setConnected(false);
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+      setMural(await apiService.obterMuralRanking());
+      setConnected(true); setCountdown(30);
+      if (manual) onAddToast('success', 'Mural atualizado', 'O ranking da temporada foi atualizado.');
+    } catch {
+      setConnected(false);
+      if (manual) onAddToast('error', 'Não foi possível atualizar', 'Tente novamente em alguns instantes.');
+    } finally { setLoading(false); setRefreshing(false); }
   }, [onAddToast]);
 
-  // Initial load
+  useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    const relogio = window.setInterval(() => setCountdown(anterior => anterior <= 1 ? 30 : anterior - 1), 1000);
+    const atualizador = window.setInterval(() => carregar(), 30000);
+    return () => { window.clearInterval(relogio); window.clearInterval(atualizador); };
+  }, [carregar]);
 
-  // FIX 1.9: separar countdown (1s) do fetch (30s) — sem toast automatico
-  useEffect(() => {
-    // Countdown visual a cada 1s (sem chamar API)
-    const countdownTimer = setInterval(() => {
-      setCountdown((prev) => (prev <= 1 ? 30 : prev - 1));
-    }, 1000);
+  const linhas = mural?.[area] ?? [];
+  const configuracao = useMemo(() => areas.find(item => item.id === area)!, [area]);
+  const nomeLinha = (linha: LinhaMuralRanking) => linha.jogador || linha.equipe || linha.criador || linha.nick || 'Participante';
+  const primeiro = area === 'criadores' ? 'Eventos' : 'Pontos';
+  const segundo = area === 'criadores' ? 'Participantes' : 'Abates';
+  const terceiro = area === 'criadores' ? 'Situação' : 'Partidas';
 
-    // Fetch silencioso a cada 30s — sem toast automatico
-    const fetchTimer = setInterval(() => {
-      loadData(false, true); // silent = true (sem toast)
-    }, 30000);
-
-    return () => {
-      clearInterval(countdownTimer);
-      clearInterval(fetchTimer);
-    };
-  }, [loadData]);
-
-
-  const handleManualRefresh = () => {
-    loadData(true);
+  const compartilhar = async () => {
+    const texto = `Confira o Mural dos Campeões da ${mural?.temporada.nome ?? 'temporada'} no FlowFire.`;
+    try {
+      if (navigator.share) await navigator.share({ title: 'FlowFire Champions', text: texto, url: window.location.href });
+      else { await navigator.clipboard.writeText(window.location.href); onAddToast('success', 'Link copiado', 'Envie o ranking para sua equipe.'); }
+    } catch { /* compartilhamento cancelado pelo jogador */ }
   };
 
-  const getRankBadge = (posicao: number) => {
-    if (posicao === 1) {
-      return (
-        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-yellow-400 to-amber-500 text-zinc-950 font-black shadow-[0_0_10px_rgba(251,191,36,0.5)]">
-          1º
-        </span>
-      );
-    }
-    if (posicao === 2) {
-      return (
-        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-zinc-300 to-zinc-400 text-zinc-950 font-black shadow-[0_0_10px_rgba(209,213,219,0.4)]">
-          2º
-        </span>
-      );
-    }
-    if (posicao === 3) {
-      return (
-        <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-r from-amber-600 to-amber-700 text-white font-black shadow-[0_0_10px_rgba(180,83,9,0.4)]">
-          3º
-        </span>
-      );
-    }
-    return <span className="text-zinc-500 font-semibold text-sm pl-2">{posicao}º</span>;
-  };
+  const medalha = (posicao: number) => <span className={`ff-rank-medal rank-${Math.min(posicao, 4)}`}>{posicao <= 3 ? `${posicao}º` : `${posicao}º`}</span>;
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <Spinner size="lg" />
-        <p className="text-zinc-400 font-medium text-sm animate-pulse">Buscando dados da LBFF Solo...</p>
-      </div>
-    );
-  }
+  if (loading && !mural) return <div className="min-h-[400px] grid place-items-center"><div className="text-center"><Spinner size="lg" /><p className="mt-4 text-sm text-zinc-400">Preparando o Mural dos Campeões...</p></div></div>;
 
-  return (
-    <div className="space-y-6 ff-ranking-shell">
-      {/* Header controls & stats */}
-      <div className="ff-hero ff-ranking-hero flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-        <div className="relative z-10">
-          <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Trophy className="w-6 h-6 text-primary animate-neon" />
-            Mural dos Campeoes
-          </h2>
-          <p className="text-sm text-zinc-400">
-            Acompanhe o ranking e os prêmios acumulados do campeonato.
-          </p>
-        </div>
+  return <div className="space-y-6 ff-ranking-shell">
+    <section className="ff-hero ff-ranking-hero ff-mural-hero flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+      <div className="relative z-10"><p className="ff-kicker">FlowFire // Arena competitiva</p><h2 className="mt-2 flex items-center gap-2 text-3xl font-black tracking-tight text-white"><Trophy className="w-7 h-7 text-primary animate-neon" />MURAL DOS CAMPEÕES</h2><p className="mt-2 text-sm text-zinc-300">Ranking oficial por área. Resultados em revisão aparecem como provisórios.</p></div>
+      <div className="relative z-10 flex flex-wrap items-center gap-2"><span className="ff-season-pill"><span />{mural?.temporada.nome ?? 'Nova temporada'}</span><span className={`ff-api-pill ${connected ? 'is-online' : 'is-offline'}`}>{connected ? 'Ranking conectado' : <><ShieldAlert className="w-3.5 h-3.5" /> Sem conexão</>}</span><span className="hidden sm:inline text-[11px] text-zinc-500 font-mono">Atualiza em {countdown}s</span><button onClick={() => carregar(true)} disabled={refreshing} className="ff-mural-action"><RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />Atualizar</button></div>
+    </section>
 
-        <div className="relative z-10 flex items-center gap-3">
-          {/* Status Badge */}
-          {connected ? (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-semibold text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-              API Conectada
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-xs font-semibold text-rose-400">
-              <ShieldAlert className="w-3.5 h-3.5" />
-              API Offline
-            </div>
-          )}
+    <section className="ff-ranking-tabs" aria-label="Área do ranking">{areas.map(item => { const Icone = item.icone; return <button key={item.id} onClick={() => setArea(item.id)} className={area === item.id ? 'is-active' : ''}><Icone className="w-4 h-4" /><span><b>{item.titulo}</b><small>{item.descricao}</small></span></button>; })}</section>
 
-          {/* Autorefresh indicator */}
-          <div className="text-xs text-zinc-500 font-mono hidden md:block">
-            Auto-refresh em {countdown}s
-          </div>
+    <section className="ff-card overflow-hidden ff-mural-table">
+      <div className="ff-mural-table-head"><div><p className="ff-kicker">{configuracao.titulo}</p><h3>{mural?.temporada.nome ?? 'Temporada em preparação'}</h3></div><button onClick={compartilhar} className="ff-mural-share"><Share2 className="w-4 h-4" />Compartilhar ranking</button></div>
+      {linhas.length === 0 ? <div className="ff-mural-empty"><Trophy className="w-11 h-11" /><h3>O placar está zerado.</h3><p>A nova temporada começou agora. O primeiro resultado aprovado será o primeiro registro do Mural dos Campeões.</p></div> : <div className="overflow-x-auto"><table className="w-full text-left border-collapse"><thead><tr><th>Pos</th><th>{area === 'equipes' ? 'Equipe' : area === 'criadores' ? 'Criador' : 'Jogador'}</th><th className="text-right">{primeiro}</th><th className="text-right">{segundo}</th><th className="text-right hidden sm:table-cell">{terceiro}</th><th className="text-right">Ganhos (R$)</th></tr></thead><tbody>{linhas.map(linha => <tr key={`${area}-${linha.posicao}-${nomeLinha(linha)}`}><td>{medalha(linha.posicao)}</td><td><b className="text-white">{nomeLinha(linha)}</b>{linha.status === 'provisorio' && <span className="ff-provisional">provisório</span>}</td><td className="text-right text-white font-bold">{linha.pontos}{area !== 'criadores' && ' pts'}</td><td className="text-right text-zinc-300">{area === 'criadores' ? linha.partidas : linha.abates}</td><td className="text-right hidden sm:table-cell text-zinc-400">{area === 'criadores' ? (linha.status === 'oficial' ? 'Oficial' : 'Em revisão') : linha.partidas}</td><td className="text-right font-black text-accent-cyan">{dinheiro(linha.ganhos)}</td></tr>)}</tbody></table></div>}
+    </section>
 
-          {/* Manual reload button */}
-          <button
-            onClick={handleManualRefresh}
-            disabled={refreshing}
-            className="flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 active:scale-95 disabled:opacity-50 transition-all cursor-pointer shadow-md"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-primary' : ''}`} />
-            {refreshing ? 'Atualizando...' : 'Atualizar'}
-          </button>
-        </div>
-      </div>
-
-      {/* Main Table */}
-      <div className="relative overflow-hidden ff-card">
-        <div className="h-1 ff-topbar" />
-        <div className="overflow-x-auto">
-          {data.length === 0 ? (
-            <div className="flex flex-col items-center justify-center p-12 text-center">
-              <Award className="w-12 h-12 text-zinc-600 mb-3" />
-              <h3 className="text-lg font-bold text-zinc-300">Nenhum jogador pontuou ainda</h3>
-              <p className="text-sm text-zinc-500 max-w-sm mt-1">
-                Cadastre jogadores e envie os resultados das quedas no Painel do Administrador para ver o ranking subir.
-              </p>
-            </div>
-          ) : (
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-900/50">
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400 w-20">Pos</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400">Jogador</th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400 text-right text-accent-orange font-mono">
-                    Ganhos (R$)
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400 text-right hidden sm:table-cell">
-                    Pontos LBFF
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400 text-right">
-                    Kills (Abates)
-                  </th>
-                  <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-zinc-400 text-right hidden sm:table-cell">
-                    Quedas
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-900">
-                {data.map((item) => {
-                  const isTop3 = item.posicao <= 3;
-                  return (
-                    <tr
-                      key={item.jogador_id}
-                      className={`group hover:bg-zinc-800/35 transition-colors ${
-                        isTop3
-                          ? 'bg-gradient-to-r from-primary/5 via-transparent to-transparent'
-                          : ''
-                      }`}
-                    >
-                      {/* Rank Position */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getRankBadge(item.posicao)}
-                      </td>
-
-                      {/* Nickname & Player Details */}
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className="font-bold text-white group-hover:text-primary transition-colors text-base">
-                          {item.nick}
-                        </span>
-                      </td>
-
-                      {/* Total Prize money */}
-                      <td className="px-6 py-4 whitespace-nowrap text-right font-black text-accent-cyan text-base font-mono">
-                        R$ {(item.ganhos_reais || 0).toFixed(2).replace('.', ',')}
-                      </td>
-
-                      {/* LBFF Score points */}
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-zinc-300 font-semibold text-sm hidden sm:table-cell">
-                        {item.total_pontos} pts
-                      </td>
-
-                      {/* Kills Count */}
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-zinc-300 font-medium text-sm">
-                        {item.total_abates}
-                      </td>
-
-                      {/* Falls Played */}
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-zinc-400 text-sm hidden sm:table-cell">
-                        {item.quedas_jogadas}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* Rules Footer Summary */}
-      <div className="p-4 rounded-xl bg-zinc-950/40 border border-zinc-900 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-zinc-500">
-        <p>🏆 Classificação priorit�ria por **Prêmio Acumulado**, seguido de **Pontos LBFF** (colocação + abates).</p>
-        <p className="flex items-center gap-3">
-          <span className="text-zinc-400 font-bold">Taxa: R$ 3,00</span>
-          <span>•</span>
-          <span>Premiação: 2/3 do arrecadado</span>
-          <span>•</span>
-          <span>85% Top 5</span>
-          <span>•</span>
-          <span>15% rateado por abates</span>
-        </p>
-      </div>
-    </div>
-  );
+    <section className="ff-ranking-rules"><Users className="w-5 h-5 text-primary" /><p><b>Como o ranking funciona:</b> cada campeonato tem seu placar próprio. Quando o resultado é lançado, ele aparece como provisório; após a revisão do FlowFire, entra oficialmente na temporada certa.</p><span>Histórico preservado · temporada atual separada</span></section>
+  </div>;
 };
