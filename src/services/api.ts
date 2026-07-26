@@ -309,6 +309,12 @@ export interface CampeonatoEquipe {
   total_rodadas?: number; inicio?: string | null; fim?: string | null;
   regra_pontos?: 'lbff' | 'cs'; pontos_vitoria?: number; pontos_abate?: number;
 }
+
+export interface JogadorEquipeDisponivel {
+  id: number;
+  nome: string;
+  nick: string;
+}
 export interface PagamentoEquipe { id: number; equipe: string; colocacao: number; valor: number; status: string; }
 
 // ====================== API SERVICE ======================
@@ -395,6 +401,11 @@ export const apiService = {
   async listarJogadores(): Promise<Jogador[]> {
     const res = await api.get('/jogadores');
     return res.data as Jogador[];
+  },
+
+  async listarJogadoresParaEquipe(): Promise<JogadorEquipeDisponivel[]> {
+    const res = await api.get('/equipes/jogadores');
+    return res.data as JogadorEquipeDisponivel[];
   },
 
   async limparJogadoresTeste(): Promise<any> {

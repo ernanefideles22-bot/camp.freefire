@@ -760,6 +760,13 @@ def listar_jogadores(_admin: JogadorModel = Depends(require_admin), db: Session 
     return [_payload_jogador(j) for j in jogadores]
 
 
+@app.get('/equipes/jogadores')
+def listar_jogadores_para_equipe(_jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    """Lista publica minima para o capitao montar uma equipe sem digitar os nicks."""
+    jogadores = db.scalars(select(JogadorModel).order_by(func.lower(JogadorModel.nick))).all()
+    return [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in jogadores]
+
+
 @app.get('/historico/{nick}')
 def historico_jogador(nick: str, db: Session = Depends(get_db)):
     jogador = db.scalar(select(JogadorModel).where(JogadorModel.nick == nick))
