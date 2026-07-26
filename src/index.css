@@ -503,9 +503,27 @@
   letter-spacing: 0;
 }
 
+/* Formulário do Creator Hub no mesmo padrão da criação de Queda Bônus. */
+.ff-creator-create {
+  isolation: isolate;
+  border-color: rgba(255,90,31,.6);
+  background: linear-gradient(90deg, rgba(8,10,14,.98), rgba(8,10,14,.92) 55%, rgba(8,10,14,.62)), url('/flowfire-player-hero.png') right center/auto 115% no-repeat;
+  box-shadow: 0 28px 65px -38px #000, inset 0 1px 0 rgba(255,255,255,.08), 0 0 42px rgba(255,90,31,.08);
+}
+.ff-creator-create > * { position: relative; z-index: 1; }
+.ff-creator-create label > span { display: block; margin: 0 0 .4rem; color: #8e97a3; font-size: .62rem; font-weight: 900; letter-spacing: .07em; text-transform: uppercase; }
+.ff-creator-create .ff-input { background: rgba(5,7,10,.86); border-color: rgba(255,255,255,.14); box-shadow: inset 0 1px 0 rgba(255,255,255,.025); }
+.ff-creator-create input::placeholder, .ff-creator-create textarea::placeholder { color: #8e97a3; font-size: .74rem; font-weight: 800; letter-spacing: .035em; text-transform: uppercase; }
+.ff-creator-info { min-height: 42px; display: flex; align-items: center; gap: .55rem; padding: .65rem .75rem; border: 1px solid rgba(255,209,102,.15); border-left: 2px solid var(--color-accent-cyan); background: rgba(5,7,10,.55); color: #b8c0ca; font-size: .68rem; line-height: 1.35; }
+.ff-creator-info svg { flex: 0 0 auto; color: var(--color-accent-cyan); }
+.ff-creator-notice { display: flex; align-items: center; gap: .5rem; padding: .75rem .85rem; border: 1px solid rgba(255,90,31,.22); border-left: 2px solid var(--color-primary); background: rgba(255,90,31,.055); color: #c7cdd5; font-size: .7rem; line-height: 1.5; }
+.ff-creator-notice svg { flex: 0 0 auto; color: var(--color-primary); }
+
 @media (max-width: 640px) {
   .ff-ranking-hero:has(+ .ff-command-tabs) { min-height: 210px; background-position: 60% center; }
   .ff-card:has(input[placeholder*="Nome do campeonato"]) { min-height: auto; background-size: auto 62%; background-position: 135% 18%; }
   .ff-card:has(input[placeholder*="Nome do campeonato"])::after { width: 135px; height: 135px; right: -1.5rem; top: 3.5rem; }
   .ff-card:has(input[placeholder*="Nome do campeonato"]) > .ff-kicker::after { display: none; }
+  .ff-creator-create { background-size: auto 62%; background-position: 135% 18%; }
+  .ff-creator-info { min-height: 54px; }
 }
