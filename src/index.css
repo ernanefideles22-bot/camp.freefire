@@ -122,8 +122,24 @@
   .ff-kicker { color: var(--color-accent-cyan); font-size: .65rem; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
   .ff-hero { position: relative; overflow: hidden; padding: clamp(1.25rem, 4vw, 2.4rem); border: 1px solid rgba(255,255,255,.09); border-radius: 1rem; background: linear-gradient(115deg, rgba(255,90,31,.16), rgba(23,27,34,.9) 42%, rgba(9,11,15,.95)); }
   .ff-hero::after { content: 'FF'; position: absolute; right: clamp(1rem, 5vw, 4rem); top: 50%; transform: translateY(-50%) skewX(-12deg); font: 900 clamp(5rem, 16vw, 12rem)/.7 var(--font-display); color: rgba(255,255,255,.035); pointer-events: none; }
+  .ff-hero-art {
+    min-height: 330px;
+    display: flex;
+    align-items: flex-end;
+    background-image: linear-gradient(90deg, rgba(7,9,13,.98) 0%, rgba(7,9,13,.88) 34%, rgba(7,9,13,.28) 68%, rgba(7,9,13,.15)), linear-gradient(0deg, rgba(7,9,13,.72), transparent 55%), url('/flowfire-arena-hero.png');
+    background-position: center;
+    background-size: cover;
+  }
+  .ff-hero-art::after { display: none; }
+  .ff-hero-art .ff-hero-copy { max-width: 33rem; }
+  .ff-hero-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .45rem; margin-top: 1.35rem; }
+  .ff-hero-stat { border: 1px solid rgba(255,255,255,.12); background: rgba(8,10,14,.52); backdrop-filter: blur(8px); padding: .62rem .7rem; border-radius: .45rem; }
+  .ff-hero-stat b { display: block; color: var(--color-accent-cyan); font-size: .88rem; }
+  .ff-hero-stat span { display: block; color: #8f98a7; font-size: .57rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; margin-top: .1rem; }
   .ff-mode-card { position: relative; overflow: hidden; border: 1px solid rgba(255,255,255,.09); background: rgba(10,12,16,.8); }
   .ff-mode-card.is-active { border-color: rgba(255,90,31,.8); background: linear-gradient(145deg, rgba(255,90,31,.25), rgba(26,24,24,.92)); box-shadow: 0 12px 32px -22px rgba(255,90,31,.9); }
+  .ff-mode-card::after { content: ''; position: absolute; right: -1rem; bottom: -1.6rem; width: 5rem; height: 5rem; border: 1px solid rgba(255,255,255,.08); transform: rotate(45deg); }
+  .ff-mode-card.is-active::after { border-color: rgba(255,209,102,.35); }
 }
 
 /* ====== Glows ====== */
@@ -171,4 +187,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   .animate-neon, .animate-float, .animate-shimmer, .ff-card, .ff-hero, .ff-mode-card { animation: none; }
+}
+
+@media (max-width: 640px) {
+  .ff-hero-art { min-height: 360px; background-position: 62% center; align-items: flex-end; }
+  .ff-hero-art .ff-hero-copy { max-width: 21rem; }
+  .ff-hero-stats { gap: .3rem; }
+  .ff-hero-stat { padding: .5rem; }
 }
