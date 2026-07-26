@@ -6,7 +6,8 @@ import { Spinner } from './Spinner';
 
 interface Props { currentUser: Jogador | null; onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void; }
 const brl = (valor: number) => `R$ ${(valor || 0).toFixed(2).replace('.', ',')}`;
-const linkCriador = (slug: string, eventoId?: number) => `${window.location.origin}/#criador/${slug}${eventoId ? `/evento/${eventoId}` : ''}`;
+const slugDoNome = (valor: string) => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const linkCriador = (slug: string, eventoSlug?: string) => `${window.location.origin}/#criador/${slug}${eventoSlug ? `/evento/${eventoSlug}` : ''}`;
 
 async function compartilhar(titulo: string, texto: string, url: string, onOk: () => void) {
   if (navigator.share) { await navigator.share({ title: titulo, text: texto, url }); return; }
@@ -47,8 +48,8 @@ export function Criadores({ currentUser, onAddToast }: Props) {
   const carregar = useCallback(async () => { setLoading(true); try { const partes = window.location.hash.split('/'); const slugVisitado = partes[1] === 'criador' ? partes[2] : ''; const [rank, abertos, dados, perfil] = await Promise.all([apiService.rankingCriadores(), apiService.eventosCriadoresAbertos(), currentUser ? apiService.meuCriador() : Promise.resolve({ criador: null, eventos: [] }), slugVisitado ? apiService.perfilCriador(slugVisitado).catch(() => null) : Promise.resolve(null)]); setRanking(rank); setEventos(abertos); setMeu(dados); setPerfilVisitado(perfil); if (dados.criador) { setSlug(dados.criador.slug); setBio(dados.criador.bio ?? ''); } } catch (erro: any) { onAddToast('error', 'Erro ao carregar criadores', erro.message); } finally { setLoading(false); } }, [currentUser, onAddToast]);
   useEffect(() => { carregar(); }, [carregar]);
   const executar = async (acao: () => Promise<any>, titulo: string) => { setBusy(true); try { const resposta = await acao(); onAddToast('success', titulo, resposta?.message); await carregar(); } catch (erro: any) { onAddToast('error', 'Não foi possível concluir', erro.message); } finally { setBusy(false); } };
-  const criar = () => { const percentuais = premios.split(',').map(item => Number(item.trim())).filter(valor => valor > 0); executar(() => apiService.criarEventoCriador({ nome, slug: eventoSlug, formato, descricao, max_jogadores: Number(vagas), taxa_inscricao: Number(taxa), premios_percentuais: percentuais, percentual_criador: Number(parteCriador), data_hora: dataHora }), 'Campeonato criado como rascunho'); };
-  const compartilharEvento = (evento: CampeonatoCriador) => compartilhar(evento.nome, `Confira o ranking do campeonato ${evento.nome} no FlowFire.`, linkCriador(evento.criador.slug, evento.id), () => onAddToast('success', 'Link copiado', 'Envie o resultado onde quiser.'));
+  const criar = () => { const percentuais = premios.split(',').map(item => Number(item.trim())).filter(valor => valor > 0); executar(() => apiService.criarEventoCriador({ nome, slug: slugDoNome(nome), formato, descricao, max_jogadores: Number(vagas), taxa_inscricao: Number(taxa), premios_percentuais: percentuais, percentual_criador: Number(parteCriador), data_hora: dataHora }), 'Campeonato criado como rascunho'); };
+  const compartilharEvento = (evento: CampeonatoCriador) => compartilhar(evento.nome, `Confira o ranking do campeonato ${evento.nome} no FlowFire.`, linkCriador(evento.criador.slug, evento.slug), () => onAddToast('success', 'Link copiado', 'Envie o resultado onde quiser.'));
   const copiarPerfil = () => navigator.clipboard.writeText(linkCriador(meu.criador?.slug ?? slug)).then(() => onAddToast('success', 'Link copiado', 'Seu link personalizado está pronto para divulgar.'));
   if (loading) return <div className="py-16 flex justify-center"><Spinner size="md" className="text-primary" /></div>;
   return <div className="max-w-6xl mx-auto space-y-6">

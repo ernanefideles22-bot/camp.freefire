@@ -264,3 +264,23 @@
   .ff-guild-profile-art { min-height: 180px; background-size: 410% auto; }
   .ff-guild-profile-copy { padding: 1.35rem; }
 }
+/* O endereço de criador é padronizado: o título do campeonato gera o final do link. */
+.ff-card .grid:has(> input[placeholder="link-do-evento"]) {
+  position: relative;
+  padding-top: 1.75rem;
+}
+
+.ff-card .grid:has(> input[placeholder="link-do-evento"])::before {
+  content: 'Seu link FlowFire: /#criador/seu-perfil/evento/nome-do-campeonato';
+  position: absolute;
+  top: 0;
+  left: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  color: var(--color-primary, #ff5c35);
+}
+
+.ff-card input[placeholder="link-do-evento"] {
+  display: none;
+}
