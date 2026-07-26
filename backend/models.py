@@ -367,6 +367,15 @@ class GuildaPerfilModel(Base):
     atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class MembroGuildaPerfilModel(Base):
+    """Guilda atual de cada jogador, exibida em rankings e campeonatos."""
+    __tablename__ = 'membros_guildas_perfis'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    guilda_id: Mapped[int] = mapped_column(ForeignKey('guildas_perfis.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), unique=True, nullable=False, index=True)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class EquipeGuildaModel(Base):
     """Vincula a equipe criada para um campeonato à identidade da sua guilda."""
     __tablename__ = 'equipes_guildas'

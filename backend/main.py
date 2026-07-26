@@ -23,7 +23,7 @@ from models import (JogadorModel, QuedaModel, InscricaoModel,
                     MembroEquipeCampeonatoModel, ResultadoEquipeCampeonatoModel,
                     PagamentoEquipeCampeonatoModel, ConfiguracaoEventoModel,
                     SalaEventoModel, ResultadoEquipeRodadaModel,
-                    GuildaPerfilModel, EquipeGuildaModel,
+                    GuildaPerfilModel, MembroGuildaPerfilModel, EquipeGuildaModel,
                     ReservaEquipeCampeonatoModel,
                     CriadorFlowFireModel, CampeonatoCriadorModel,
                     InscricaoCampeonatoCriadorModel, ResultadoCampeonatoCriadorModel,
@@ -647,7 +647,13 @@ def mural_dos_campeoes(db: Session = Depends(get_db)):
     temporada = _temporada_ranking_atual(db)
     desde = temporada.iniciado_em
     jogadores = {j.id: j for j in db.scalars(select(JogadorModel)).all()}
-    guildas_por_capitao = {g.capitao_id: g for g in db.scalars(select(GuildaPerfilModel)).all()}
+    guildas_por_jogador = {}
+    for vinculo in db.scalars(select(MembroGuildaPerfilModel)).all():
+        guilda = db.get(GuildaPerfilModel, vinculo.guilda_id)
+        if guilda:
+            guildas_por_jogador[vinculo.jogador_id] = guilda
+    for guilda in db.scalars(select(GuildaPerfilModel)).all():
+        guildas_por_jogador.setdefault(guilda.capitao_id, guilda)
 
     individual = defaultdict(lambda: {'jogador': '', 'pontos': 0.0, 'abates': 0, 'partidas': 0, 'ganhos': 0.0, 'provisorio': False, 'logo_url': None})
     def adicionar_individual(jogador_id: int, colocacao: int, abates: int, ganho: float = 0.0, provisorio: bool = False):
@@ -656,7 +662,7 @@ def mural_dos_campeoes(db: Session = Depends(get_db)):
             return
         linha = individual[jogador_id]
         linha['jogador'] = jogador.nick
-        if guildas_por_capitao.get(jogador_id): linha['logo_url'] = guildas_por_capitao[jogador_id].logo_data
+        if guildas_por_jogador.get(jogador_id): linha['logo_url'] = guildas_por_jogador[jogador_id].logo_data
         linha['pontos'] += calcular_pontos_lbff(colocacao, abates)
         linha['abates'] += abates
         linha['partidas'] += 1
@@ -734,7 +740,7 @@ def mural_dos_campeoes(db: Session = Depends(get_db)):
         criadores.append({'criador': f'@{criador.slug}', 'pontos': len([e for e in eventos_criador if e.status == 'encerrado']),
                           'abates': 0, 'partidas': participantes, 'ganhos': round(arrecadacao, 2),
                           'provisorio': any(e.status != 'encerrado' for e in eventos_criador), 'nick': dono.nick if dono else criador.slug,
-                          'logo_url': guildas_por_capitao.get(criador.jogador_id).logo_data if guildas_por_capitao.get(criador.jogador_id) else None})
+                          'logo_url': guildas_por_jogador.get(criador.jogador_id).logo_data if guildas_por_jogador.get(criador.jogador_id) else None})
     criadores.sort(key=lambda item: (-item['pontos'], -item['partidas'], -item['ganhos'], item['criador']))
     for posicao, item in enumerate(criadores, 1):
         item['posicao'] = posicao; item['status'] = 'provisorio' if item.pop('provisorio') else 'oficial'
@@ -2624,6 +2630,16 @@ def _identidade_guilda_por_capitao(db: Session, capitao_id: int) -> Optional[Gui
     return db.scalar(select(GuildaPerfilModel).where(GuildaPerfilModel.capitao_id == capitao_id))
 
 
+def _identidade_guilda_do_jogador(db: Session, jogador_id: int) -> Optional[GuildaPerfilModel]:
+    vinculo = db.scalar(select(MembroGuildaPerfilModel)
+                        .where(MembroGuildaPerfilModel.jogador_id == jogador_id))
+    if vinculo:
+        guilda = db.get(GuildaPerfilModel, vinculo.guilda_id)
+        if guilda:
+            return guilda
+    return _identidade_guilda_por_capitao(db, jogador_id)
+
+
 def _identidade_equipe(db: Session, equipe_id: int) -> Optional[dict]:
     vinculo = db.scalar(select(EquipeGuildaModel).where(EquipeGuildaModel.equipe_id == equipe_id))
     guilda = db.get(GuildaPerfilModel, vinculo.guilda_id) if vinculo else None
@@ -2831,6 +2847,12 @@ def inscrever_equipe(campeonato_id: int, body: InscreverEquipeBody,
         db.add(MembroEquipeCampeonatoModel(equipe_id=equipe.id, jogador_id=membro.id))
         if membro.nick.lower() in reservas_nicks:
             db.add(ReservaEquipeCampeonatoModel(equipe_id=equipe.id, jogador_id=membro.id))
+        vinculo = db.scalar(select(MembroGuildaPerfilModel)
+                            .where(MembroGuildaPerfilModel.jogador_id == membro.id))
+        if vinculo:
+            vinculo.guilda_id = guilda.id
+        else:
+            db.add(MembroGuildaPerfilModel(guilda_id=guilda.id, jogador_id=membro.id))
     db.commit()
     return {'message': 'Equipe inscrita com sucesso.', 'equipe': _serializar_equipe(db, equipe)}
 
@@ -3057,7 +3079,7 @@ def _placar_criador(db: Session, evento_id: int) -> list[dict]:
                              .order_by(ResultadoCampeonatoCriadorModel.colocacao)).all())
     return [{'jogador_id': linha.jogador_id, 'nick': db.get(JogadorModel, linha.jogador_id).nick,
              'colocacao': linha.colocacao, 'abates': linha.abates,
-             'guilda': ({'nome': guilda.nome, 'logo_url': guilda.logo_data} if (guilda := _identidade_guilda_por_capitao(db, linha.jogador_id)) else None)}
+             'guilda': ({'nome': guilda.nome, 'logo_url': guilda.logo_data} if (guilda := _identidade_guilda_do_jogador(db, linha.jogador_id)) else None)}
             for linha in linhas]
 
 def _serializar_campeonato_criador(db: Session, evento: CampeonatoCriadorModel, publico: bool = True) -> dict:
@@ -3073,7 +3095,7 @@ def _serializar_campeonato_criador(db: Session, evento: CampeonatoCriadorModel, 
     if not publico:
         dados.update({'sala_id': evento.sala_id, 'sala_senha': evento.sala_senha,
                       'inscritos_jogadores': [{'id': item.jogador_id, 'nick': db.get(JogadorModel, item.jogador_id).nick,
-                                               'guilda': ({'nome': guilda.nome, 'logo_url': guilda.logo_data} if (guilda := _identidade_guilda_por_capitao(db, item.jogador_id)) else None)}
+                                               'guilda': ({'nome': guilda.nome, 'logo_url': guilda.logo_data} if (guilda := _identidade_guilda_do_jogador(db, item.jogador_id)) else None)}
                                               for item in inscritos]})
     return dados
 

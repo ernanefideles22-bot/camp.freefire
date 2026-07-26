@@ -24,7 +24,9 @@ export function CampeonatosEquipe({ currentUser, onAddToast }: Props) {
   const [reservasNicks, setReservasNicks] = useState('');
   const [jogadores, setJogadores] = useState<JogadorEquipeDisponivel[]>([]);
   const [membrosSelecionados, setMembrosSelecionados] = useState<string[]>([]);
+  const [reservasSelecionados, setReservasSelecionados] = useState<string[]>([]);
   const [listaAberta, setListaAberta] = useState(false);
+  const [listaReservasAberta, setListaReservasAberta] = useState(false);
   const [carregandoJogadores, setCarregandoJogadores] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -44,7 +46,7 @@ export function CampeonatosEquipe({ currentUser, onAddToast }: Props) {
   useEffect(() => { carregar(); }, [carregar]);
 
   const abrirInscricao = async (eventoId: number) => {
-    setAbrir(eventoId); setNomeEquipe(''); setNomeGuilda(''); setLogoData(''); setNicks(''); setReservasNicks(''); setMembrosSelecionados([]); setListaAberta(false);
+    setAbrir(eventoId); setNomeEquipe(''); setNomeGuilda(''); setLogoData(''); setNicks(''); setReservasNicks(''); setMembrosSelecionados([]); setReservasSelecionados([]); setListaAberta(false); setListaReservasAberta(false);
     if (!currentUser || jogadores.length) return;
     setCarregandoJogadores(true);
     try { setJogadores(await apiService.listarJogadoresParaEquipe()); }
@@ -57,7 +59,10 @@ export function CampeonatosEquipe({ currentUser, onAddToast }: Props) {
     ...membrosSelecionados,
   ].filter(nick => nick.toLowerCase() !== currentUser?.nick.toLowerCase())));
 
-  const reservasInformados = () => Array.from(new Set(reservasNicks.split(',').map(nick => nick.trim()).filter(Boolean)))
+  const reservasInformados = () => Array.from(new Set([
+    ...reservasNicks.split(',').map(nick => nick.trim()).filter(Boolean),
+    ...reservasSelecionados,
+  ]))
     .filter(nick => nick.toLowerCase() !== currentUser?.nick.toLowerCase() && !membrosInformados().some(titular => titular.toLowerCase() === nick.toLowerCase()));
 
   const alternarMembro = (jogador: JogadorEquipeDisponivel, evento: CampeonatoEquipe) => {
@@ -72,6 +77,18 @@ export function CampeonatosEquipe({ currentUser, onAddToast }: Props) {
     });
   };
 
+  const alternarReserva = (jogador: JogadorEquipeDisponivel) => {
+    if (jogador.nick.toLowerCase() === currentUser?.nick.toLowerCase() || membrosInformados().some(titular => titular.toLowerCase() === jogador.nick.toLowerCase())) return;
+    setReservasSelecionados(atual => {
+      if (atual.some(nick => nick.toLowerCase() === jogador.nick.toLowerCase())) return atual.filter(nick => nick.toLowerCase() !== jogador.nick.toLowerCase());
+      if (reservasInformados().length >= 2) {
+        onAddToast('warning', 'Limite de reservas', 'Cada equipe pode cadastrar até 2 reservas.');
+        return atual;
+      }
+      return [...atual, jogador.nick];
+    });
+  };
+
   const inscrever = async (ev: CampeonatoEquipe) => {
     if (!currentUser) { onAddToast('warning', 'Faça login', 'Entre para criar sua equipe.'); return; }
     setBusy(true);
@@ -80,7 +97,7 @@ export function CampeonatosEquipe({ currentUser, onAddToast }: Props) {
       const reservas = reservasInformados();
       await apiService.inscreverEquipe(ev.id, nomeEquipe, membros, reservas, nomeGuilda, logoData || undefined);
       onAddToast('success', 'Equipe inscrita', `A inscrição de ${nomeEquipe} foi confirmada.`);
-      setAbrir(null); setNomeEquipe(''); setNomeGuilda(''); setLogoData(''); setNicks(''); setReservasNicks(''); setMembrosSelecionados([]); await carregar();
+      setAbrir(null); setNomeEquipe(''); setNomeGuilda(''); setLogoData(''); setNicks(''); setReservasNicks(''); setMembrosSelecionados([]); setReservasSelecionados([]); await carregar();
     } catch (erro: any) { onAddToast('error', 'Não foi possível inscrever', erro.message); }
     finally { setBusy(false); }
   };
@@ -112,7 +129,7 @@ export function CampeonatosEquipe({ currentUser, onAddToast }: Props) {
           {ev.tamanho_equipe > 1 && <div className="rounded-xl border border-zinc-800 bg-zinc-950/30 overflow-hidden"><button type="button" onClick={() => setListaAberta(valor => !valor)} className="w-full flex items-center justify-between gap-3 px-3 py-3 text-left cursor-pointer"><span><b className="block text-sm text-white">Selecionar jogadores cadastrados</b><small className="text-zinc-500">{membros.length}/{ev.tamanho_equipe - 1} integrante(s) além do capitão</small></span>{listaAberta ? <ChevronUp className="w-4 h-4 text-primary" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}</button>
             {listaAberta && <div className="border-t border-zinc-800 max-h-60 overflow-y-auto p-2 space-y-1">{carregandoJogadores ? <div className="py-5 flex justify-center"><Spinner size="sm" /></div> : jogadores.filter(jogador => jogador.nick.toLowerCase() !== currentUser?.nick.toLowerCase()).map(jogador => { const selecionado = membrosSelecionados.some(nick => nick.toLowerCase() === jogador.nick.toLowerCase()); return <button type="button" key={jogador.id} onClick={() => alternarMembro(jogador, ev)} className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left cursor-pointer ${selecionado ? 'bg-primary/15 text-white' : 'text-zinc-300 hover:bg-zinc-900'}`}><span className={`grid place-items-center w-5 h-5 rounded border ${selecionado ? 'border-primary bg-primary text-white' : 'border-zinc-700'}`}>{selecionado && <Check className="w-3.5 h-3.5" />}</span><span className="min-w-0"><b className="block text-sm truncate">{jogador.nick}</b><small className="block text-[10px] text-zinc-500 truncate">{jogador.nome}</small></span></button>; })}</div>}</div>}
           <input value={nicks} onChange={e => setNicks(e.target.value)} placeholder={ev.tamanho_equipe === 1 ? 'Não precisa informar outros nicks' : 'Ou digite outros titulares, separados por vírgula (opcional)'} className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm text-white" />
-          {ev.tamanho_equipe === 4 && <div className="rounded-xl border border-dashed border-accent-cyan/35 bg-accent-cyan/5 p-3 space-y-2"><div className="flex items-center justify-between gap-3"><span><b className="block text-xs text-white">Reservas da equipe</b><small className="text-[10px] text-zinc-400">Até 2 jogadores para CS 4x4 ou BR Squad. Eles não ocupam vaga titular.</small></span><span className="text-xs font-black text-accent-cyan">{reservasInformados().length}/2</span></div><input value={reservasNicks} onChange={e => setReservasNicks(e.target.value)} placeholder="Nicks dos reservas, separados por vírgula" className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm text-white" /></div>}
+          {ev.tamanho_equipe === 4 && <div className="rounded-xl border border-dashed border-accent-cyan/35 bg-accent-cyan/5 p-3 space-y-2"><div className="flex items-center justify-between gap-3"><span><b className="block text-xs text-white">Reservas da equipe</b><small className="text-[10px] text-zinc-400">Até 2 jogadores para CS 4x4 ou BR Squad. Eles não ocupam vaga titular.</small></span><span className="text-xs font-black text-accent-cyan">{reservasInformados().length}/2</span></div><button type="button" onClick={() => setListaReservasAberta(valor => !valor)} className="w-full flex items-center justify-between rounded-lg border border-accent-cyan/25 bg-zinc-950/55 px-3 py-2 text-left cursor-pointer"><span><b className="block text-xs text-white">Selecionar reservas cadastrados</b><small className="text-[10px] text-zinc-500">Abra a lista e escolha até dois jogadores.</small></span>{listaReservasAberta ? <ChevronUp className="w-4 h-4 text-accent-cyan" /> : <ChevronDown className="w-4 h-4 text-zinc-400" />}</button>{listaReservasAberta && <div className="max-h-52 overflow-y-auto rounded-lg border border-accent-cyan/20 bg-zinc-950/60 p-2 space-y-1">{carregandoJogadores ? <div className="py-4 flex justify-center"><Spinner size="sm" /></div> : jogadores.filter(jogador => jogador.nick.toLowerCase() !== currentUser?.nick.toLowerCase() && !membrosInformados().some(titular => titular.toLowerCase() === jogador.nick.toLowerCase())).map(jogador => { const selecionado = reservasSelecionados.some(nick => nick.toLowerCase() === jogador.nick.toLowerCase()); return <button type="button" key={jogador.id} onClick={() => alternarReserva(jogador)} className={`w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left cursor-pointer ${selecionado ? 'bg-accent-cyan/15 text-white' : 'text-zinc-300 hover:bg-zinc-900'}`}><span className={`grid place-items-center w-5 h-5 rounded border ${selecionado ? 'border-accent-cyan bg-accent-cyan text-zinc-950' : 'border-zinc-700'}`}>{selecionado && <Check className="w-3.5 h-3.5" />}</span><span className="min-w-0"><b className="block text-sm truncate">{jogador.nick}</b><small className="block text-[10px] text-zinc-500 truncate">{jogador.nome}</small></span></button>; })}</div>}<input value={reservasNicks} onChange={e => setReservasNicks(e.target.value)} placeholder="Ou digite nicks dos reservas, separados por vírgula" className="w-full rounded-lg bg-zinc-950 border border-zinc-800 px-3 py-2 text-sm text-white" />{reservasInformados().length > 0 && <div className="flex flex-wrap gap-1.5">{reservasInformados().map(nick => <span key={nick} className="rounded-full border border-accent-cyan/30 bg-accent-cyan/10 px-2 py-1 text-[11px] text-accent-cyan">{nick}</span>)}</div>}</div>}
           {membros.length > 0 && <div className="flex flex-wrap gap-1.5">{membros.map(nick => <span key={nick} className="rounded-full border border-primary/30 bg-primary/10 px-2 py-1 text-[11px] text-primary">{nick}</span>)}</div>}<p className="text-[10px] text-zinc-500">Você é o capitão e entra automaticamente. A taxa é cobrada uma vez do capitão.</p><button disabled={busy} onClick={() => inscrever(ev)} className="w-full rounded-lg bg-primary py-2.5 text-sm font-bold text-white disabled:opacity-50 cursor-pointer">{busy ? 'Inscrevendo...' : 'Confirmar inscrição da equipe'}</button></div> : <button onClick={() => abrirInscricao(ev.id)} className="w-full rounded-xl bg-primary py-3 text-sm font-bold text-white cursor-pointer">Criar e inscrever equipe</button>}</>}
         {ev.placar.length > 0 && <div className="border-t border-zinc-800 pt-3 space-y-1"><p className="text-[10px] font-bold uppercase text-zinc-500"><Trophy className="inline w-3 h-3 mr-1" />Placar</p>{ev.placar.map(item => <div key={item.equipe_id} className="flex items-center text-xs py-1"><span className="w-8 text-zinc-500">{item.posicao}º</span>{item.guilda?.logo_url && <img src={item.guilda.logo_url} alt="" className="mr-2 w-6 h-6 rounded object-cover border border-primary/35" />}<span className="flex-1 font-bold text-white">{item.equipe}{item.guilda?.nome && <small className="ml-1 text-[9px] text-primary">· {item.guilda.nome}</small>}</span><span className="text-zinc-400">{item.pontos} pts · {item.abates} abates</span></div>)}</div>}
       </section>;
