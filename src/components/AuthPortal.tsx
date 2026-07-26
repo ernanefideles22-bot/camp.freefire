@@ -138,15 +138,16 @@ export const AuthPortal: React.FC<AuthPortalProps> = ({ onAuthSuccess, onAddToas
   );
 
   return (
-    <div className="flex items-center justify-center py-12 px-4 relative overflow-hidden" style={{ minHeight: 'calc(100vh - 12rem)' }}>
+    <div className="ff-auth-screen flex items-center justify-center py-12 px-4 relative overflow-hidden" style={{ minHeight: 'calc(100vh - 12rem)' }}>
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-accent-cyan/10 blur-[120px] pointer-events-none" />
       <Termos open={termosOpen} onClose={() => setTermosOpen(false)} />
 
-      <div className="w-full max-w-md ff-card p-8 relative z-10 overflow-hidden">
+      <div className="w-full max-w-md ff-card ff-auth-card p-8 relative z-10 overflow-hidden">
         <div className={`absolute top-0 left-0 right-0 h-1 ff-topbar ${isLogin ? '' : 'opacity-90'}`} />
 
         <div className="text-center mb-8 mt-2">
+          <p className="ff-kicker mb-2">Acesso autorizado</p>
           <div className="inline-flex items-center justify-center mb-4 animate-float">
             <img src="/flowfire-logo.png" alt="Flow Fire Champions" className="w-20 h-20 object-contain drop-shadow-[0_0_18px_rgba(255,90,31,0.45)]" />
           </div>

@@ -106,13 +106,13 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 ff-ranking-shell">
       {/* Header controls & stats */}
-      <div className="ff-hero flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+      <div className="ff-hero ff-ranking-hero flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div className="relative z-10">
           <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <Trophy className="w-6 h-6 text-primary animate-neon" />
-            Resultados Gerais
+            Mural dos Campeoes
           </h2>
           <p className="text-sm text-zinc-400">
             Acompanhe o ranking e os prêmios acumulados do campeonato.

@@ -469,11 +469,15 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
   );
 
   return (
-    <div className="max-w-3xl mx-auto space-y-5">
+    <div className="max-w-3xl mx-auto space-y-5 ff-portal-shell">
+      <div className="ff-portal-hero">
+        <div className="relative z-10"><p className="ff-kicker">Area do competidor</p><h2>Pronto para a arena, {currentUser.nick}?</h2><p>Entre nas salas, acompanhe seus resultados e administre seus ganhos sem sair da missao.</p></div>
+        <div className="ff-portal-status relative z-10"><i /> CONEXAO ATIVA</div>
+      </div>
       {/* Segmented control Arena / Carteira */}
-      <div className="flex items-center gap-1 p-1 rounded-2xl border border-zinc-800 bg-zinc-950/40 max-w-md mx-auto">
-        <button onClick={() => setAba('arena')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${aba === 'arena' ? 'bg-primary text-white shadow-[0_0_12px_rgba(255,90,31,0.25)]' : 'text-zinc-400 hover:text-zinc-200'}`}><Gamepad2 className="w-4 h-4" />Arena</button>
-        <button onClick={() => setAba('carteira')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${aba === 'carteira' ? 'bg-primary text-white shadow-[0_0_12px_rgba(255,90,31,0.25)]' : 'text-zinc-400 hover:text-zinc-200'}`}><Wallet className="w-4 h-4" />Carteira <span className="text-[10px] font-mono opacity-80">{brl(saldo)}</span></button>
+      <div className="ff-command-tabs max-w-md mx-auto">
+        <button onClick={() => setAba('arena')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${aba === 'arena' ? 'is-active' : ''}`}><Gamepad2 className="w-4 h-4" />Arena</button>
+        <button onClick={() => setAba('carteira')} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all cursor-pointer ${aba === 'carteira' ? 'is-active' : ''}`}><Wallet className="w-4 h-4" />Carteira <span className="text-[10px] font-mono opacity-80">{brl(saldo)}</span></button>
       </div>
 
       {aba === 'arena' ? arena : carteira}

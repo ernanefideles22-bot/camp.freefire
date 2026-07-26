@@ -341,8 +341,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white">
-      <div className="flex border-b border-zinc-800 overflow-x-auto">
+    <div className="min-h-screen bg-zinc-950 text-white ff-admin-shell">
+      <div className="ff-admin-banner"><div><p className="ff-kicker">Controle da operacao</p><h2>Painel do comandante</h2><p>Salas, resultados, pagamentos e eventos em uma unica central.</p></div><b>FF<br />HQ</b></div>
+      <div className="ff-admin-tabs flex border-b border-zinc-800 overflow-x-auto">
         <button onClick={() => setActiveTab('geral')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'geral' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
           <UserPlus className="w-4 h-4 text-primary" />
           Painel Geral
