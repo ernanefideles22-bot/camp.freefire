@@ -1,8 +1,9 @@
-import { ArrowRight, Crosshair, Flame, Play, Shield, Swords, Trophy, Users } from 'lucide-react';
+import { ArrowRight, Crown, Crosshair, Flame, Play, Shield, Swords, Trophy, Users } from 'lucide-react';
 
 interface Props {
   onAbrirCampeonatos: () => void;
   onAbrirRanking: () => void;
+  onAbrirGuilda: () => void;
 }
 
 const modos = [
@@ -11,7 +12,7 @@ const modos = [
   { icon: Trophy, titulo: 'Eventos especiais', texto: 'Quedas bônus, premiação e ranking que ficam salvos.', marca: 'BÔNUS • AO VIVO' },
 ];
 
-export function Inicio({ onAbrirCampeonatos, onAbrirRanking }: Props) {
+export function Inicio({ onAbrirCampeonatos, onAbrirRanking, onAbrirGuilda }: Props) {
   return <div className="ff-home space-y-16 pb-8">
     <section className="ff-home-hero">
       <div className="ff-home-vignette" />
@@ -22,6 +23,7 @@ export function Inicio({ onAbrirCampeonatos, onAbrirRanking }: Props) {
         <div className="flex flex-wrap gap-3 pt-2">
           <button onClick={onAbrirCampeonatos} className="ff-home-cta cursor-pointer"><Play className="w-4 h-4 fill-current" /> Entrar na arena</button>
           <button onClick={onAbrirRanking} className="ff-home-ghost cursor-pointer"><Trophy className="w-4 h-4" /> Ver ranking</button>
+          <button onClick={onAbrirGuilda} className="ff-home-ghost cursor-pointer"><Crown className="w-4 h-4" /> Conhecer a Guilda</button>
         </div>
       </div>
       <div className="ff-home-hud"><span><i /> Arena online</span><b>SEASON<br />01</b></div>
