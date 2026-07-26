@@ -107,6 +107,7 @@ export interface LinhaMuralRanking {
   equipe?: string;
   criador?: string;
   nick?: string;
+  logo_url?: string | null;
 }
 
 export interface MuralRanking {
@@ -320,8 +321,9 @@ export interface PagamentoBonus {
 export interface BonusResultadoInput { jogador_id: number; colocacao: number; abates: number; }
 
 export interface MembroEquipe { id: number; nick: string; nome: string; }
-export interface EquipeCampeonato { id: number; nome: string; capitao_id: number; capitao_nick?: string; membros: MembroEquipe[]; salas?: BonusSala[]; }
-export interface PlacarEquipe { equipe_id: number; equipe: string; posicao: number; pontos: number; abates: number; partidas: number; melhor_colocacao: number | null; }
+export interface GuildaIdentidade { nome: string; logo_url?: string | null; }
+export interface EquipeCampeonato { id: number; nome: string; capitao_id: number; capitao_nick?: string; membros: MembroEquipe[]; salas?: BonusSala[]; guilda?: GuildaIdentidade | null; }
+export interface PlacarEquipe { equipe_id: number; equipe: string; posicao: number; pontos: number; abates: number; partidas: number; melhor_colocacao: number | null; guilda?: GuildaIdentidade | null; }
 export interface CampeonatoEquipe {
   id: number; nome: string; tipo: 'cs_4x4' | 'br'; modo: '4x4' | 'solo' | 'duo' | 'squad'; tamanho_equipe: number;
   status: 'inscricao' | 'em_andamento' | 'aguardando_revisao' | 'pago' | 'cancelado'; min_equipes: number; max_equipes: number;
@@ -337,14 +339,14 @@ export interface JogadorEquipeDisponivel {
 }
 export interface PagamentoEquipe { id: number; equipe: string; colocacao: number; valor: number; status: string; }
 
-export interface ResultadoCriador { jogador_id: number; nick: string; colocacao: number; abates: number; }
+export interface ResultadoCriador { jogador_id: number; nick: string; colocacao: number; abates: number; guilda?: GuildaIdentidade | null; }
 export interface CampeonatoCriador {
   id: number; nome: string; slug: string; formato: string; descricao?: string | null;
   status: 'rascunho' | 'inscricao' | 'em_andamento' | 'aguardando_revisao' | 'pagamentos_pendentes' | 'encerrado' | 'cancelado';
   max_jogadores: number; taxa_inscricao: number; data_hora?: string | null; premios_percentuais: number[]; percentual_criador: number;
   inscritos: number; arrecadado: number; taxa_flowfire: number; cofre_evento: number;
   criador: { slug: string; nick: string }; placar: ResultadoCriador[];
-  sala_id?: string | null; sala_senha?: string | null; inscritos_jogadores?: { id: number; nick: string }[];
+  sala_id?: string | null; sala_senha?: string | null; inscritos_jogadores?: { id: number; nick: string; guilda?: GuildaIdentidade | null }[];
 }
 export interface CriadorPerfil { id?: number; slug: string; bio?: string | null; status?: 'pendente' | 'aprovado' | 'suspenso'; nick?: string; }
 export interface CriadorRanking { posicao: number; slug: string; nick: string; bio?: string | null; eventos_concluidos: number; participantes: number; score: number; }
@@ -416,8 +418,8 @@ export const apiService = {
     const res = await api.get(`/equipes/${campeonatoId}/minha-equipe`);
     return (res.data?.equipe ?? null) as EquipeCampeonato | null;
   },
-  async inscreverEquipe(campeonatoId: number, nomeEquipe: string, membrosNicks: string[]): Promise<any> {
-    return (await api.post(`/equipes/${campeonatoId}/inscrever`, { nome_equipe: nomeEquipe, membros_nicks: membrosNicks })).data;
+  async inscreverEquipe(campeonatoId: number, nomeEquipe: string, membrosNicks: string[], nomeGuilda?: string, logoData?: string): Promise<any> {
+    return (await api.post(`/equipes/${campeonatoId}/inscrever`, { nome_equipe: nomeEquipe, membros_nicks: membrosNicks, nome_guilda: nomeGuilda, logo_data: logoData })).data;
   },
   async criarCampeonatoEquipe(payload: any): Promise<CampeonatoEquipe> {
     return (await api.post('/admin/equipes/criar', payload)).data as CampeonatoEquipe;

@@ -2,7 +2,7 @@
 from datetime import datetime, timezone, date
 from typing import Optional, List
 
-from sqlalchemy import String, Integer, Float, Boolean, ForeignKey, DateTime, Date
+from sqlalchemy import String, Integer, Float, Boolean, ForeignKey, DateTime, Date, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -354,6 +354,25 @@ class EquipeCampeonatoModel(Base):
     nome: Mapped[str] = mapped_column(String, nullable=False)
     capitao_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class GuildaPerfilModel(Base):
+    """Identidade visual de uma guilda, mantida pelo seu capitão."""
+    __tablename__ = 'guildas_perfis'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    capitao_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), unique=True, nullable=False, index=True)
+    nome: Mapped[str] = mapped_column(String, nullable=False)
+    logo_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    atualizado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class EquipeGuildaModel(Base):
+    """Vincula a equipe criada para um campeonato à identidade da sua guilda."""
+    __tablename__ = 'equipes_guildas'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonato.id'), unique=True, nullable=False, index=True)
+    guilda_id: Mapped[int] = mapped_column(ForeignKey('guildas_perfis.id'), nullable=False, index=True)
 
 
 class MembroEquipeCampeonatoModel(Base):
