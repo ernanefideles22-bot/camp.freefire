@@ -8,6 +8,7 @@ import { AdminAgentChat } from './AdminAgentChat';
 import { AdminBonus } from './AdminBonus';
 import { AdminPago } from './AdminPago';
 import { AdminEquipes } from './AdminEquipes';
+import { AdminEventos } from './AdminEventos';
 import { AdminApagarJogadores } from './AdminApagarJogadores';
 
 interface AdminPanelProps {
@@ -24,7 +25,7 @@ interface LinhaResultado {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser: _currentUser }) => {
-  const [activeTab, setActiveTab] = useState<'geral' | 'lancar' | 'depositos' | 'retidos' | 'bonus' | 'pago' | 'equipes'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'lancar' | 'depositos' | 'retidos' | 'bonus' | 'pago' | 'equipes' | 'eventos'>('geral');
   const [salaQueda, setSalaQueda] = useState<string>('1');
   const [salaId, setSalaId] = useState<string>('');
   const [salaSenha, setSalaSenha] = useState<string>('');
@@ -360,17 +361,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
           Prêmios Retidos
           {retidos.length > 0 && (<span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span></span>)}
         </button>
-        <button onClick={() => setActiveTab('bonus')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'bonus' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
+        <button onClick={() => setActiveTab('bonus')} className={`hidden px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'bonus' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
           <Gift className="w-4 h-4 text-primary" />
           Bônus
         </button>
-        <button onClick={() => setActiveTab('pago')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'pago' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
+        <button onClick={() => setActiveTab('pago')} className={`hidden px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'pago' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
           <Trophy className="w-4 h-4 text-amber-400" />
           Torneio Pago
         </button>
-        <button onClick={() => setActiveTab('equipes')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'equipes' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
+        <button onClick={() => setActiveTab('equipes')} className={`hidden px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'equipes' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
           <Users className="w-4 h-4 text-primary" />
           Equipes
+        </button>
+        <button onClick={() => setActiveTab('eventos')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'eventos' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
+          <Trophy className="w-4 h-4 text-primary" />
+          Eventos
         </button>
       </div>
       <div className="p-5">
@@ -658,6 +663,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
         )}
         {activeTab === 'equipes' && (
           <AdminEquipes onAddToast={onAddToast} />
+        )}
+        {activeTab === 'eventos' && (
+          <AdminEventos onAddToast={onAddToast} />
         )}
         {activeTab === 'bonus' && (
           <AdminBonus onAddToast={onAddToast} />
