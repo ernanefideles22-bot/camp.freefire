@@ -14,7 +14,14 @@ from sqlalchemy.orm import Session
 from database import engine, get_db, Base
 from models import (JogadorModel, QuedaModel, InscricaoModel,
                     ResultadoQuedaModel, DepositoRequisicaoModel, SaqueRequisicaoModel,
-                    registrar_transacao, TransacaoModel, CobrancaPixModel)
+                    registrar_transacao, TransacaoModel, CobrancaPixModel,
+                    EventoBonusModel, InscricaoBonusModel, ResultadoBonusModel,
+                    PagamentoBonusModel, EventoPagoModel, InscricaoPagaModel,
+                    ResultadoPagoModel, PagamentoPagoModel, PremioConfigPagoModel,
+                    CampeonatoEquipeModel, EquipeCampeonatoModel,
+                    MembroEquipeCampeonatoModel, ResultadoEquipeCampeonatoModel,
+                    PagamentoEquipeCampeonatoModel, ConfiguracaoEventoModel,
+                    SalaEventoModel, ResultadoEquipeRodadaModel)
 from auth import (hash_senha, verificar_senha, criar_access_token, criar_refresh_token,
                   decodificar_token, obter_usuario_atual, require_admin)
 from jose import jwt as jose_jwt
@@ -1650,7 +1657,7 @@ def saque_disponivel(jogador: JogadorModel = Depends(obter_usuario_atual),
 
 # ====================== QUEDA BONUS (evento promocional, melhor de 3) ======================
 from models import (EventoBonusModel, InscricaoBonusModel,
-                    ResultadoBonusModel, PagamentoBonusModel)
+                    ResultadoBonusModel, PagamentoBonusModel, ConfiguracaoEventoModel)
 from models import utcnow as _utcnow_bonus
 
 PREMIO_BONUS_TOP5 = {1: 50.0, 2: 20.0, 3: 15.0, 4: 10.0, 5: 5.0}
@@ -1665,6 +1672,9 @@ class CriarBonusBody(BaseModel):
     data_hora: Optional[str] = None
     min_jogadores: Optional[int] = None
     premios: Optional[List[float]] = None  # [1o, 2o, 3o, 4o, 5o]
+    total_rodadas: int = 3
+    inicio: Optional[str] = None
+    fim: Optional[str] = None
 
 
 class ConfigBonusBody(BaseModel):
@@ -1672,6 +1682,9 @@ class ConfigBonusBody(BaseModel):
     data_hora: Optional[str] = None
     min_jogadores: Optional[int] = None
     premios: Optional[List[float]] = None
+    total_rodadas: Optional[int] = None
+    inicio: Optional[str] = None
+    fim: Optional[str] = None
 
 
 class InscreverBonusBody(BaseModel):
@@ -1695,6 +1708,63 @@ class BonusResultadoBody(BaseModel):
     ordem: int
     resultados: List[BonusResultadoItem]
 
+
+def _config_evento(db: Session, categoria: str, evento_id: int, criar: bool = False):
+    cfg = db.scalar(select(ConfiguracaoEventoModel).where(ConfiguracaoEventoModel.categoria == categoria, ConfiguracaoEventoModel.evento_id == evento_id))
+    if not cfg and criar:
+        cfg = ConfiguracaoEventoModel(categoria=categoria, evento_id=evento_id)
+        db.add(cfg); db.flush()
+    return cfg
+
+def _rodadas_evento(db: Session, categoria: str, evento_id: int) -> int:
+    cfg = _config_evento(db, categoria, evento_id)
+    return max(1, min(100, cfg.total_rodadas if cfg else 3))
+
+def _aplicar_config_duracao(db: Session, categoria: str, evento_id: int, body):
+    cfg = _config_evento(db, categoria, evento_id, True)
+    if getattr(body, 'total_rodadas', None) is not None: cfg.total_rodadas = max(1, min(100, int(body.total_rodadas)))
+    if getattr(body, 'inicio', None) is not None: cfg.inicio = body.inicio.strip() or None
+    if getattr(body, 'fim', None) is not None: cfg.fim = body.fim.strip() or None
+    return cfg
+
+def _salas_evento(db: Session, categoria: str, evento_id: int, legado=None) -> list[dict]:
+    salas = db.scalars(select(SalaEventoModel)
+                       .where(SalaEventoModel.categoria == categoria,
+                              SalaEventoModel.evento_id == evento_id)
+                       .order_by(SalaEventoModel.ordem)).all()
+    if salas:
+        return [{'ordem': sala.ordem, 'sala_id': sala.sala_id, 'senha': sala.sala_senha,
+                 'horario': sala.horario} for sala in salas]
+    if not legado:
+        return []
+    return [{'ordem': ordem, 'sala_id': getattr(legado, f'sala{ordem}_id'),
+             'senha': getattr(legado, f'sala{ordem}_senha'),
+             'horario': getattr(legado, f'sala{ordem}_horario')}
+            for ordem in range(1, 4) if getattr(legado, f'sala{ordem}_id')]
+
+def _salvar_sala_evento(db: Session, categoria: str, evento_id: int, body: BonusSalaBody,
+                        legado=None):
+    total = _rodadas_evento(db, categoria, evento_id)
+    if not 1 <= body.ordem <= total:
+        raise HTTPException(400, f'Rodada invalida. Escolha de 1 a {total}.')
+    sala = db.scalar(select(SalaEventoModel).where(SalaEventoModel.categoria == categoria,
+                                                    SalaEventoModel.evento_id == evento_id,
+                                                    SalaEventoModel.ordem == body.ordem))
+    dados = {'sala_id': (body.sala_id or '').strip(),
+             'sala_senha': (body.sala_senha or '').strip(),
+             'horario': (body.horario or '').strip() or None}
+    if not dados['sala_id']:
+        raise HTTPException(400, 'Informe o ID da sala.')
+    if sala:
+        sala.sala_id, sala.sala_senha, sala.horario = dados.values()
+    else:
+        db.add(SalaEventoModel(categoria=categoria, evento_id=evento_id,
+                               ordem=body.ordem, **dados))
+    # Mantem as tres salas antigas acessiveis para eventos criados antes desta versao.
+    if legado is not None and body.ordem <= 3:
+        setattr(legado, f'sala{body.ordem}_id', dados['sala_id'])
+        setattr(legado, f'sala{body.ordem}_senha', dados['sala_senha'])
+        setattr(legado, f'sala{body.ordem}_horario', dados['horario'])
 
 def _evento_bonus_atual(db: Session):
     """Ultimo evento que ainda nao foi finalizado (pago/cancelado)."""
@@ -1725,7 +1795,7 @@ def _placar_bonus(db: Session, evento_id: int) -> list:
         pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in res)
         kills = sum(r.abates for r in res)
         melhor = min((r.colocacao for r in res), default=None)
-        elegivel = {1, 2, 3}.issubset(ordens)
+        elegivel = set(range(1, _rodadas_evento(db, 'bonus', evento_id) + 1)).issubset(ordens)
         linhas.append({'jogador_id': jog.id, 'nick': jog.nick, 'nome': jog.nome,
                        'pontos': pontos, 'kills': kills, 'quedas_jogadas': len(ordens),
                        'melhor_colocacao': melhor, 'elegivel': elegivel})
@@ -1777,11 +1847,13 @@ def _aplicar_config_bonus(ev: EventoBonusModel, body) -> None:
 
 
 def _serializar_evento_bonus(db: Session, ev: EventoBonusModel) -> dict:
+    cfg = _config_evento(db, 'bonus', ev.id)
     return {'id': ev.id, 'nome': ev.nome, 'status': ev.status,
             'min_jogadores': ev.min_jogadores, 'premio_total': ev.premio_total,
             'data_hora': ev.data_hora,
             'inscritos': _contar_inscritos_bonus(db, ev.id),
-            'premio_top5': _premios_evento(ev)}
+            'premio_top5': _premios_evento(ev), 'total_rodadas': _rodadas_evento(db, 'bonus', ev.id),
+            'inicio': cfg.inicio if cfg else None, 'fim': cfg.fim if cfg else None}
 
 
 # ---------- Publico / jogador ----------
@@ -1845,12 +1917,7 @@ def bonus_minha_inscricao(evento_id: int, jogador: JogadorModel = Depends(obter_
                                 InscricaoBonusModel.jogador_id == jogador.id)) is not None
     salas = []
     if inscrito:
-        for o in (1, 2, 3):
-            sid = getattr(ev, f'sala{o}_id')
-            if sid:
-                salas.append({'ordem': o, 'sala_id': sid,
-                              'senha': getattr(ev, f'sala{o}_senha'),
-                              'horario': getattr(ev, f'sala{o}_horario')})
+        salas = _salas_evento(db, 'bonus', evento_id, ev)
     return {'inscrito': inscrito, 'salas': salas}
 
 
@@ -1874,6 +1941,7 @@ def bonus_historico(db: Session = Depends(get_db)):
         out.append({'id': ev.id, 'nome': ev.nome, 'data_hora': ev.data_hora,
                     'status': ev.status, 'inscritos': _contar_inscritos_bonus(db, ev.id),
                     'premio_total': ev.premio_total, 'premio_top5': _premios_evento(ev),
+                    'total_rodadas': _rodadas_evento(db, 'bonus', ev.id),
                     'vencedores': vencedores})
     return {'eventos': out}
 
@@ -1890,6 +1958,8 @@ def bonus_criar(body: CriarBonusBody, _admin: JogadorModel = Depends(require_adm
                           min_jogadores=MIN_JOGADORES_BONUS, premio_total=PREMIO_TOTAL_BONUS)
     _aplicar_config_bonus(ev, body)
     db.add(ev)
+    db.flush()
+    _aplicar_config_duracao(db, 'bonus', ev.id, body)
     db.commit()
     db.refresh(ev)
     return _serializar_evento_bonus(db, ev)
@@ -1904,6 +1974,7 @@ def bonus_config(evento_id: int, body: ConfigBonusBody,
     if ev.status != 'inscricao':
         raise HTTPException(400, 'So da pra ajustar enquanto as inscricoes estao abertas.')
     _aplicar_config_bonus(ev, body)
+    _aplicar_config_duracao(db, 'bonus', ev.id, body)
     db.commit()
     db.refresh(ev)
     return _serializar_evento_bonus(db, ev)
@@ -1932,11 +2003,7 @@ def bonus_set_sala(evento_id: int, body: BonusSalaBody,
     ev = db.get(EventoBonusModel, evento_id)
     if not ev:
         raise HTTPException(404, 'Evento nao encontrado')
-    if body.ordem not in (1, 2, 3):
-        raise HTTPException(400, 'ordem deve ser 1, 2 ou 3.')
-    setattr(ev, f'sala{body.ordem}_id', (body.sala_id or '').strip())
-    setattr(ev, f'sala{body.ordem}_senha', (body.sala_senha or '').strip())
-    setattr(ev, f'sala{body.ordem}_horario', (body.horario or '').strip() or None)
+    _salvar_sala_evento(db, 'bonus', evento_id, body, ev)
     db.commit()
     return {'message': f'Sala da queda {body.ordem} salva.'}
 
@@ -1949,8 +2016,8 @@ def bonus_lancar_resultado(evento_id: int, body: BonusResultadoBody,
         raise HTTPException(404, 'Evento nao encontrado')
     if ev.status != 'em_andamento':
         raise HTTPException(400, 'Inicie o evento antes de lancar resultados.')
-    if body.ordem not in (1, 2, 3):
-        raise HTTPException(400, 'ordem deve ser 1, 2 ou 3.')
+    if not 1 <= body.ordem <= _rodadas_evento(db, 'bonus', evento_id):
+        raise HTTPException(400, f'Rodada invalida. Escolha de 1 a {_rodadas_evento(db, "bonus", evento_id)}.')
     existentes = db.scalars(select(ResultadoBonusModel)
                             .where(ResultadoBonusModel.evento_id == evento_id,
                                    ResultadoBonusModel.ordem == body.ordem)).all()
@@ -1989,9 +2056,10 @@ def bonus_apurar(evento_id: int, _admin: JogadorModel = Depends(require_admin),
         raise HTTPException(400, 'Evento nao esta em andamento.')
     ordens = set(db.scalars(select(ResultadoBonusModel.ordem)
                             .where(ResultadoBonusModel.evento_id == evento_id)).all())
-    if not {1, 2, 3}.issubset(ordens):
-        faltam = sorted({1, 2, 3} - ordens)
-        raise HTTPException(400, f'Faltam resultados das quedas {faltam}. Lance as 3 antes de apurar.')
+    esperadas = set(range(1, _rodadas_evento(db, 'bonus', evento_id) + 1))
+    if not esperadas.issubset(ordens):
+        faltam = sorted(esperadas - ordens)
+        raise HTTPException(400, f'Faltam resultados das rodadas {faltam}. Lance todas antes de apurar.')
     if db.scalar(select(PagamentoBonusModel).where(PagamentoBonusModel.evento_id == evento_id)):
         raise HTTPException(400, 'Evento ja apurado.')
     placar = _placar_bonus(db, evento_id)
@@ -2121,6 +2189,9 @@ class CriarPagoBody(BaseModel):
     min_jogadores: Optional[int] = None
     taxa_inscricao: Optional[float] = None
     premios: Optional[List[float]] = None
+    total_rodadas: int = 3
+    inicio: Optional[str] = None
+    fim: Optional[str] = None
 
 def _pago_atual(db):
     return db.scalar(select(EventoPagoModel).where(EventoPagoModel.status.notin_(['pago', 'cancelado'])).order_by(EventoPagoModel.id.desc()))
@@ -2149,17 +2220,19 @@ def _pago_placar(db, evento_id):
             'pontos': sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in rs),
             'kills': sum(r.abates for r in rs), 'quedas_jogadas': len(ordens),
             'melhor_colocacao': min((r.colocacao for r in rs), default=None),
-            'elegivel': {1, 2, 3}.issubset(ordens)})
+            'elegivel': set(range(1, _rodadas_evento(db, 'pago', evento_id) + 1)).issubset(ordens)})
     linhas.sort(key=lambda x: (not x['elegivel'], -x['pontos'], -x['kills'], x['melhor_colocacao'] or 999))
     for pos, linha in enumerate(linhas, 1): linha['posicao'] = pos
     return linhas
 
 def _pago_serializar(db, ev):
     premios = _pago_premios(db, ev)
+    cfg = _config_evento(db, 'pago', ev.id)
     return {'id': ev.id, 'nome': ev.nome, 'status': ev.status, 'min_jogadores': ev.min_jogadores,
             'taxa_inscricao': ev.taxa_inscricao, 'data_hora': ev.data_hora,
             'inscritos': _pago_inscritos(db, ev.id), 'premio_total': round(sum(premios), 2),
-            'premio_top5': premios}
+            'premio_top5': premios, 'total_rodadas': _rodadas_evento(db, 'pago', ev.id),
+            'inicio': cfg.inicio if cfg else None, 'fim': cfg.fim if cfg else None}
 
 @app.get('/pago/atual')
 def pago_atual(db: Session = Depends(get_db)):
@@ -2183,6 +2256,7 @@ def pago_historico(db: Session = Depends(get_db)):
             vencedores.append({'colocacao': p.colocacao_final, 'nick': j.nick if j else None, 'valor': p.valor, 'status': p.status})
         out.append({'id': ev.id, 'nome': ev.nome, 'data_hora': ev.data_hora, 'status': ev.status,
                     'inscritos': _pago_inscritos(db, ev.id), 'premio_total': round(sum(p.valor for p in pgs), 2),
+                    'total_rodadas': _rodadas_evento(db, 'pago', ev.id),
                     'vencedores': vencedores})
     return {'eventos': out}
 
@@ -2200,9 +2274,7 @@ def pago_minha_inscricao(evento_id: int, jogador: JogadorModel = Depends(obter_u
     inscrito = db.scalar(select(InscricaoPagaModel).where(InscricaoPagaModel.evento_id == evento_id, InscricaoPagaModel.jogador_id == jogador.id)) is not None
     salas = []
     if inscrito:
-        for ordem in (1, 2, 3):
-            sala_id = getattr(ev, f'sala{ordem}_id')
-            if sala_id: salas.append({'ordem': ordem, 'sala_id': sala_id, 'senha': getattr(ev, f'sala{ordem}_senha'), 'horario': getattr(ev, f'sala{ordem}_horario')})
+        salas = _salas_evento(db, 'pago', evento_id, ev)
     return {'inscrito': inscrito, 'salas': salas}
 
 @app.post('/pago/{evento_id}/inscrever')
@@ -2239,6 +2311,7 @@ def pago_criar(body: CriarPagoBody, _admin: JogadorModel = Depends(require_admin
     ev = EventoPagoModel(nome=body.nome.strip() or 'Torneio Pago', data_hora=(body.data_hora or '').strip() or None,
         min_jogadores=max(2, int(body.min_jogadores or 2)), taxa_inscricao=round(max(0.01, float(body.taxa_inscricao or TAXA_INSCRICAO)), 2))
     db.add(ev); db.flush()
+    _aplicar_config_duracao(db, 'pago', ev.id, body)
     pesos = [max(0.0, float(v)) for v in (body.premios or [50, 20, 15, 10, 5])][:20]
     db.add(PremioConfigPagoModel(evento_id=ev.id, pesos_json=json.dumps(pesos)))
     db.commit(); db.refresh(ev); return _pago_serializar(db, ev)
@@ -2254,14 +2327,14 @@ def pago_iniciar(evento_id: int, _admin: JogadorModel = Depends(require_admin), 
 @app.post('/admin/pago/{evento_id}/sala')
 def pago_sala(evento_id: int, body: BonusSalaBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     ev = db.get(EventoPagoModel, evento_id)
-    if not ev or body.ordem not in (1, 2, 3): raise HTTPException(400, 'Sala ou ordem invalida.')
-    setattr(ev, f'sala{body.ordem}_id', body.sala_id.strip()); setattr(ev, f'sala{body.ordem}_senha', body.sala_senha.strip()); setattr(ev, f'sala{body.ordem}_horario', (body.horario or '').strip() or None)
+    if not ev: raise HTTPException(400, 'Torneio nao encontrado.')
+    _salvar_sala_evento(db, 'pago', evento_id, body, ev)
     db.commit(); return {'message': f'Sala {body.ordem} salva.'}
 
 @app.post('/admin/pago/{evento_id}/resultado')
 def pago_resultado(evento_id: int, body: BonusResultadoBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     ev = db.get(EventoPagoModel, evento_id)
-    if not ev or ev.status != 'em_andamento' or body.ordem not in (1, 2, 3): raise HTTPException(400, 'Torneio ou ordem invalida.')
+    if not ev or ev.status != 'em_andamento' or not 1 <= body.ordem <= _rodadas_evento(db, 'pago', evento_id): raise HTTPException(400, 'Torneio ou rodada invalida.')
     existentes = db.scalars(select(ResultadoPagoModel).where(ResultadoPagoModel.evento_id == evento_id, ResultadoPagoModel.ordem == body.ordem)).all()
     usados, colocacoes = {r.jogador_id for r in existentes}, {r.colocacao for r in existentes}
     for r in body.resultados:
@@ -2275,7 +2348,8 @@ def pago_apurar(evento_id: int, _admin: JogadorModel = Depends(require_admin), d
     ev = db.get(EventoPagoModel, evento_id)
     if not ev or ev.status != 'em_andamento': raise HTTPException(400, 'Torneio nao esta em andamento.')
     ordens = set(db.scalars(select(ResultadoPagoModel.ordem).where(ResultadoPagoModel.evento_id == evento_id)).all())
-    if not {1, 2, 3}.issubset(ordens): raise HTTPException(400, 'Lance resultados das tres quedas antes de apurar.')
+    esperadas = set(range(1, _rodadas_evento(db, 'pago', evento_id) + 1))
+    if not esperadas.issubset(ordens): raise HTTPException(400, f'Lance resultados das rodadas {sorted(esperadas - ordens)} antes de apurar.')
     placar, premios = [x for x in _pago_placar(db, evento_id) if x['elegivel']], _pago_premios(db, ev)
     premiados = min(len(placar), len(premios))
     for pos in range(1, premiados + 1):
@@ -2324,6 +2398,9 @@ class ConfigPagoBody(BaseModel):
     min_jogadores: Optional[int] = None
     taxa_inscricao: Optional[float] = None
     premios: Optional[List[float]] = None
+    total_rodadas: Optional[int] = None
+    inicio: Optional[str] = None
+    fim: Optional[str] = None
 
 @app.post('/admin/pago/{evento_id}/config')
 def pago_config(evento_id: int, body: ConfigPagoBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
@@ -2339,6 +2416,7 @@ def pago_config(evento_id: int, body: ConfigPagoBody, _admin: JogadorModel = Dep
         cfg = db.scalar(select(PremioConfigPagoModel).where(PremioConfigPagoModel.evento_id == ev.id))
         if cfg: cfg.pesos_json = json.dumps(pesos)
         else: db.add(PremioConfigPagoModel(evento_id=ev.id, pesos_json=json.dumps(pesos)))
+    _aplicar_config_duracao(db, 'pago', ev.id, body)
     db.commit(); db.refresh(ev)
     return _pago_serializar(db, ev)
 
@@ -2346,7 +2424,7 @@ def pago_config(evento_id: int, body: ConfigPagoBody, _admin: JogadorModel = Dep
 # ====================== CAMPEONATOS POR EQUIPE ======================
 from models import (CampeonatoEquipeModel, EquipeCampeonatoModel,
                     MembroEquipeCampeonatoModel, ResultadoEquipeCampeonatoModel,
-                    PagamentoEquipeCampeonatoModel)
+                    PagamentoEquipeCampeonatoModel, ResultadoEquipeRodadaModel)
 
 
 def _tamanho_equipe(tipo: str, modo: str, tamanho_configurado: Optional[int] = None) -> int:
@@ -2382,16 +2460,31 @@ def _serializar_equipe(db: Session, equipe: EquipeCampeonatoModel) -> dict:
 
 
 def _placar_equipes(db: Session, campeonato_id: int) -> list[dict]:
+    cfg = _config_evento(db, 'equipe', campeonato_id)
+    regra = cfg.regra_pontos if cfg else 'lbff'
+    try:
+        pesos = json.loads(cfg.pesos_json) if cfg and cfg.pesos_json else {}
+    except Exception:
+        pesos = {}
+    pontos_vitoria = max(0, float(pesos.get('pontos_vitoria', 1)))
+    pontos_abate = max(0, float(pesos.get('pontos_abate', 1)))
     equipes = db.scalars(select(EquipeCampeonatoModel)
                          .where(EquipeCampeonatoModel.campeonato_id == campeonato_id)).all()
     linhas = []
     for equipe in equipes:
-        resultados = db.scalars(select(ResultadoEquipeCampeonatoModel)
-                                .where(ResultadoEquipeCampeonatoModel.equipe_id == equipe.id)).all()
+        resultados = db.scalars(select(ResultadoEquipeRodadaModel)
+                                .where(ResultadoEquipeRodadaModel.equipe_id == equipe.id)).all()
+        # Resultado legado continua aparecendo nos campeonatos finalizados antigos.
+        if not resultados:
+            resultados = db.scalars(select(ResultadoEquipeCampeonatoModel)
+                                    .where(ResultadoEquipeCampeonatoModel.equipe_id == equipe.id)).all()
+        pontos = sum((pontos_vitoria if r.colocacao == 1 else 0) + r.abates * pontos_abate
+                     for r in resultados) if regra == 'cs' else sum(
+                     calcular_pontos_lbff(r.colocacao, r.abates) for r in resultados)
         linhas.append({'equipe_id': equipe.id, 'equipe': equipe.nome,
-                       'pontos': sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in resultados),
+                       'pontos': round(pontos, 2),
                        'abates': sum(r.abates for r in resultados),
-                       'partidas': len(resultados),
+                       'partidas': len({getattr(r, 'ordem', 1) for r in resultados}),
                        'melhor_colocacao': min((r.colocacao for r in resultados), default=None)})
     linhas.sort(key=lambda x: (-x['pontos'], -x['abates'], x['melhor_colocacao'] or 999, x['equipe'].lower()))
     for pos, linha in enumerate(linhas, 1):
@@ -2402,12 +2495,22 @@ def _placar_equipes(db: Session, campeonato_id: int) -> list[dict]:
 def _serializar_campeonato_equipe(db: Session, ev: CampeonatoEquipeModel) -> dict:
     equipes = db.scalars(select(EquipeCampeonatoModel)
                          .where(EquipeCampeonatoModel.campeonato_id == ev.id)).all()
+    cfg = _config_evento(db, 'equipe', ev.id)
+    try:
+        pesos = json.loads(cfg.pesos_json) if cfg and cfg.pesos_json else {}
+    except Exception:
+        pesos = {}
     return {'id': ev.id, 'nome': ev.nome, 'tipo': ev.tipo, 'modo': ev.modo,
             'tamanho_equipe': ev.tamanho_equipe, 'status': ev.status,
             'min_equipes': ev.min_equipes, 'max_equipes': ev.max_equipes,
             'taxa_inscricao': ev.taxa_inscricao, 'data_hora': ev.data_hora,
             'premios': _premios_equipe(ev), 'equipes': len(equipes),
-            'placar': _placar_equipes(db, ev.id)}
+            'placar': _placar_equipes(db, ev.id),
+            'total_rodadas': _rodadas_evento(db, 'equipe', ev.id),
+            'inicio': cfg.inicio if cfg else None, 'fim': cfg.fim if cfg else None,
+            'regra_pontos': cfg.regra_pontos if cfg else 'lbff',
+            'pontos_vitoria': pesos.get('pontos_vitoria', 1),
+            'pontos_abate': pesos.get('pontos_abate', 1)}
 
 
 class CriarCampeonatoEquipeBody(BaseModel):
@@ -2420,6 +2523,12 @@ class CriarCampeonatoEquipeBody(BaseModel):
     max_equipes: int = 12
     taxa_inscricao: float = 3.0
     premios: Optional[List[float]] = None
+    total_rodadas: Optional[int] = None
+    inicio: Optional[str] = None
+    fim: Optional[str] = None
+    regra_pontos: Optional[str] = None
+    pontos_vitoria: Optional[float] = None
+    pontos_abate: Optional[float] = None
 
 
 class InscreverEquipeBody(BaseModel):
@@ -2434,6 +2543,7 @@ class ResultadoEquipeItem(BaseModel):
 
 
 class ResultadoEquipesBody(BaseModel):
+    ordem: int = 1
     resultados: List[ResultadoEquipeItem]
 
 
@@ -2445,13 +2555,24 @@ def equipes_ativos(db: Session = Depends(get_db)):
     return {'campeonatos': [_serializar_campeonato_equipe(db, ev) for ev in eventos]}
 
 
+@app.get('/equipes/historico')
+def equipes_historico(db: Session = Depends(get_db)):
+    eventos = db.scalars(select(CampeonatoEquipeModel)
+                         .where(CampeonatoEquipeModel.status.in_(['pago', 'aguardando_revisao', 'cancelado']))
+                         .order_by(CampeonatoEquipeModel.id.desc()).limit(30)).all()
+    return {'campeonatos': [_serializar_campeonato_equipe(db, ev) for ev in eventos]}
+
+
 @app.get('/equipes/{campeonato_id}/minha-equipe')
 def minha_equipe(campeonato_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
     membro = db.scalar(select(MembroEquipeCampeonatoModel)
                        .join(EquipeCampeonatoModel, MembroEquipeCampeonatoModel.equipe_id == EquipeCampeonatoModel.id)
                        .where(EquipeCampeonatoModel.campeonato_id == campeonato_id,
                               MembroEquipeCampeonatoModel.jogador_id == jogador.id))
-    return {'equipe': _serializar_equipe(db, db.get(EquipeCampeonatoModel, membro.equipe_id)) if membro else None}
+    equipe = _serializar_equipe(db, db.get(EquipeCampeonatoModel, membro.equipe_id)) if membro else None
+    if equipe:
+        equipe['salas'] = _salas_evento(db, 'equipe', campeonato_id)
+    return {'equipe': equipe}
 
 
 @app.post('/equipes/{campeonato_id}/inscrever')
@@ -2508,6 +2629,37 @@ def criar_campeonato_equipe(body: CriarCampeonatoEquipeBody, _admin: JogadorMode
         max_equipes=max(2, body.max_equipes), taxa_inscricao=round(max(0.01, body.taxa_inscricao), 2),
         premios_json=json.dumps(premios))
     db.add(ev); db.commit(); db.refresh(ev)
+    _aplicar_config_duracao(db, 'equipe', ev.id, body)
+    cfg = _config_evento(db, 'equipe', ev.id, True)
+    cfg.regra_pontos = body.regra_pontos if body.regra_pontos in ('lbff', 'cs') else ('cs' if body.tipo == 'cs_4x4' else 'lbff')
+    cfg.pesos_json = json.dumps({'pontos_vitoria': max(0, float(body.pontos_vitoria if body.pontos_vitoria is not None else 1)),
+                                 'pontos_abate': max(0, float(body.pontos_abate if body.pontos_abate is not None else 1))})
+    db.commit(); db.refresh(ev)
+    return _serializar_campeonato_equipe(db, ev)
+
+
+@app.post('/admin/equipes/{campeonato_id}/config')
+def configurar_campeonato_equipe(campeonato_id: int, body: CriarCampeonatoEquipeBody,
+                                 _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    if not ev or ev.status != 'inscricao':
+        raise HTTPException(400, 'So e possivel ajustar campeonatos com inscricoes abertas.')
+    tamanho = _tamanho_equipe(body.tipo, body.modo, body.tamanho_equipe)
+    if body.max_equipes < 2 or body.min_equipes < 2 or body.min_equipes > body.max_equipes:
+        raise HTTPException(400, 'Configure minimo e maximo de equipes validos.')
+    ev.nome, ev.tipo = body.nome.strip() or ev.nome, body.tipo
+    ev.modo, ev.tamanho_equipe = ('4x4' if body.tipo == 'cs_4x4' else body.modo), tamanho
+    ev.data_hora = (body.data_hora or '').strip() or None
+    ev.min_equipes, ev.max_equipes = int(body.min_equipes), int(body.max_equipes)
+    ev.taxa_inscricao = round(max(0.01, float(body.taxa_inscricao)), 2)
+    if body.premios is not None:
+        ev.premios_json = json.dumps([max(0.0, float(v)) for v in body.premios][:20])
+    _aplicar_config_duracao(db, 'equipe', ev.id, body)
+    cfg = _config_evento(db, 'equipe', ev.id, True)
+    cfg.regra_pontos = body.regra_pontos if body.regra_pontos in ('lbff', 'cs') else ('cs' if ev.tipo == 'cs_4x4' else 'lbff')
+    cfg.pesos_json = json.dumps({'pontos_vitoria': max(0, float(body.pontos_vitoria if body.pontos_vitoria is not None else 1)),
+                                 'pontos_abate': max(0, float(body.pontos_abate if body.pontos_abate is not None else 1))})
+    db.commit(); db.refresh(ev)
     return _serializar_campeonato_equipe(db, ev)
 
 
@@ -2543,12 +2695,27 @@ def equipes_inscritas(campeonato_id: int, _admin: JogadorModel = Depends(require
     return {'equipes': [_serializar_equipe(db, equipe) for equipe in equipes]}
 
 
+@app.post('/admin/equipes/{campeonato_id}/sala')
+def sala_campeonato_equipe(campeonato_id: int, body: BonusSalaBody,
+                           _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    if not ev:
+        raise HTTPException(404, 'Campeonato nao encontrado.')
+    _salvar_sala_evento(db, 'equipe', campeonato_id, body)
+    db.commit()
+    return {'message': f'Sala da rodada {body.ordem} salva.'}
+
+
 @app.post('/admin/equipes/{campeonato_id}/resultado')
 def resultado_equipes(campeonato_id: int, body: ResultadoEquipesBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     ev = db.get(CampeonatoEquipeModel, campeonato_id)
     if not ev or ev.status != 'em_andamento': raise HTTPException(400, 'Campeonato nao esta em andamento.')
-    if db.scalar(select(ResultadoEquipeCampeonatoModel).where(ResultadoEquipeCampeonatoModel.campeonato_id == ev.id)):
-        raise HTTPException(400, 'O resultado ja foi lancado para este campeonato.')
+    total_rodadas = _rodadas_evento(db, 'equipe', ev.id)
+    if not 1 <= body.ordem <= total_rodadas:
+        raise HTTPException(400, f'Rodada invalida. Escolha de 1 a {total_rodadas}.')
+    if db.scalar(select(ResultadoEquipeRodadaModel).where(ResultadoEquipeRodadaModel.campeonato_id == ev.id,
+                                                           ResultadoEquipeRodadaModel.ordem == body.ordem)):
+        raise HTTPException(400, f'O resultado da rodada {body.ordem} ja foi lancado.')
     usadas, posicoes = set(), set()
     for item in body.resultados:
         equipe = db.get(EquipeCampeonatoModel, item.equipe_id)
@@ -2556,15 +2723,20 @@ def resultado_equipes(campeonato_id: int, body: ResultadoEquipesBody, _admin: Jo
                 or item.colocacao < 1 or item.colocacao > ev.max_equipes or item.abates < 0 or item.abates > MAX_ABATES):
             raise HTTPException(400, 'Resultado invalido ou duplicado.')
         usadas.add(item.equipe_id); posicoes.add(item.colocacao)
-        db.add(ResultadoEquipeCampeonatoModel(campeonato_id=ev.id, equipe_id=item.equipe_id,
-                                               colocacao=item.colocacao, abates=item.abates))
-    db.commit(); return {'message': 'Resultados salvos.'}
+        db.add(ResultadoEquipeRodadaModel(campeonato_id=ev.id, equipe_id=item.equipe_id, ordem=body.ordem,
+                                          colocacao=item.colocacao, abates=item.abates))
+    db.commit(); return {'message': f'Resultados da rodada {body.ordem} salvos.'}
 
 
 @app.post('/admin/equipes/{campeonato_id}/apurar')
 def apurar_equipes(campeonato_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     ev = db.get(CampeonatoEquipeModel, campeonato_id)
     if not ev or ev.status != 'em_andamento': raise HTTPException(400, 'Campeonato nao esta em andamento.')
+    ordens = set(db.scalars(select(ResultadoEquipeRodadaModel.ordem)
+                            .where(ResultadoEquipeRodadaModel.campeonato_id == ev.id)).all())
+    esperadas = set(range(1, _rodadas_evento(db, 'equipe', ev.id) + 1))
+    if not esperadas.issubset(ordens):
+        raise HTTPException(400, f'Faltam resultados das rodadas {sorted(esperadas - ordens)}.')
     placar = _placar_equipes(db, ev.id)
     if not placar: raise HTTPException(400, 'Lance os resultados antes de apurar.')
     for pos, premio in enumerate(_premios_equipe(ev), 1):

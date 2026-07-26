@@ -64,8 +64,8 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast,
   }, [fetchAll]);
 
   useEffect(() => {
-    if (pago) setHistorico([]); else apiService.obterHistoricoBonus().then(setHistorico).catch(() => {});
-  }, []);
+    (pago ? apiService.obterHistoricoPago() : apiService.obterHistoricoBonus()).then(itens => setHistorico(itens as HistoricoBonusItem[])).catch(() => {});
+  }, [pago]);
 
   const handleParticipar = async () => {
     if (!currentUser) { onAddToast('warning', 'Faça login', 'Entre na sua conta para participar do evento bônus.'); return; }
@@ -136,7 +136,7 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast,
                     <span className="flex-1 min-w-0 truncate text-zinc-200">{l.nick}</span>
                     <span className="text-zinc-400">{l.pontos} pts</span>
                     <span className="text-zinc-600 w-10 text-right">{l.kills}k</span>
-                    {l.elegivel ? <span className="text-[8px] font-bold text-emerald-400">3/3</span> : <span className="text-[8px] font-bold text-amber-400">{l.quedas_jogadas}/3</span>}
+                    {l.elegivel ? <span className="text-[8px] font-bold text-emerald-400">{ev.total_rodadas ?? 3}/{ev.total_rodadas ?? 3}</span> : <span className="text-[8px] font-bold text-amber-400">{l.quedas_jogadas}/{ev.total_rodadas ?? 3}</span>}
                   </div>
                 ))}
               </div>
@@ -180,7 +180,7 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast,
         </div>
         <div className="flex items-center gap-3 text-xs text-zinc-300">
           <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold">Entrada grátis</span>
-          <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 font-bold">{brl(evento.premio_total)} garantidos • melhor de 3</span>
+          <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 font-bold">{brl(evento.premio_total)} garantidos • {evento.total_rodadas ?? 3} rodada(s)</span>
         </div>
         <div className="flex flex-wrap gap-2">
           {premio.map((v, i) => (
@@ -194,7 +194,7 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast,
           <b className="text-white">{evento.inscritos}</b> inscritos
           {evento.status === 'inscricao' && <span className="text-zinc-500">• precisa de {evento.min_jogadores} para começar</span>}
         </div>
-        <p className="text-[11px] text-zinc-500">Elegível ao prêmio quem jogar as <b className="text-zinc-300">3 quedas</b>. Prêmios passam por revisão antes de virar sacável.</p>
+        <p className="text-[11px] text-zinc-500">Elegível ao prêmio quem jogar as <b className="text-zinc-300">{evento.total_rodadas ?? 3} rodadas</b>. Prêmios passam por revisão antes de virar sacável.</p>
 
         {/* Ação de participar */}
         {podeParticipar && (
@@ -234,7 +234,7 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast,
 
       {/* Placar ao vivo */}
       <div className="p-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 space-y-2">
-        <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5"><Trophy className="w-4 h-4 text-amber-400" />Placar ao vivo (soma das 3 quedas)</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5"><Trophy className="w-4 h-4 text-amber-400" />Placar ao vivo (soma das {evento.total_rodadas ?? 3} rodadas)</span>
         {placar.length === 0 ? (
           <div className="text-xs text-zinc-500 py-6 text-center">O placar aparece quando as quedas começarem.</div>
         ) : (
@@ -251,8 +251,8 @@ export const QuedaBonus: React.FC<QuedaBonusProps> = ({ currentUser, onAddToast,
                   <span className="text-xs text-zinc-300"><b className="text-white">{l.pontos}</b> pts</span>
                   <span className="text-[11px] text-zinc-500 w-12 text-right">{l.kills}k</span>
                   {l.elegivel
-                    ? <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded flex items-center gap-0.5"><Check className="w-2.5 h-2.5" />3/3</span>
-                    : <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">{l.quedas_jogadas}/3</span>}
+                    ? <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded flex items-center gap-0.5"><Check className="w-2.5 h-2.5" />{evento.total_rodadas ?? 3}/{evento.total_rodadas ?? 3}</span>
+                    : <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">{l.quedas_jogadas}/{evento.total_rodadas ?? 3}</span>}
                 </div>
               );
             })}

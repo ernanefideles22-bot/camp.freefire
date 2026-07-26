@@ -22,6 +22,9 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
   const [nome, setNome] = useState<string>('Queda Bônus');
   const [dataHora, setDataHora] = useState<string>('');
   const [minimo, setMinimo] = useState<string>('20');
+  const [rodadas, setRodadas] = useState<string>('3');
+  const [inicio, setInicio] = useState<string>('');
+  const [fim, setFim] = useState<string>('');
   const [numPos, setNumPos] = useState<string>('5');
   const [modo, setModo] = useState<'valor' | 'pct'>('valor');
   const [totalPool, setTotalPool] = useState<string>('100');
@@ -68,6 +71,9 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
       setNome(evento.nome);
       setDataHora(evento.data_hora ?? '');
       setMinimo(String(evento.min_jogadores));
+      setRodadas(String(evento.total_rodadas ?? 3));
+      setInicio(evento.inicio ?? '');
+      setFim(evento.fim ?? '');
       const lst = evento.premio_top5 ?? [50, 20, 15, 10, 5];
       setNumPos(String(lst.length));
       setModo('valor');
@@ -85,7 +91,7 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
   };
 
   const setSala = (ordem: number, field: keyof SalaForm, value: string) =>
-    setSalaForms(prev => ({ ...prev, [ordem]: { ...prev[ordem], [field]: value } }));
+    setSalaForms(prev => ({ ...prev, [ordem]: { ...(prev[ordem] ?? { sala_id: '', senha: '', horario: '' }), [field]: value } }));
   const addLinha = () => setLinhas([...linhas, { tempId: String(Date.now()), jogadorId: '', colocacao: '', abates: '0' }]);
   const rmLinha = (id: string) => setLinhas(linhas.length > 1 ? linhas.filter(l => l.tempId !== id) : linhas);
   const updLinha = (id: string, f: keyof LinhaBonus, v: string) => setLinhas(linhas.map(l => l.tempId === id ? { ...l, [f]: v } : l));
@@ -182,6 +188,9 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
     data_hora: dataHora.trim() || undefined,
     min_jogadores: parseInt(minimo) || undefined,
     premios: premiosAbs,
+    total_rodadas: Math.max(1, Math.min(100, parseInt(rodadas) || 1)),
+    inicio: inicio.trim() || undefined,
+    fim: fim.trim() || undefined,
   });
   const configCampos = (
     <div className="space-y-3">
@@ -189,6 +198,9 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
         <div><label className={lbl}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} className={inp} /></div>
         <div><label className={lbl}>Data e hora</label><input value={dataHora} onChange={e => setDataHora(e.target.value)} placeholder="ex: 15/07 20:00" className={inp} /></div>
         <div><label className={lbl}>Mínimo de jogadores</label><input type="number" min="2" value={minimo} onChange={e => setMinimo(e.target.value)} className={inp} /></div>
+        <div><label className={lbl}>Número de rodadas</label><input type="number" min="1" max="100" value={rodadas} onChange={e => setRodadas(e.target.value)} className={inp} /></div>
+        <div><label className={lbl}>Início do evento</label><input value={inicio} onChange={e => setInicio(e.target.value)} placeholder="ex: 15/07 20:00" className={inp} /></div>
+        <div><label className={lbl}>Fim / prazo final</label><input value={fim} onChange={e => setFim(e.target.value)} placeholder="ex: 20/07 23:59" className={inp} /></div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div><label className={lbl}>Posições premiadas (top N)</label><input type="number" min="1" max="20" value={numPos} onChange={e => setNumPos(e.target.value)} className={inp} /></div>
@@ -238,7 +250,7 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
       {/* Cabeçalho */}
       <div className="ff-card p-5 space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-bold text-white flex items-center gap-2"><Gift className="w-4 h-4 text-primary" />Queda Bônus — melhor de 3 (entrada grátis)</h2>
+          <h2 className="text-sm font-bold text-white flex items-center gap-2"><Gift className="w-4 h-4 text-primary" />Queda Bônus — {evento?.total_rodadas ?? 3} rodada(s) (entrada grátis)</h2>
           <button onClick={fetchAll} className="p-1.5 text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer" title="Atualizar"><RefreshCw className="w-3.5 h-3.5" /></button>
         </div>
         <p className="text-xs text-zinc-400">Prêmio fixo da casa ao top 5 (elegível quem joga as 3 quedas). Prêmio fica retido até você liberar.</p>
@@ -293,13 +305,13 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
             <div className="space-y-6">
               {/* Salas das 3 quedas */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {[1, 2, 3].map(o => (
+                {Array.from({ length: evento.total_rodadas ?? 3 }, (_, i) => i + 1).map(o => (
                   <div key={o} className="p-3 rounded-xl border border-zinc-800 bg-zinc-950/40 space-y-2">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Sala da queda {o}</span>
-                    <input value={salaForms[o].sala_id} onChange={e => setSala(o, 'sala_id', e.target.value)} placeholder="ID da sala" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none" />
-                    <input value={salaForms[o].senha} onChange={e => setSala(o, 'senha', e.target.value)} placeholder="Senha" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none" />
-                    <input value={salaForms[o].horario} onChange={e => setSala(o, 'horario', e.target.value)} placeholder="Horário (opcional)" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none" />
-                    <button disabled={busy} onClick={() => guard(() => apiService.definirSalaBonus(evento.id, o, salaForms[o].sala_id.trim(), salaForms[o].senha.trim(), salaForms[o].horario.trim() || undefined), `Sala da queda ${o} salva`)} className="w-full py-2 rounded-lg bg-zinc-800 text-white text-xs font-bold hover:bg-zinc-700 transition-all cursor-pointer disabled:opacity-50">Salvar sala {o}</button>
+                    <input value={salaForms[o]?.sala_id ?? ''} onChange={e => setSala(o, 'sala_id', e.target.value)} placeholder="ID da sala" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none" />
+                    <input value={salaForms[o]?.senha ?? ''} onChange={e => setSala(o, 'senha', e.target.value)} placeholder="Senha" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none" />
+                    <input value={salaForms[o]?.horario ?? ''} onChange={e => setSala(o, 'horario', e.target.value)} placeholder="Horário (opcional)" className="w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none" />
+                    <button disabled={busy} onClick={() => guard(() => apiService.definirSalaBonus(evento.id, o, salaForms[o]?.sala_id?.trim() ?? '', salaForms[o]?.senha?.trim() ?? '', salaForms[o]?.horario?.trim() || undefined), `Sala da queda ${o} salva`)} className="w-full py-2 rounded-lg bg-zinc-800 text-white text-xs font-bold hover:bg-zinc-700 transition-all cursor-pointer disabled:opacity-50">Salvar sala {o}</button>
                   </div>
                 ))}
               </div>
@@ -309,7 +321,7 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-zinc-400">Lançar resultado da queda</span>
                   <div className="flex gap-1">
-                    {[1, 2, 3].map(o => (
+                    {Array.from({ length: evento.total_rodadas ?? 3 }, (_, i) => i + 1).map(o => (
                       <button key={o} onClick={() => setOrdemSel(o)} className={`w-8 h-8 rounded-lg text-xs font-black transition-all cursor-pointer ${ordemSel === o ? 'bg-primary text-white' : 'bg-zinc-950 border border-zinc-800 text-zinc-400'}`}>{o}</button>
                     ))}
                   </div>
@@ -354,7 +366,7 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
                 </div>
               </div>
 
-              <PlacarTabela placar={placar} />
+              <PlacarTabela placar={placar} rodadas={evento.total_rodadas ?? 3} />
 
               <div className="flex gap-2">
                 <button disabled={busy} onClick={() => window.confirm('Apurar o top 5 agora? Encerra o lançamento.') && guard(() => apiService.apurarBonus(evento.id), 'Apuração concluída')} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 text-zinc-950 font-bold text-sm hover:opacity-90 transition-all cursor-pointer disabled:opacity-50"><Trophy className="w-4 h-4" />Apurar top 5</button>
@@ -411,9 +423,9 @@ const InscritosLista: React.FC<{ inscritos: BonusInscrito[] }> = ({ inscritos })
   </div>
 );
 
-const PlacarTabela: React.FC<{ placar: PlacarBonusItem[] }> = ({ placar }) => (
+const PlacarTabela: React.FC<{ placar: PlacarBonusItem[]; rodadas: number }> = ({ placar, rodadas }) => (
   <div className="space-y-1.5">
-    <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Placar ao vivo (soma das 3)</span>
+    <span className="text-xs font-bold uppercase tracking-wider text-zinc-500">Placar ao vivo (soma das {rodadas})</span>
     <div className="max-h-72 overflow-y-auto pr-1 space-y-1">
       {placar.length === 0 ? (<div className="text-xs text-zinc-500 py-3 text-center">Sem resultados ainda.</div>) :
         placar.map(l => (
@@ -423,8 +435,8 @@ const PlacarTabela: React.FC<{ placar: PlacarBonusItem[] }> = ({ placar }) => (
             <span className="text-xs text-zinc-300"><b className="text-white">{l.pontos}</b> pts</span>
             <span className="text-[11px] text-zinc-500 w-14 text-right">{l.kills} kills</span>
             {l.elegivel
-              ? <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">3/3</span>
-              : <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">{l.quedas_jogadas}/3</span>}
+              ? <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">{rodadas}/{rodadas}</span>
+              : <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">{l.quedas_jogadas}/{rodadas}</span>}
           </div>
         ))}
     </div>

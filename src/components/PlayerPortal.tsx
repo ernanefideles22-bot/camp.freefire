@@ -187,7 +187,7 @@ export const PlayerPortal = ({ currentUser, onUpdateUser, onAddToast }: PlayerPo
           <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-300">
             <span className="px-2.5 py-1 rounded-lg bg-accent-orange/10 border border-accent-orange/30 text-accent-orange font-bold flex items-center gap-1"><DollarSign className="w-3.5 h-3.5" />Entrada {brl(pagoTaxa)}</span>
             <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 font-bold">Premiação {brl(pagoEvento.premio_total)}</span>
-            <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 font-bold text-zinc-400">Melhor de 3</span>
+            <span className="px-2.5 py-1 rounded-lg bg-zinc-950 border border-zinc-800 font-bold text-zinc-400">{pagoEvento.total_rodadas ?? 3} rodada(s)</span>
           </div>
           {pagoEvento.premio_top5 && pagoEvento.premio_top5.length > 0 && (
             <div className="flex flex-wrap gap-2">

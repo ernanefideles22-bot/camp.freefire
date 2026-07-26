@@ -372,3 +372,44 @@ class PagamentoEquipeCampeonatoModel(Base):
     status: Mapped[str] = mapped_column(String, nullable=False, default='pendente', index=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     liberado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ConfiguracaoEventoModel(Base):
+    """Configuracoes extras sem migrar as tabelas legadas de cada modalidade."""
+    __tablename__ = 'configuracoes_eventos'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    categoria: Mapped[str] = mapped_column(String, nullable=False, index=True)  # bonus|pago|equipe
+    evento_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    total_rodadas: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    inicio: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    fim: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    regra_pontos: Mapped[str] = mapped_column(String, nullable=False, default='lbff')
+    pesos_json: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class SalaEventoModel(Base):
+    """Salas por rodada para eventos configuraveis.
+
+    As salas antigas continuam preservadas nas tabelas originais; esta tabela
+    permite qualquer quantidade de rodadas sem alterar aquele schema.
+    """
+    __tablename__ = 'salas_eventos'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    categoria: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    evento_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    ordem: Mapped[int] = mapped_column(Integer, nullable=False)
+    sala_id: Mapped[str] = mapped_column(String, nullable=False)
+    sala_senha: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    horario: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class ResultadoEquipeRodadaModel(Base):
+    """Resultado de cada rodada de um campeonato por equipes."""
+    __tablename__ = 'resultados_equipes_rodadas'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_equipe.id'), nullable=False, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonato.id'), nullable=False, index=True)
+    ordem: Mapped[int] = mapped_column(Integer, nullable=False)
+    colocacao: Mapped[int] = mapped_column(Integer, nullable=False)
+    abates: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -244,6 +244,9 @@ export interface EventoBonus {
   data_hora: string | null;
   inscritos: number;
   premio_top5: number[];
+  total_rodadas?: number;
+  inicio?: string | null;
+  fim?: string | null;
 }
 
 export interface PlacarBonusItem {
@@ -276,6 +279,7 @@ export interface HistoricoBonusItem {
   inscritos: number;
   premio_total: number;
   premio_top5: number[];
+  total_rodadas?: number;
   vencedores: HistoricoBonusVencedor[];
 }
 export interface BonusInscrito { jogador_id: number; nick: string; nome: string; entrou_em: string | null; }
@@ -296,18 +300,20 @@ export interface PagamentoBonus {
 export interface BonusResultadoInput { jogador_id: number; colocacao: number; abates: number; }
 
 export interface MembroEquipe { id: number; nick: string; nome: string; }
-export interface EquipeCampeonato { id: number; nome: string; capitao_id: number; capitao_nick?: string; membros: MembroEquipe[]; }
+export interface EquipeCampeonato { id: number; nome: string; capitao_id: number; capitao_nick?: string; membros: MembroEquipe[]; salas?: BonusSala[]; }
 export interface PlacarEquipe { equipe_id: number; equipe: string; posicao: number; pontos: number; abates: number; partidas: number; melhor_colocacao: number | null; }
 export interface CampeonatoEquipe {
   id: number; nome: string; tipo: 'cs_4x4' | 'br'; modo: '4x4' | 'solo' | 'duo' | 'squad'; tamanho_equipe: number;
   status: 'inscricao' | 'em_andamento' | 'aguardando_revisao' | 'pago' | 'cancelado'; min_equipes: number; max_equipes: number;
   taxa_inscricao: number; data_hora: string | null; premios: number[]; equipes: number; placar: PlacarEquipe[];
+  total_rodadas?: number; inicio?: string | null; fim?: string | null;
+  regra_pontos?: 'lbff' | 'cs'; pontos_vitoria?: number; pontos_abate?: number;
 }
 export interface PagamentoEquipe { id: number; equipe: string; colocacao: number; valor: number; status: string; }
 
 // ====================== API SERVICE ======================
 export interface HistoricoPagoVencedor { colocacao: number; nick: string | null; valor: number; status: string; }
-export interface HistoricoPagoItem { id: number; nome: string; data_hora: string | null; status: string; inscritos: number; premio_total: number; vencedores: HistoricoPagoVencedor[]; }
+export interface HistoricoPagoItem { id: number; nome: string; data_hora: string | null; status: string; inscritos: number; premio_total: number; total_rodadas?: number; vencedores: HistoricoPagoVencedor[]; }
 
 export const apiService = {
   // AUTH
@@ -359,6 +365,10 @@ export const apiService = {
     const res = await api.get('/equipes/ativos');
     return (res.data?.campeonatos ?? []) as CampeonatoEquipe[];
   },
+  async obterHistoricoCampeonatosEquipe(): Promise<CampeonatoEquipe[]> {
+    const res = await api.get('/equipes/historico');
+    return (res.data?.campeonatos ?? []) as CampeonatoEquipe[];
+  },
   async obterMinhaEquipe(campeonatoId: number): Promise<EquipeCampeonato | null> {
     const res = await api.get(`/equipes/${campeonatoId}/minha-equipe`);
     return (res.data?.equipe ?? null) as EquipeCampeonato | null;
@@ -372,9 +382,11 @@ export const apiService = {
   async iniciarCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/iniciar`)).data; },
   async cancelarCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/cancelar`)).data; },
   async listarEquipesInscritas(id: number): Promise<EquipeCampeonato[]> { return (await api.get(`/admin/equipes/${id}/inscritos`)).data.equipes ?? []; },
-  async lancarResultadoEquipe(id: number, resultados: { equipe_id: number; colocacao: number; abates: number }[]): Promise<any> {
-    return (await api.post(`/admin/equipes/${id}/resultado`, { resultados })).data;
+  async lancarResultadoEquipe(id: number, ordem: number, resultados: { equipe_id: number; colocacao: number; abates: number }[]): Promise<any> {
+    return (await api.post(`/admin/equipes/${id}/resultado`, { ordem, resultados })).data;
   },
+  async configurarCampeonatoEquipe(id: number, payload: any): Promise<CampeonatoEquipe> { return (await api.post(`/admin/equipes/${id}/config`, payload)).data; },
+  async definirSalaEquipe(id: number, ordem: number, salaId: string, salaSenha: string, horario?: string): Promise<any> { return (await api.post(`/admin/equipes/${id}/sala`, { ordem, sala_id: salaId, sala_senha: salaSenha, horario })).data; },
   async apurarCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/apurar`)).data; },
   async listarPagamentosEquipe(id: number): Promise<PagamentoEquipe[]> { return (await api.get(`/admin/equipes/${id}/pagamentos`)).data.pagamentos ?? []; },
   async processarPagamentoEquipe(id: number, acao: 'liberar' | 'rejeitar'): Promise<any> { return (await api.post(`/admin/equipes/pagamento/${id}/${acao}`)).data; },
@@ -447,11 +459,11 @@ export const apiService = {
     const res = await api.get('/bonus/historico');
     return (res.data?.eventos ?? []) as HistoricoBonusItem[];
   },
-  async criarBonus(payload: { nome: string; data_hora?: string; min_jogadores?: number; premios?: number[] }): Promise<EventoBonus> {
+  async criarBonus(payload: { nome: string; data_hora?: string; min_jogadores?: number; premios?: number[]; total_rodadas?: number; inicio?: string; fim?: string }): Promise<EventoBonus> {
     const res = await api.post('/admin/bonus/criar', payload);
     return res.data as EventoBonus;
   },
-  async configurarBonus(eventoId: number, payload: { nome?: string; data_hora?: string; min_jogadores?: number; premios?: number[] }): Promise<EventoBonus> {
+  async configurarBonus(eventoId: number, payload: { nome?: string; data_hora?: string; min_jogadores?: number; premios?: number[]; total_rodadas?: number; inicio?: string; fim?: string }): Promise<EventoBonus> {
     const res = await api.post(`/admin/bonus/${eventoId}/config`, payload);
     return res.data as EventoBonus;
   },
