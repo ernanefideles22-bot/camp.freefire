@@ -7,6 +7,7 @@ import { gerarPixCopiaECola, gerarQrDataUrl } from '../utils/pix';
 import { AdminAgentChat } from './AdminAgentChat';
 import { AdminBonus } from './AdminBonus';
 import { AdminPago } from './AdminPago';
+import { AdminEquipes } from './AdminEquipes';
 import { AdminApagarJogadores } from './AdminApagarJogadores';
 
 interface AdminPanelProps {
@@ -23,7 +24,7 @@ interface LinhaResultado {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser: _currentUser }) => {
-  const [activeTab, setActiveTab] = useState<'geral' | 'lancar' | 'depositos' | 'retidos' | 'bonus' | 'pago'>('geral');
+  const [activeTab, setActiveTab] = useState<'geral' | 'lancar' | 'depositos' | 'retidos' | 'bonus' | 'pago' | 'equipes'>('geral');
   const [salaQueda, setSalaQueda] = useState<string>('1');
   const [salaId, setSalaId] = useState<string>('');
   const [salaSenha, setSalaSenha] = useState<string>('');
@@ -367,6 +368,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
           <Trophy className="w-4 h-4 text-amber-400" />
           Torneio Pago
         </button>
+        <button onClick={() => setActiveTab('equipes')} className={`px-5 py-3 font-bold text-xs uppercase tracking-wider transition-all border-b-2 flex items-center gap-2 cursor-pointer whitespace-nowrap ${activeTab === 'equipes' ? 'border-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}>
+          <Users className="w-4 h-4 text-primary" />
+          Equipes
+        </button>
       </div>
       <div className="p-5">
         {activeTab === 'geral' && (
@@ -650,6 +655,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onAddToast, currentUser:
         )}
         {activeTab === 'pago' && (
           <AdminPago onAddToast={onAddToast} />
+        )}
+        {activeTab === 'equipes' && (
+          <AdminEquipes onAddToast={onAddToast} />
         )}
         {activeTab === 'bonus' && (
           <AdminBonus onAddToast={onAddToast} />

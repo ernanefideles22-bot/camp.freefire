@@ -2341,3 +2341,246 @@ def pago_config(evento_id: int, body: ConfigPagoBody, _admin: JogadorModel = Dep
         else: db.add(PremioConfigPagoModel(evento_id=ev.id, pesos_json=json.dumps(pesos)))
     db.commit(); db.refresh(ev)
     return _pago_serializar(db, ev)
+
+
+# ====================== CAMPEONATOS POR EQUIPE ======================
+from models import (CampeonatoEquipeModel, EquipeCampeonatoModel,
+                    MembroEquipeCampeonatoModel, ResultadoEquipeCampeonatoModel,
+                    PagamentoEquipeCampeonatoModel)
+
+
+def _tamanho_equipe(tipo: str, modo: str) -> int:
+    if tipo == 'cs_4x4':
+        return 4
+    if tipo != 'br' or modo not in ('solo', 'duo', 'squad'):
+        raise HTTPException(400, 'Formato invalido. Use CS 4x4 ou BR Solo, Duo ou Squad.')
+    return {'solo': 1, 'duo': 2, 'squad': 4}[modo]
+
+
+def _premios_equipe(ev: CampeonatoEquipeModel) -> list[float]:
+    try:
+        return [max(0.0, round(float(v), 2)) for v in json.loads(ev.premios_json or '[50,20,15,10,5]')][:20]
+    except Exception:
+        return [50, 20, 15, 10, 5]
+
+
+def _membros_equipe(db: Session, equipe_id: int) -> list[JogadorModel]:
+    ids = db.scalars(select(MembroEquipeCampeonatoModel.jogador_id)
+                    .where(MembroEquipeCampeonatoModel.equipe_id == equipe_id)).all()
+    return [j for j in (db.get(JogadorModel, jogador_id) for jogador_id in ids) if j]
+
+
+def _serializar_equipe(db: Session, equipe: EquipeCampeonatoModel) -> dict:
+    membros = _membros_equipe(db, equipe.id)
+    capitao = db.get(JogadorModel, equipe.capitao_id)
+    return {'id': equipe.id, 'nome': equipe.nome, 'capitao_id': equipe.capitao_id,
+            'capitao_nick': capitao.nick if capitao else None,
+            'membros': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in membros]}
+
+
+def _placar_equipes(db: Session, campeonato_id: int) -> list[dict]:
+    equipes = db.scalars(select(EquipeCampeonatoModel)
+                         .where(EquipeCampeonatoModel.campeonato_id == campeonato_id)).all()
+    linhas = []
+    for equipe in equipes:
+        resultados = db.scalars(select(ResultadoEquipeCampeonatoModel)
+                                .where(ResultadoEquipeCampeonatoModel.equipe_id == equipe.id)).all()
+        linhas.append({'equipe_id': equipe.id, 'equipe': equipe.nome,
+                       'pontos': sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in resultados),
+                       'abates': sum(r.abates for r in resultados),
+                       'partidas': len(resultados),
+                       'melhor_colocacao': min((r.colocacao for r in resultados), default=None)})
+    linhas.sort(key=lambda x: (-x['pontos'], -x['abates'], x['melhor_colocacao'] or 999, x['equipe'].lower()))
+    for pos, linha in enumerate(linhas, 1):
+        linha['posicao'] = pos
+    return linhas
+
+
+def _serializar_campeonato_equipe(db: Session, ev: CampeonatoEquipeModel) -> dict:
+    equipes = db.scalars(select(EquipeCampeonatoModel)
+                         .where(EquipeCampeonatoModel.campeonato_id == ev.id)).all()
+    return {'id': ev.id, 'nome': ev.nome, 'tipo': ev.tipo, 'modo': ev.modo,
+            'tamanho_equipe': ev.tamanho_equipe, 'status': ev.status,
+            'min_equipes': ev.min_equipes, 'max_equipes': ev.max_equipes,
+            'taxa_inscricao': ev.taxa_inscricao, 'data_hora': ev.data_hora,
+            'premios': _premios_equipe(ev), 'equipes': len(equipes),
+            'placar': _placar_equipes(db, ev.id)}
+
+
+class CriarCampeonatoEquipeBody(BaseModel):
+    nome: str = 'Campeonato por equipes'
+    tipo: str
+    modo: str = 'solo'
+    data_hora: Optional[str] = None
+    min_equipes: int = 2
+    max_equipes: int = 12
+    taxa_inscricao: float = 3.0
+    premios: Optional[List[float]] = None
+
+
+class InscreverEquipeBody(BaseModel):
+    nome_equipe: str
+    membros_nicks: List[str] = []
+
+
+class ResultadoEquipeItem(BaseModel):
+    equipe_id: int
+    colocacao: int
+    abates: int = 0
+
+
+class ResultadoEquipesBody(BaseModel):
+    resultados: List[ResultadoEquipeItem]
+
+
+@app.get('/equipes/ativos')
+def equipes_ativos(db: Session = Depends(get_db)):
+    eventos = db.scalars(select(CampeonatoEquipeModel)
+                         .where(CampeonatoEquipeModel.status.notin_(['pago', 'cancelado']))
+                         .order_by(CampeonatoEquipeModel.id.desc())).all()
+    return {'campeonatos': [_serializar_campeonato_equipe(db, ev) for ev in eventos]}
+
+
+@app.get('/equipes/{campeonato_id}/minha-equipe')
+def minha_equipe(campeonato_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    membro = db.scalar(select(MembroEquipeCampeonatoModel)
+                       .join(EquipeCampeonatoModel, MembroEquipeCampeonatoModel.equipe_id == EquipeCampeonatoModel.id)
+                       .where(EquipeCampeonatoModel.campeonato_id == campeonato_id,
+                              MembroEquipeCampeonatoModel.jogador_id == jogador.id))
+    return {'equipe': _serializar_equipe(db, db.get(EquipeCampeonatoModel, membro.equipe_id)) if membro else None}
+
+
+@app.post('/equipes/{campeonato_id}/inscrever')
+def inscrever_equipe(campeonato_id: int, body: InscreverEquipeBody,
+                     jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    if not ev or ev.status != 'inscricao':
+        raise HTTPException(400, 'Inscricoes indisponiveis.')
+    nome_equipe = body.nome_equipe.strip()
+    if not nome_equipe:
+        raise HTTPException(400, 'Informe o nome da equipe.')
+    if db.scalar(select(EquipeCampeonatoModel).where(EquipeCampeonatoModel.campeonato_id == ev.id,
+                                                       func.lower(EquipeCampeonatoModel.nome) == nome_equipe.lower())):
+        raise HTTPException(400, 'Ja existe uma equipe com esse nome.')
+    total = db.scalar(select(func.count()).select_from(EquipeCampeonatoModel)
+                      .where(EquipeCampeonatoModel.campeonato_id == ev.id)) or 0
+    if total >= ev.max_equipes:
+        raise HTTPException(400, f'Campeonato lotado ({ev.max_equipes} equipes).')
+    nicks = {n.strip().lower() for n in body.membros_nicks if n.strip()}
+    nicks.add(jogador.nick.lower())
+    membros = db.scalars(select(JogadorModel).where(func.lower(JogadorModel.nick).in_(nicks))).all()
+    if len(membros) != len(nicks):
+        raise HTTPException(400, 'Um ou mais nicks informados nao existem.')
+    if len(membros) != ev.tamanho_equipe:
+        raise HTTPException(400, f'Esse formato exige exatamente {ev.tamanho_equipe} jogador(es) por equipe.')
+    ids = [m.id for m in membros]
+    ja_inscrito = db.scalar(select(MembroEquipeCampeonatoModel)
+                             .join(EquipeCampeonatoModel, MembroEquipeCampeonatoModel.equipe_id == EquipeCampeonatoModel.id)
+                             .where(EquipeCampeonatoModel.campeonato_id == ev.id,
+                                    MembroEquipeCampeonatoModel.jogador_id.in_(ids)))
+    if ja_inscrito:
+        raise HTTPException(400, 'Um integrante ja esta inscrito em outra equipe deste campeonato.')
+    capitao = _lock_jogador(db, jogador.id)
+    if capitao.saldo < ev.taxa_inscricao:
+        raise HTTPException(400, f'Saldo insuficiente. A inscricao da equipe custa R$ {ev.taxa_inscricao:.2f}.')
+    registrar_transacao(db, capitao, tipo='inscricao_equipe', delta_saldo=-ev.taxa_inscricao, ref=f'equipe:{ev.id}')
+    equipe = EquipeCampeonatoModel(campeonato_id=ev.id, nome=nome_equipe, capitao_id=capitao.id)
+    db.add(equipe); db.flush()
+    for membro in membros:
+        db.add(MembroEquipeCampeonatoModel(equipe_id=equipe.id, jogador_id=membro.id))
+    db.commit()
+    return {'message': 'Equipe inscrita com sucesso.', 'equipe': _serializar_equipe(db, equipe)}
+
+
+@app.post('/admin/equipes/criar')
+def criar_campeonato_equipe(body: CriarCampeonatoEquipeBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    tamanho = _tamanho_equipe(body.tipo, body.modo)
+    if body.max_equipes < 2:
+        raise HTTPException(400, 'O maximo deve ser de pelo menos 2 equipes.')
+    premios = [max(0.0, float(valor)) for valor in (body.premios or [50, 20, 15, 10, 5])][:20]
+    ev = CampeonatoEquipeModel(nome=body.nome.strip() or 'Campeonato por equipes', tipo=body.tipo,
+        modo='4x4' if body.tipo == 'cs_4x4' else body.modo, tamanho_equipe=tamanho,
+        data_hora=(body.data_hora or '').strip() or None, min_equipes=max(2, body.min_equipes),
+        max_equipes=max(2, body.max_equipes), taxa_inscricao=round(max(0.01, body.taxa_inscricao), 2),
+        premios_json=json.dumps(premios))
+    db.add(ev); db.commit(); db.refresh(ev)
+    return _serializar_campeonato_equipe(db, ev)
+
+
+@app.post('/admin/equipes/{campeonato_id}/iniciar')
+def iniciar_campeonato_equipe(campeonato_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    if not ev or ev.status != 'inscricao': raise HTTPException(400, 'Campeonato nao pode ser iniciado.')
+    total = db.scalar(select(func.count()).select_from(EquipeCampeonatoModel).where(EquipeCampeonatoModel.campeonato_id == ev.id)) or 0
+    if total < ev.min_equipes: raise HTTPException(400, f'Faltam equipes: {total}/{ev.min_equipes}.')
+    ev.status = 'em_andamento'; db.commit(); return {'message': 'Campeonato iniciado.'}
+
+
+@app.get('/admin/equipes/{campeonato_id}/inscritos')
+def equipes_inscritas(campeonato_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    equipes = db.scalars(select(EquipeCampeonatoModel).where(EquipeCampeonatoModel.campeonato_id == campeonato_id)).all()
+    return {'equipes': [_serializar_equipe(db, equipe) for equipe in equipes]}
+
+
+@app.post('/admin/equipes/{campeonato_id}/resultado')
+def resultado_equipes(campeonato_id: int, body: ResultadoEquipesBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    if not ev or ev.status != 'em_andamento': raise HTTPException(400, 'Campeonato nao esta em andamento.')
+    if db.scalar(select(ResultadoEquipeCampeonatoModel).where(ResultadoEquipeCampeonatoModel.campeonato_id == ev.id)):
+        raise HTTPException(400, 'O resultado ja foi lancado para este campeonato.')
+    usadas, posicoes = set(), set()
+    for item in body.resultados:
+        equipe = db.get(EquipeCampeonatoModel, item.equipe_id)
+        if (not equipe or equipe.campeonato_id != ev.id or item.equipe_id in usadas or item.colocacao in posicoes
+                or item.colocacao < 1 or item.colocacao > ev.max_equipes or item.abates < 0 or item.abates > MAX_ABATES):
+            raise HTTPException(400, 'Resultado invalido ou duplicado.')
+        usadas.add(item.equipe_id); posicoes.add(item.colocacao)
+        db.add(ResultadoEquipeCampeonatoModel(campeonato_id=ev.id, equipe_id=item.equipe_id,
+                                               colocacao=item.colocacao, abates=item.abates))
+    db.commit(); return {'message': 'Resultados salvos.'}
+
+
+@app.post('/admin/equipes/{campeonato_id}/apurar')
+def apurar_equipes(campeonato_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    if not ev or ev.status != 'em_andamento': raise HTTPException(400, 'Campeonato nao esta em andamento.')
+    placar = _placar_equipes(db, ev.id)
+    if not placar: raise HTTPException(400, 'Lance os resultados antes de apurar.')
+    for pos, premio in enumerate(_premios_equipe(ev), 1):
+        if pos > len(placar): break
+        if premio > 0:
+            db.add(PagamentoEquipeCampeonatoModel(campeonato_id=ev.id, equipe_id=placar[pos - 1]['equipe_id'],
+                colocacao_final=pos, valor=premio))
+    ev.status = 'aguardando_revisao'; db.commit(); return {'message': 'Apuracao concluida. Premios aguardam liberacao.'}
+
+
+@app.get('/admin/equipes/{campeonato_id}/pagamentos')
+def pagamentos_equipes(campeonato_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    pagamentos = db.scalars(select(PagamentoEquipeCampeonatoModel).where(PagamentoEquipeCampeonatoModel.campeonato_id == campeonato_id).order_by(PagamentoEquipeCampeonatoModel.colocacao_final)).all()
+    return {'pagamentos': [{'id': p.id, 'equipe': db.get(EquipeCampeonatoModel, p.equipe_id).nome,
+        'colocacao': p.colocacao_final, 'valor': p.valor, 'status': p.status} for p in pagamentos]}
+
+
+@app.post('/admin/equipes/pagamento/{pagamento_id}/{acao}')
+def pagamento_equipes(pagamento_id: int, acao: str, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    pagamento = db.get(PagamentoEquipeCampeonatoModel, pagamento_id)
+    if not pagamento or pagamento.status != 'pendente' or acao not in ('liberar', 'rejeitar'):
+        raise HTTPException(400, 'Pagamento invalido.')
+    if acao == 'liberar':
+        membros = _membros_equipe(db, pagamento.equipe_id)
+        if not membros: raise HTTPException(400, 'Equipe sem integrantes.')
+        valor_base, resto = divmod(round(pagamento.valor * 100), len(membros))
+        for indice, membro in enumerate(membros):
+            valor = (valor_base + (1 if indice < resto else 0)) / 100
+            jogador = _lock_jogador(db, membro.id)
+            registrar_transacao(db, jogador, tipo='premio_equipe', delta_saldo=valor,
+                                delta_sacavel=valor, ref=f'equipe:{pagamento.campeonato_id}')
+        pagamento.status = 'liberado'; pagamento.liberado_em = _utcnow_bonus()
+    else:
+        pagamento.status = 'rejeitado'
+    db.flush()
+    pendentes = db.scalar(select(func.count()).select_from(PagamentoEquipeCampeonatoModel)
+                           .where(PagamentoEquipeCampeonatoModel.campeonato_id == pagamento.campeonato_id,
+                                  PagamentoEquipeCampeonatoModel.status == 'pendente')) or 0
+    if not pendentes: db.get(CampeonatoEquipeModel, pagamento.campeonato_id).status = 'pago'
+    db.commit(); return {'message': f'Premio {acao}.'}

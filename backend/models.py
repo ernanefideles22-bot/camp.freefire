@@ -314,3 +314,61 @@ class PremioConfigPagoModel(Base):
     evento_id: Mapped[int] = mapped_column(ForeignKey('eventos_pagos.id'), unique=True, nullable=False, index=True)
     # Pesos da divisao do pote por colocacao, em JSON. Ex.: [50, 20, 15, 10, 5].
     pesos_json: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+# ====================== CAMPEONATOS POR EQUIPE ======================
+# Mantidos em tabelas separadas para que os torneios individuais ja existentes
+# continuem funcionando sem migracao de dados.
+class CampeonatoEquipeModel(Base):
+    __tablename__ = 'campeonatos_equipe'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    nome: Mapped[str] = mapped_column(String, nullable=False)
+    # cs_4x4 | br. Em BR, modo define solo, duo ou squad.
+    tipo: Mapped[str] = mapped_column(String, nullable=False, default='br')
+    modo: Mapped[str] = mapped_column(String, nullable=False, default='solo')
+    tamanho_equipe: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String, nullable=False, default='inscricao', index=True)
+    min_equipes: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    max_equipes: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
+    taxa_inscricao: Mapped[float] = mapped_column(Float, nullable=False, default=3.0)
+    data_hora: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    premios_json: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class EquipeCampeonatoModel(Base):
+    __tablename__ = 'equipes_campeonato'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_equipe.id'), nullable=False, index=True)
+    nome: Mapped[str] = mapped_column(String, nullable=False)
+    capitao_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MembroEquipeCampeonatoModel(Base):
+    __tablename__ = 'membros_equipes_campeonato'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonato.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+
+
+class ResultadoEquipeCampeonatoModel(Base):
+    __tablename__ = 'resultados_equipes_campeonato'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_equipe.id'), nullable=False, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonato.id'), nullable=False, index=True)
+    colocacao: Mapped[int] = mapped_column(Integer, nullable=False)
+    abates: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PagamentoEquipeCampeonatoModel(Base):
+    __tablename__ = 'pagamentos_equipes_campeonato'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_equipe.id'), nullable=False, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonato.id'), nullable=False, index=True)
+    colocacao_final: Mapped[int] = mapped_column(Integer, nullable=False)
+    valor: Mapped[float] = mapped_column(Float, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default='pendente', index=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    liberado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

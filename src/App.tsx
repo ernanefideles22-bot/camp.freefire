@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import { Trophy, User, Gift, Sliders, Shield, Award, LogOut } from 'lucide-react';
+import { Trophy, User, Gift, Sliders, Shield, Award, LogOut, Users } from 'lucide-react';
 import { Leaderboard } from './components/Leaderboard';
 import { PlayerPortal } from './components/PlayerPortal';
 import { AdminPanel } from './components/AdminPanel';
 import { QuedaBonus } from './components/QuedaBonus';
 import { AuthPortal } from './components/AuthPortal';
+import { CampeonatosEquipe } from './components/CampeonatosEquipe';
 import { ToastContainer } from './components/Toast';
 import type { ToastMessage, ToastType } from './components/Toast';
 import type { Jogador } from './services/api';
 
-type TabType = 'leaderboard' | 'player_portal' | 'admin' | 'bonus' | 'pago';
+type TabType = 'leaderboard' | 'player_portal' | 'admin' | 'bonus' | 'pago' | 'equipes';
 
 function App() {
   const [currentUser, setCurrentUser] = useState<Jogador | null>(() => {
@@ -82,6 +83,10 @@ function App() {
               <Trophy className="w-4 h-4" />
               Torneio Pago
             </button>
+            <button onClick={() => setActiveTab('equipes')} className={tabClasses('equipes')}>
+              <Users className="w-4 h-4" />
+              Equipes
+            </button>
         {currentUser?.is_admin && (
             <button onClick={() => setActiveTab('admin')} className={tabClasses('admin')}>
               <Sliders className="w-4 h-4" />
@@ -129,6 +134,11 @@ function App() {
           <Gift className="w-5 h-5" />
           <span className="text-[10px]">Bônus</span>
         </button>
+        <button onClick={() => setActiveTab('equipes')}
+          className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'equipes' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}>
+          <Users className="w-5 h-5" />
+          <span className="text-[10px]">Equipes</span>
+        </button>
         {currentUser?.is_admin && (
         <button onClick={() => setActiveTab('admin')}
           className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'admin' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}>
@@ -151,6 +161,10 @@ function App() {
 
           {activeTab === 'bonus' && (
             <QuedaBonus currentUser={currentUser} onAddToast={handleAddToast} />
+          )}
+
+          {activeTab === 'equipes' && (
+            <CampeonatosEquipe currentUser={currentUser} onAddToast={handleAddToast} />
           )}
 
           {activeTab === 'player_portal' && (
