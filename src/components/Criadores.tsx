@@ -47,6 +47,17 @@ export function Criadores({ currentUser, onAddToast }: Props) {
   const [nome, setNome] = useState(''); const [eventoSlug, setEventoSlug] = useState(''); const [formato, setFormato] = useState('BR Solo'); const [descricao, setDescricao] = useState(''); const [vagas, setVagas] = useState('48'); const [taxa, setTaxa] = useState('3'); const [premios, setPremios] = useState('60, 30'); const [parteCriador, setParteCriador] = useState('10'); const [dataHora, setDataHora] = useState('');
   const carregar = useCallback(async () => { setLoading(true); try { const partes = window.location.hash.split('/'); const slugVisitado = partes[1] === 'criador' ? partes[2] : ''; const [rank, abertos, dados, perfil] = await Promise.all([apiService.rankingCriadores(), apiService.eventosCriadoresAbertos(), currentUser ? apiService.meuCriador() : Promise.resolve({ criador: null, eventos: [] }), slugVisitado ? apiService.perfilCriador(slugVisitado).catch(() => null) : Promise.resolve(null)]); setRanking(rank); setEventos(abertos); setMeu(dados); setPerfilVisitado(perfil); if (dados.criador) { setSlug(dados.criador.slug); setBio(dados.criador.bio ?? ''); } } catch (erro: any) { onAddToast('error', 'Erro ao carregar criadores', erro.message); } finally { setLoading(false); } }, [currentUser, onAddToast]);
   useEffect(() => { carregar(); }, [carregar]);
+  useEffect(() => {
+    if (aba !== 'painel' || meu.criador?.status !== 'aprovado') return;
+    const seletor = document.querySelector<HTMLSelectElement>('select.ff-input');
+    if (!seletor) return;
+    for (const modo of ['CS 1x1', 'CS 2x2', 'CS 3x3']) {
+      if (![...seletor.options].some(opcao => opcao.value === modo)) {
+        const opcao = document.createElement('option');
+        opcao.value = modo; opcao.text = modo; seletor.append(opcao);
+      }
+    }
+  }, [aba, meu.criador?.status]);
   const executar = async (acao: () => Promise<any>, titulo: string) => { setBusy(true); try { const resposta = await acao(); onAddToast('success', titulo, resposta?.message); await carregar(); } catch (erro: any) { onAddToast('error', 'Não foi possível concluir', erro.message); } finally { setBusy(false); } };
   const criar = () => { const percentuais = premios.split(',').map(item => Number(item.trim())).filter(valor => valor > 0); executar(() => apiService.criarEventoCriador({ nome, slug: slugDoNome(nome), formato, descricao, max_jogadores: Number(vagas), taxa_inscricao: Number(taxa), premios_percentuais: percentuais, percentual_criador: Number(parteCriador), data_hora: dataHora }), 'Campeonato criado como rascunho'); };
   const compartilharEvento = (evento: CampeonatoCriador) => compartilhar(evento.nome, `Confira o ranking do campeonato ${evento.nome} no FlowFire.`, linkCriador(evento.criador.slug, evento.slug), () => onAddToast('success', 'Link copiado', 'Envie o resultado onde quiser.'));
