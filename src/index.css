@@ -284,3 +284,38 @@
 .ff-card input[placeholder="link-do-evento"] {
   display: none;
 }
+
+/* No perfil de criador, a origem oficial nunca pode ser alterada. */
+.ff-card .space-y-3.mt-4:has(> input[placeholder="seu-link-personalizado"]) {
+  position: relative;
+}
+
+.ff-card .space-y-3.mt-4:has(> input[placeholder="seu-link-personalizado"])::before {
+  content: 'camp-freefas.com.br/#criador/';
+  position: absolute;
+  z-index: 2;
+  top: .67rem;
+  left: .9rem;
+  pointer-events: none;
+  color: var(--color-primary);
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.ff-card input[placeholder="seu-link-personalizado"] {
+  padding-left: 17.1rem !important;
+}
+
+.ff-card input[placeholder="seu-link-personalizado"]::placeholder {
+  color: transparent;
+}
+
+@media (max-width: 640px) {
+  .ff-card .space-y-3.mt-4:has(> input[placeholder="seu-link-personalizado"])::before {
+    content: 'flowfire/';
+  }
+
+  .ff-card input[placeholder="seu-link-personalizado"] {
+    padding-left: 5.4rem !important;
+  }
+}
