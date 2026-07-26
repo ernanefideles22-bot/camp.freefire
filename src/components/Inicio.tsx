@@ -1,9 +1,10 @@
-import { ArrowRight, Crown, Crosshair, Flame, Play, Shield, Swords, Trophy, Users } from 'lucide-react';
+import { ArrowRight, Crown, Crosshair, Flame, Megaphone, Play, Shield, Swords, Trophy, Users } from 'lucide-react';
 
 interface Props {
   onAbrirCampeonatos: () => void;
   onAbrirRanking: () => void;
   onAbrirGuilda: () => void;
+  onAbrirCriadores: () => void;
 }
 
 const modos = [
@@ -12,7 +13,7 @@ const modos = [
   { icon: Trophy, titulo: 'Eventos especiais', texto: 'Quedas bônus, premiação e ranking que ficam salvos.', marca: 'BÔNUS • AO VIVO' },
 ];
 
-export function Inicio({ onAbrirCampeonatos, onAbrirRanking, onAbrirGuilda }: Props) {
+export function Inicio({ onAbrirCampeonatos, onAbrirRanking, onAbrirGuilda, onAbrirCriadores }: Props) {
   return <div className="ff-home space-y-16 pb-8">
     <section className="ff-home-hero">
       <div className="ff-home-vignette" />
@@ -32,6 +33,17 @@ export function Inicio({ onAbrirCampeonatos, onAbrirRanking, onAbrirGuilda }: Pr
     <section className="ff-home-guild">
       <div className="ff-home-guild-copy"><span className="ff-kicker flex items-center gap-2"><Crown className="w-3.5 h-3.5" /> Destaque FlowFire</span><h2>A GUILDA JÁ<br /><span>ENTROU NA ARENA.</span></h2><p>Time Alfa e Time Beta representam os melhores da FlowFire. Conheça os emblemas, as formações e as histórias que estão construindo o legado da nossa irmandade.</p><div className="ff-home-guild-stats"><span><b>02</b> Times oficiais</span><span><b>08</b> Lendas escaladas</span></div><button onClick={onAbrirGuilda} className="ff-home-cta cursor-pointer"><Crown className="w-4 h-4" /> Conhecer a Guilda <ArrowRight className="w-4 h-4" /></button></div>
       <div className="ff-home-guild-art" aria-hidden="true"><img className="ff-home-guild-alfa" src="/guilda-time-alfa.jpeg" alt="" /><img className="ff-home-guild-beta" src="/guilda-time-beta.jpeg" alt="" /><div>FLOWFIRE<br /><b>GUILDA</b></div></div>
+    </section>
+
+    <section className="ff-home-creator max-w-6xl mx-auto">
+      <div className="ff-home-creator-copy">
+        <span className="ff-kicker flex items-center gap-2"><Megaphone className="w-3.5 h-3.5" /> FlowFire Creator Hub</span>
+        <h2>CRIE A SUA<br /><span>PRÓPRIA ARENA.</span></h2>
+        <p>Transforme sua ideia em campeonato. Configure BR ou CS de 1x1 até 4x4, defina inscrições, premiação, regras e divulgue com seu link personalizado.</p>
+        <div className="ff-home-creator-stats"><span><b>12%</b> FlowFire protegido</span><span><b>88%</b> Cofre do evento</span><span><b>OCR</b> Revisão por IA</span></div>
+        <button onClick={onAbrirCriadores} className="ff-home-cta cursor-pointer"><Megaphone className="w-4 h-4" /> Abrir Creator Hub <ArrowRight className="w-4 h-4" /></button>
+      </div>
+      <div className="ff-home-creator-hud" aria-hidden="true"><span>FLOWFIRE</span><b>CREATE<br />PLAY<br />LEAD</b><i>LIVE</i></div>
     </section>
 
     <section className="max-w-6xl mx-auto px-1">

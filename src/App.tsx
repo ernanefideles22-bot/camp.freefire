@@ -69,7 +69,7 @@ function App() {
       {currentUser?.is_admin && <button onClick={() => setActiveTab('admin')} className={`flex flex-col items-center gap-1 py-2 px-3 rounded-xl flex-1 transition-all ${activeTab === 'admin' ? 'text-primary font-black' : 'text-zinc-500 font-medium'}`}><Sliders className="w-5 h-5" /><span className="text-[10px]">Admin</span></button>}
     </div>
     <main className="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-7 pb-28 md:pb-9"><div className="ff-page-frame animate-in fade-in slide-in-from-bottom-3 duration-300">
-      {activeTab === 'home' && <Inicio onAbrirCampeonatos={() => setActiveTab('campeonatos')} onAbrirRanking={() => setActiveTab('leaderboard')} onAbrirGuilda={() => setActiveTab('guilda')} />}
+      {activeTab === 'home' && <Inicio onAbrirCampeonatos={() => setActiveTab('campeonatos')} onAbrirRanking={() => setActiveTab('leaderboard')} onAbrirGuilda={() => setActiveTab('guilda')} onAbrirCriadores={() => setActiveTab('criadores')} />}
       {activeTab === 'leaderboard' && <Leaderboard onAddToast={handleAddToast} />}
       {activeTab === 'campeonatos' && <Campeonatos currentUser={currentUser} onAddToast={handleAddToast} />}
       {activeTab === 'guilda' && <GuildaFlowFire />}
