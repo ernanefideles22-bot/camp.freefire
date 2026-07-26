@@ -2349,9 +2349,12 @@ from models import (CampeonatoEquipeModel, EquipeCampeonatoModel,
                     PagamentoEquipeCampeonatoModel)
 
 
-def _tamanho_equipe(tipo: str, modo: str) -> int:
+def _tamanho_equipe(tipo: str, modo: str, tamanho_configurado: Optional[int] = None) -> int:
     if tipo == 'cs_4x4':
-        return 4
+        tamanho = int(tamanho_configurado or 4)
+        if not 1 <= tamanho <= 4:
+            raise HTTPException(400, 'No CS, escolha de 1x1 ate 4x4.')
+        return tamanho
     if tipo != 'br' or modo not in ('solo', 'duo', 'squad'):
         raise HTTPException(400, 'Formato invalido. Use CS 4x4 ou BR Solo, Duo ou Squad.')
     return {'solo': 1, 'duo': 2, 'squad': 4}[modo]
@@ -2411,6 +2414,7 @@ class CriarCampeonatoEquipeBody(BaseModel):
     nome: str = 'Campeonato por equipes'
     tipo: str
     modo: str = 'solo'
+    tamanho_equipe: Optional[int] = None
     data_hora: Optional[str] = None
     min_equipes: int = 2
     max_equipes: int = 12
@@ -2494,7 +2498,7 @@ def inscrever_equipe(campeonato_id: int, body: InscreverEquipeBody,
 
 @app.post('/admin/equipes/criar')
 def criar_campeonato_equipe(body: CriarCampeonatoEquipeBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
-    tamanho = _tamanho_equipe(body.tipo, body.modo)
+    tamanho = _tamanho_equipe(body.tipo, body.modo, body.tamanho_equipe)
     if body.max_equipes < 2:
         raise HTTPException(400, 'O maximo deve ser de pelo menos 2 equipes.')
     premios = [max(0.0, float(valor)) for valor in (body.premios or [50, 20, 15, 10, 5])][:20]

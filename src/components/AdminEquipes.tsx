@@ -17,6 +17,7 @@ export function AdminEquipes({ onAddToast }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [tipo, setTipo] = useState<'cs_4x4' | 'br'>('cs_4x4');
   const [modo, setModo] = useState<'solo' | 'duo' | 'squad'>('solo');
+  const [tamanhoCs, setTamanhoCs] = useState('4');
   const [nome, setNome] = useState('CS 4x4');
   const [dataHora, setDataHora] = useState('');
   const [minimo, setMinimo] = useState('2');
@@ -55,7 +56,7 @@ export function AdminEquipes({ onAddToast }: Props) {
   const campo = 'w-full px-3 py-2 rounded-lg bg-zinc-950 border border-zinc-800 text-white text-sm focus:border-primary focus:outline-none';
   const label = 'text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1';
 
-  const criar = () => executar(() => apiService.criarCampeonatoEquipe({ nome: nome.trim() || 'Campeonato por equipes', tipo, modo, data_hora: dataHora.trim() || undefined, min_equipes: Number(minimo) || 2, max_equipes: Number(maximo) || 12, taxa_inscricao: Number(taxa) || 0.01, premios }), 'Campeonato criado');
+  const criar = () => executar(() => apiService.criarCampeonatoEquipe({ nome: nome.trim() || 'Campeonato por equipes', tipo, modo, tamanho_equipe: tipo === 'cs_4x4' ? Number(tamanhoCs) : undefined, data_hora: dataHora.trim() || undefined, min_equipes: Number(minimo) || 2, max_equipes: Number(maximo) || 12, taxa_inscricao: Number(taxa) || 0.01, premios }), 'Campeonato criado');
   const salvarResultado = () => {
     if (!evento) return;
     const linhas = equipes.map(equipe => ({ equipe_id: equipe.id, colocacao: Number(resultados[equipe.id]?.colocacao), abates: Number(resultados[equipe.id]?.abates || 0) }));
@@ -87,8 +88,8 @@ export function AdminEquipes({ onAddToast }: Props) {
   const configCampos = <div className="space-y-3">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       <div><label className={label}>Nome</label><input value={nome} onChange={e => setNome(e.target.value)} className={campo} /></div>
-      <div><label className={label}>Formato</label><select value={tipo} onChange={e => { const novo = e.target.value as 'cs_4x4' | 'br'; setTipo(novo); setNome(novo === 'cs_4x4' ? 'CS 4x4' : 'BR'); }} className={campo}><option value="cs_4x4">CS 4x4</option><option value="br">Battle Royale</option></select></div>
-      {tipo === 'br' ? <div><label className={label}>Modo BR</label><select value={modo} onChange={e => setModo(e.target.value as typeof modo)} className={campo}><option value="solo">Solo</option><option value="duo">Duo</option><option value="squad">Squad</option></select></div> : <div><label className={label}>Equipe</label><div className={`${campo} text-zinc-400`}>4 jogadores por equipe</div></div>}
+      <div><label className={label}>Formato</label><select value={tipo} onChange={e => { const novo = e.target.value as 'cs_4x4' | 'br'; setTipo(novo); setNome(novo === 'cs_4x4' ? `CS ${tamanhoCs}x${tamanhoCs}` : 'BR'); }} className={campo}><option value="cs_4x4">Contra Squad</option><option value="br">Battle Royale</option></select></div>
+      {tipo === 'br' ? <div><label className={label}>Modo BR</label><select value={modo} onChange={e => setModo(e.target.value as typeof modo)} className={campo}><option value="solo">Solo</option><option value="duo">Duo</option><option value="squad">Squad</option></select></div> : <div><label className={label}>Formato CS</label><select value={tamanhoCs} onChange={e => { setTamanhoCs(e.target.value); setNome(`CS ${e.target.value}x${e.target.value}`); }} className={campo}><option value="1">1x1</option><option value="2">2x2</option><option value="3">3x3</option><option value="4">4x4</option></select></div>}
       <div><label className={label}>Data e hora</label><input value={dataHora} onChange={e => setDataHora(e.target.value)} placeholder="ex: 15/07 20:00" className={campo} /></div>
       <div><label className={label}>Minimo de equipes</label><input type="number" min="2" value={minimo} onChange={e => setMinimo(e.target.value)} className={campo} /></div>
       <div><label className={label}>Maximo de equipes</label><input type="number" min="2" value={maximo} onChange={e => setMaximo(e.target.value)} className={campo} /></div>
