@@ -24,6 +24,7 @@ from models import (JogadorModel, QuedaModel, InscricaoModel,
                     PagamentoEquipeCampeonatoModel, ConfiguracaoEventoModel,
                     SalaEventoModel, ResultadoEquipeRodadaModel,
                     GuildaPerfilModel, EquipeGuildaModel,
+                    ReservaEquipeCampeonatoModel,
                     CriadorFlowFireModel, CampeonatoCriadorModel,
                     InscricaoCampeonatoCriadorModel, ResultadoCampeonatoCriadorModel,
                     PagamentoCampeonatoCriadorModel, TemporadaRankingModel, utcnow)
@@ -2606,8 +2607,16 @@ def _premios_equipe(ev: CampeonatoEquipeModel) -> list[float]:
 
 
 def _membros_equipe(db: Session, equipe_id: int) -> list[JogadorModel]:
+    reservas = set(db.scalars(select(ReservaEquipeCampeonatoModel.jogador_id)
+                              .where(ReservaEquipeCampeonatoModel.equipe_id == equipe_id)).all())
     ids = db.scalars(select(MembroEquipeCampeonatoModel.jogador_id)
                     .where(MembroEquipeCampeonatoModel.equipe_id == equipe_id)).all()
+    return [j for j in (db.get(JogadorModel, jogador_id) for jogador_id in ids) if j and j.id not in reservas]
+
+
+def _reservas_equipe(db: Session, equipe_id: int) -> list[JogadorModel]:
+    ids = db.scalars(select(ReservaEquipeCampeonatoModel.jogador_id)
+                    .where(ReservaEquipeCampeonatoModel.equipe_id == equipe_id)).all()
     return [j for j in (db.get(JogadorModel, jogador_id) for jogador_id in ids) if j]
 
 
@@ -2636,10 +2645,12 @@ def _validar_logo_guilda(logo_data: Optional[str]) -> Optional[str]:
 
 def _serializar_equipe(db: Session, equipe: EquipeCampeonatoModel) -> dict:
     membros = _membros_equipe(db, equipe.id)
+    reservas = _reservas_equipe(db, equipe.id)
     capitao = db.get(JogadorModel, equipe.capitao_id)
     return {'id': equipe.id, 'nome': equipe.nome, 'capitao_id': equipe.capitao_id,
             'capitao_nick': capitao.nick if capitao else None,
             'membros': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in membros],
+            'reservas': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in reservas],
             'guilda': _identidade_equipe(db, equipe.id)}
 
 
@@ -2718,6 +2729,7 @@ class CriarCampeonatoEquipeBody(BaseModel):
 class InscreverEquipeBody(BaseModel):
     nome_equipe: str
     membros_nicks: List[str] = []
+    reservas_nicks: List[str] = []
     nome_guilda: Optional[str] = None
     logo_data: Optional[str] = None
 
@@ -2777,12 +2789,20 @@ def inscrever_equipe(campeonato_id: int, body: InscreverEquipeBody,
                       .where(EquipeCampeonatoModel.campeonato_id == ev.id)) or 0
     if total >= ev.max_equipes:
         raise HTTPException(400, f'Campeonato lotado ({ev.max_equipes} equipes).')
-    nicks = {n.strip().lower() for n in body.membros_nicks if n.strip()}
-    nicks.add(jogador.nick.lower())
-    membros = db.scalars(select(JogadorModel).where(func.lower(JogadorModel.nick).in_(nicks))).all()
-    if len(membros) != len(nicks):
+    titulares_nicks = {n.strip().lower() for n in body.membros_nicks if n.strip()}
+    titulares_nicks.add(jogador.nick.lower())
+    reservas_nicks = {n.strip().lower() for n in body.reservas_nicks if n.strip()}
+    if reservas_nicks and ev.tamanho_equipe != 4:
+        raise HTTPException(400, 'Reservas são permitidos apenas no CS 4x4 e no BR Squad.')
+    if len(reservas_nicks) > 2:
+        raise HTTPException(400, 'Cada equipe pode cadastrar no máximo 2 reservas.')
+    if titulares_nicks.intersection(reservas_nicks):
+        raise HTTPException(400, 'Um jogador não pode ser titular e reserva ao mesmo tempo.')
+    todos_nicks = titulares_nicks.union(reservas_nicks)
+    membros = db.scalars(select(JogadorModel).where(func.lower(JogadorModel.nick).in_(todos_nicks))).all()
+    if len(membros) != len(todos_nicks):
         raise HTTPException(400, 'Um ou mais nicks informados nao existem.')
-    if len(membros) != ev.tamanho_equipe:
+    if len(titulares_nicks) != ev.tamanho_equipe:
         raise HTTPException(400, f'Esse formato exige exatamente {ev.tamanho_equipe} jogador(es) por equipe.')
     ids = [m.id for m in membros]
     ja_inscrito = db.scalar(select(MembroEquipeCampeonatoModel)
@@ -2809,6 +2829,8 @@ def inscrever_equipe(campeonato_id: int, body: InscreverEquipeBody,
     db.add(EquipeGuildaModel(equipe_id=equipe.id, guilda_id=guilda.id))
     for membro in membros:
         db.add(MembroEquipeCampeonatoModel(equipe_id=equipe.id, jogador_id=membro.id))
+        if membro.nick.lower() in reservas_nicks:
+            db.add(ReservaEquipeCampeonatoModel(equipe_id=equipe.id, jogador_id=membro.id))
     db.commit()
     return {'message': 'Equipe inscrita com sucesso.', 'equipe': _serializar_equipe(db, equipe)}
 

@@ -382,6 +382,14 @@ class MembroEquipeCampeonatoModel(Base):
     jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
 
 
+class ReservaEquipeCampeonatoModel(Base):
+    """Reserva não ocupa vaga titular e não participa da divisão automática do prêmio."""
+    __tablename__ = 'reservas_equipes_campeonato'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonato.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+
+
 class ResultadoEquipeCampeonatoModel(Base):
     __tablename__ = 'resultados_equipes_campeonato'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)

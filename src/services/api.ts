@@ -322,7 +322,7 @@ export interface BonusResultadoInput { jogador_id: number; colocacao: number; ab
 
 export interface MembroEquipe { id: number; nick: string; nome: string; }
 export interface GuildaIdentidade { nome: string; logo_url?: string | null; }
-export interface EquipeCampeonato { id: number; nome: string; capitao_id: number; capitao_nick?: string; membros: MembroEquipe[]; salas?: BonusSala[]; guilda?: GuildaIdentidade | null; }
+export interface EquipeCampeonato { id: number; nome: string; capitao_id: number; capitao_nick?: string; membros: MembroEquipe[]; reservas?: MembroEquipe[]; salas?: BonusSala[]; guilda?: GuildaIdentidade | null; }
 export interface PlacarEquipe { equipe_id: number; equipe: string; posicao: number; pontos: number; abates: number; partidas: number; melhor_colocacao: number | null; guilda?: GuildaIdentidade | null; }
 export interface CampeonatoEquipe {
   id: number; nome: string; tipo: 'cs_4x4' | 'br'; modo: '4x4' | 'solo' | 'duo' | 'squad'; tamanho_equipe: number;
@@ -418,8 +418,8 @@ export const apiService = {
     const res = await api.get(`/equipes/${campeonatoId}/minha-equipe`);
     return (res.data?.equipe ?? null) as EquipeCampeonato | null;
   },
-  async inscreverEquipe(campeonatoId: number, nomeEquipe: string, membrosNicks: string[], nomeGuilda?: string, logoData?: string): Promise<any> {
-    return (await api.post(`/equipes/${campeonatoId}/inscrever`, { nome_equipe: nomeEquipe, membros_nicks: membrosNicks, nome_guilda: nomeGuilda, logo_data: logoData })).data;
+  async inscreverEquipe(campeonatoId: number, nomeEquipe: string, membrosNicks: string[], reservasNicks: string[] = [], nomeGuilda?: string, logoData?: string): Promise<any> {
+    return (await api.post(`/equipes/${campeonatoId}/inscrever`, { nome_equipe: nomeEquipe, membros_nicks: membrosNicks, reservas_nicks: reservasNicks, nome_guilda: nomeGuilda, logo_data: logoData })).data;
   },
   async criarCampeonatoEquipe(payload: any): Promise<CampeonatoEquipe> {
     return (await api.post('/admin/equipes/criar', payload)).data as CampeonatoEquipe;
