@@ -1,9 +1,27 @@
-import { Crown, Shield, Swords, Target, Trophy, Users } from 'lucide-react';
+import { Crown, Shield, Trophy, Users } from 'lucide-react';
 
-const frentes = [
-  { nome: 'Linha de frente', funcao: 'CS // Controle e pressao', Icone: Swords, vagas: 4 },
-  { nome: 'Elite Battle Royale', funcao: 'BR // Sobrevivencia e decisao', Icone: Target, vagas: 4 },
-  { nome: 'Capitaes da tropa', funcao: 'Lideranca // Estrategia e uniao', Icone: Crown, vagas: 2 },
+type Membro = { nome: string; funcao: string; valores: string; posicao: string };
+type Time = { nome: string; tipo: string; arte: string; lema: string; membros: Membro[] };
+
+const times: Time[] = [
+  {
+    nome: 'Time Alfa', tipo: 'Line-up oficial // FlowFire Guilda', arte: '/guilda-time-alfa.jpeg', lema: 'Juntos somos mais fortes.',
+    membros: [
+      { nome: '_.MIGUEL.X77', funcao: 'Capitao', valores: 'Lideranca • Coragem • Superacao', posicao: '14%' },
+      { nome: 'DANTEZ', funcao: 'Assault', valores: 'Agressividade • Foco • Impacto', posicao: '39%' },
+      { nome: 'LP PRECOSE', funcao: 'Treinador', valores: 'Estrategia • Visao • Lideranca', posicao: '63%' },
+      { nome: 'CRD PURO', funcao: 'Suporte', valores: 'Suporte • Lealdade • Confianca', posicao: '87%' },
+    ],
+  },
+  {
+    nome: 'Time Beta', tipo: 'Line-up oficial // FlowFire Guilda', arte: '/guilda-time-beta.jpeg', lema: 'Precisao, protecao e controle.',
+    membros: [
+      { nome: '777-666', funcao: 'Capitao', valores: 'Lider • Foco • Agressividade', posicao: '14%' },
+      { nome: 'DREEZY', funcao: 'Atirador', valores: 'Precisao • Calma • Eficiencia', posicao: '39%' },
+      { nome: 'DNBRAM.OFIXU', funcao: 'Suporte', valores: 'Protecao • Lealdade • Estrategia', posicao: '63%' },
+      { nome: 'BRUXO', funcao: 'Estrategista', valores: 'Inteligencia • Visao • Controle', posicao: '87%' },
+    ],
+  },
 ];
 
 export function GuildaFlowFire() {
@@ -20,24 +38,25 @@ export function GuildaFlowFire() {
     </section>
 
     <section className="max-w-6xl mx-auto px-1">
-      <div className="ff-section-title"><div><span className="ff-kicker">O codigo da guilda</span><h2>UMA TROPA. VÁRIAS LENDAS.</h2></div><p>O painel vai registrar as line-ups oficiais e os feitos que cada membro construiu no jogo.</p></div>
+      <div className="ff-section-title"><div><span className="ff-kicker">O codigo da guilda</span><h2>UMA TROPA. VARIAS LENDAS.</h2></div><p>O painel registra as line-ups oficiais e os feitos que cada membro construiu no jogo.</p></div>
       <div className="ff-guild-manifesto">
         <div><b>01</b><h3>Merito acima de tudo</h3><p>A vaga e conquistada em jogo: atitude, constancia e desempenho contam.</p></div>
-        <div><b>02</b><h3>Times com identidade</h3><p>Cada line tera seu nome, emblema, jogadores e historia registrada.</p></div>
+        <div><b>02</b><h3>Times com identidade</h3><p>Cada line tem seu emblema, seus jogadores e sua propria assinatura.</p></div>
         <div><b>03</b><h3>Legado visivel</h3><p>Campeonatos, titulos e jogadas marcantes vao formar o arquivo da Guilda.</p></div>
       </div>
     </section>
 
-    <section className="max-w-6xl mx-auto px-1">
-      <div className="ff-section-title"><div><span className="ff-kicker">Line-ups oficiais</span><h2>A ESCALAÇÃO ESTÁ CHEGANDO.</h2></div><p>Os perfis serao revelados assim que os jogadores e seus emblemas forem definidos.</p></div>
-      <div className="ff-guild-squads">
-        {frentes.map(({ nome, funcao, Icone, vagas }) => <article className="ff-guild-squad" key={nome}>
-          <div className="ff-guild-squad-head"><div className="ff-guild-icon"><Icone /></div><div><span>{funcao}</span><h3>{nome}</h3></div><em>{vagas} vagas</em></div>
-          <div className="ff-guild-slots">{Array.from({ length: vagas }, (_, index) => <div className="ff-guild-slot" key={index}><span>{String(index + 1).padStart(2, '0')}</span><div><b>Identidade em preparacao</b><small>Emblema e historia do jogador</small></div></div>)}</div>
-        </article>)}
-      </div>
+    <section className="max-w-6xl mx-auto px-1 space-y-9">
+      <div className="ff-section-title"><div><span className="ff-kicker">Line-ups oficiais</span><h2>A TROPA JÁ ESTÁ ESCALADA.</h2></div><p>Dois times, oito identidades e uma so bandeira: FlowFire.</p></div>
+      {times.map((time) => <article className="ff-guild-team" key={time.nome}>
+        <div className="ff-guild-team-art"><img src={time.arte} alt={`Emblemas oficiais do ${time.nome} FlowFire`} /><div><span>{time.tipo}</span><h3>{time.nome}</h3><p>{time.lema}</p></div></div>
+        <div className="ff-guild-roster">{time.membros.map((membro, index) => <article className="ff-guild-player" key={membro.nome}>
+          <div className="ff-guild-player-art" style={{ backgroundImage: `url(${time.arte})`, backgroundPosition: `${membro.posicao} 48%` }}><span>0{index + 1}</span></div>
+          <div className="ff-guild-player-copy"><p>{membro.funcao}</p><h4>{membro.nome}</h4><small>{membro.valores}</small><em>Historia em breve</em></div>
+        </article>)}</div>
+      </article>)}
     </section>
 
-    <section className="ff-guild-archive max-w-6xl mx-auto"><div><span className="ff-kicker">Arquivo da guilda</span><h2>A HISTÓRIA COMEÇA<br />NA PRÓXIMA QUEDA.</h2><p>Quando voce enviar os nomes e emblemas, cada card vira um perfil oficial: funcao, time, conquistas e a historia do jogador no FlowFire.</p></div><Crown aria-hidden="true" /></section>
+    <section className="ff-guild-archive max-w-6xl mx-auto"><div><span className="ff-kicker">Arquivo da guilda</span><h2>A HISTORIA COMECA<br />NA PROXIMA QUEDA.</h2><p>Os emblemas e a escalação oficial ja estao aqui. Quando voce enviar as historias, cada perfil vai receber seu capitulo dentro da Guilda FlowFire.</p></div><Crown aria-hidden="true" /></section>
   </div>;
 }
