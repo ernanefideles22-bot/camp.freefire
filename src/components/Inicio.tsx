@@ -29,6 +29,11 @@ export function Inicio({ onAbrirCampeonatos, onAbrirRanking, onAbrirGuilda }: Pr
       <div className="ff-home-hud"><span><i /> Arena online</span><b>SEASON<br />01</b></div>
     </section>
 
+    <section className="ff-home-guild">
+      <div className="ff-home-guild-copy"><span className="ff-kicker flex items-center gap-2"><Crown className="w-3.5 h-3.5" /> Destaque FlowFire</span><h2>A GUILDA JÁ<br /><span>ENTROU NA ARENA.</span></h2><p>Time Alfa e Time Beta representam os melhores da FlowFire. Conheça os emblemas, as formações e as histórias que estão construindo o legado da nossa irmandade.</p><div className="ff-home-guild-stats"><span><b>02</b> Times oficiais</span><span><b>08</b> Lendas escaladas</span></div><button onClick={onAbrirGuilda} className="ff-home-cta cursor-pointer"><Crown className="w-4 h-4" /> Conhecer a Guilda <ArrowRight className="w-4 h-4" /></button></div>
+      <div className="ff-home-guild-art" aria-hidden="true"><img className="ff-home-guild-alfa" src="/guilda-time-alfa.jpeg" alt="" /><img className="ff-home-guild-beta" src="/guilda-time-beta.jpeg" alt="" /><div>FLOWFIRE<br /><b>GUILDA</b></div></div>
+    </section>
+
     <section className="max-w-6xl mx-auto px-1">
       <div className="ff-section-title"><div><span className="ff-kicker">Escolha seu combate</span><h2>JOGUE DO SEU JEITO.</h2></div><p>Uma central de campeonato, três formas de entrar na disputa.</p></div>
       <div className="ff-home-modes">
