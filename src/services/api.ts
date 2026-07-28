@@ -427,6 +427,7 @@ export const apiService = {
     return (await api.post('/admin/equipes/criar', payload)).data as CampeonatoEquipe;
   },
   async iniciarCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/iniciar`)).data; },
+  async reabrirInscricoesCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/reabrir-inscricoes`)).data; },
   async cancelarCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/cancelar`)).data; },
   async listarEquipesInscritas(id: number): Promise<EquipeCampeonato[]> { return (await api.get(`/admin/equipes/${id}/inscritos`)).data.equipes ?? []; },
   async lancarResultadoEquipe(id: number, ordem: number, resultados: { equipe_id: number; colocacao: number; abates: number }[]): Promise<any> {
@@ -547,6 +548,9 @@ export const apiService = {
   async iniciarBonus(eventoId: number): Promise<any> {
     const res = await api.post(`/admin/bonus/${eventoId}/iniciar`);
     return res.data;
+  },
+  async reabrirInscricoesBonus(eventoId: number): Promise<any> {
+    return (await api.post(`/admin/bonus/${eventoId}/reabrir-inscricoes`)).data;
   },
   async definirSalaBonus(eventoId: number, ordem: number, salaId: string, salaSenha: string, horario?: string): Promise<any> {
     const res = await api.post(`/admin/bonus/${eventoId}/sala`, { ordem, sala_id: salaId, sala_senha: salaSenha, horario });
@@ -742,6 +746,7 @@ export const apiService = {
   async obterMinhaInscricaoPaga(id: number): Promise<MinhaInscricaoBonus> { return (await api.get(`/pago/${id}/minha-inscricao`)).data; },
   async criarPago(payload: any): Promise<EventoBonus> { return (await api.post('/admin/pago/criar', payload)).data; },
   async iniciarPago(id: number): Promise<any> { return (await api.post(`/admin/pago/${id}/iniciar`)).data; },
+  async reabrirInscricoesPago(id: number): Promise<any> { return (await api.post(`/admin/pago/${id}/reabrir-inscricoes`)).data; },
   async definirSalaPaga(id: number, ordem: number, sala_id: string, sala_senha: string, horario?: string): Promise<any> { return (await api.post(`/admin/pago/${id}/sala`, { ordem, sala_id, sala_senha, horario })).data; },
   async lancarResultadoPago(id: number, ordem: number, resultados: BonusResultadoInput[]): Promise<any> { return (await api.post(`/admin/pago/${id}/resultado`, { ordem, resultados })).data; },
   async apurarPago(id: number): Promise<any> { return (await api.post(`/admin/pago/${id}/apurar`)).data; },

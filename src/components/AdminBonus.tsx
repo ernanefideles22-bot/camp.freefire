@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Gift, Trophy, Users, Play, Check, X, RefreshCw, AlertTriangle, Plus, Trash2, Send, Ban, Upload } from 'lucide-react';
+import { Gift, Trophy, Users, Play, Check, X, RefreshCw, RotateCcw, AlertTriangle, Plus, Trash2, Send, Ban, Upload } from 'lucide-react';
 import { apiService } from '../services/api';
 import type { EventoBonus, BonusInscrito, PlacarBonusItem, PagamentoBonus, BonusResultadoInput } from '../services/api';
 import { Spinner } from './Spinner';
@@ -303,6 +303,10 @@ export const AdminBonus: React.FC<AdminBonusProps> = ({ onAddToast }) => {
           {/* EM ANDAMENTO */}
           {evento.status === 'em_andamento' && (
             <div className="space-y-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+                <p className="text-xs text-amber-200">Fechou as inscrições por engano? Volte para a criação antes de liberar uma sala ou lançar resultados.</p>
+                <button disabled={busy} onClick={() => window.confirm('Reabrir as inscrições deste evento?') && guard(() => apiService.reabrirInscricoesBonus(evento.id), 'Inscrições reabertas')} className="flex items-center gap-2 rounded-lg border border-amber-500/50 px-3 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/10 cursor-pointer disabled:opacity-40"><RotateCcw className="w-3.5 h-3.5" />Voltar às inscrições</button>
+              </div>
               {/* Salas das 3 quedas */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {Array.from({ length: evento.total_rodadas ?? 3 }, (_, i) => i + 1).map(o => (

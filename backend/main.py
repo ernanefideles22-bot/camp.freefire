@@ -1935,6 +1935,25 @@ def _salvar_sala_evento(db: Session, categoria: str, evento_id: int, body: Bonus
         setattr(legado, f'sala{body.ordem}_senha', dados['sala_senha'])
         setattr(legado, f'sala{body.ordem}_horario', dados['horario'])
 
+
+def _reabrir_inscricoes_admin(db: Session, evento, categoria: str, resultado_model):
+    """Desfaz um inicio acidental antes de qualquer sala ou resultado ser publicado."""
+    if evento.status != 'em_andamento':
+        raise HTTPException(400, 'Somente eventos recém-iniciados podem ter as inscrições reabertas.')
+    tem_sala = db.scalar(select(SalaEventoModel.id).where(
+        SalaEventoModel.categoria == categoria,
+        SalaEventoModel.evento_id == evento.id,
+    )) is not None
+    tem_sala_legada = any(getattr(evento, f'sala{ordem}_id', None) for ordem in range(1, 4))
+    tem_resultado = db.scalar(select(resultado_model.id).where(
+        (resultado_model.campeonato_id if categoria == 'equipe' else resultado_model.evento_id) == evento.id
+    )) is not None
+    if tem_sala or tem_sala_legada or tem_resultado:
+        raise HTTPException(400, 'Não é possível reabrir: já existe sala liberada ou resultado lançado neste evento.')
+    evento.status = 'inscricao'
+    db.commit()
+    return {'message': 'Inscrições reabertas. O evento voltou para a etapa de criação.'}
+
 def _evento_bonus_atual(db: Session):
     """Ultimo evento que ainda nao foi finalizado (pago/cancelado)."""
     return db.scalar(select(EventoBonusModel)
@@ -2164,6 +2183,15 @@ def bonus_iniciar(evento_id: int, _admin: JogadorModel = Depends(require_admin),
     ev.status = 'em_andamento'
     db.commit()
     return {'message': f'Evento iniciado com {total} jogadores. Inscricoes fechadas.', 'total': total}
+
+
+@app.post('/admin/bonus/{evento_id}/reabrir-inscricoes')
+def bonus_reabrir_inscricoes(evento_id: int, _admin: JogadorModel = Depends(require_admin),
+                              db: Session = Depends(get_db)):
+    ev = db.get(EventoBonusModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Evento nao encontrado')
+    return _reabrir_inscricoes_admin(db, ev, 'bonus', ResultadoBonusModel)
 
 
 @app.post('/admin/bonus/{evento_id}/sala')
@@ -2492,6 +2520,13 @@ def pago_iniciar(evento_id: int, _admin: JogadorModel = Depends(require_admin), 
     total = _pago_inscritos(db, ev.id)
     if total < ev.min_jogadores: raise HTTPException(400, f'Faltam inscritos: {total}/{ev.min_jogadores}.')
     ev.status = 'em_andamento'; db.commit(); return {'message': 'Torneio iniciado.', 'total': total}
+
+@app.post('/admin/pago/{evento_id}/reabrir-inscricoes')
+def pago_reabrir_inscricoes(evento_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(EventoPagoModel, evento_id)
+    if not ev:
+        raise HTTPException(404, 'Torneio nao encontrado.')
+    return _reabrir_inscricoes_admin(db, ev, 'pago', ResultadoPagoModel)
 
 @app.post('/admin/pago/{evento_id}/sala')
 def pago_sala(evento_id: int, body: BonusSalaBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
@@ -2912,6 +2947,15 @@ def iniciar_campeonato_equipe(campeonato_id: int, _admin: JogadorModel = Depends
     total = db.scalar(select(func.count()).select_from(EquipeCampeonatoModel).where(EquipeCampeonatoModel.campeonato_id == ev.id)) or 0
     if total < ev.min_equipes: raise HTTPException(400, f'Faltam equipes: {total}/{ev.min_equipes}.')
     ev.status = 'em_andamento'; db.commit(); return {'message': 'Campeonato iniciado.'}
+
+
+@app.post('/admin/equipes/{campeonato_id}/reabrir-inscricoes')
+def reabrir_inscricoes_campeonato_equipe(campeonato_id: int, _admin: JogadorModel = Depends(require_admin),
+                                          db: Session = Depends(get_db)):
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    if not ev:
+        raise HTTPException(404, 'Campeonato nao encontrado.')
+    return _reabrir_inscricoes_admin(db, ev, 'equipe', ResultadoEquipeRodadaModel)
 
 
 @app.post('/admin/equipes/{campeonato_id}/cancelar')
