@@ -27,6 +27,8 @@ from models import (JogadorModel, QuedaModel, InscricaoModel,
                     ReservaEquipeCampeonatoModel,
                     CriadorFlowFireModel, CampeonatoCriadorModel,
                     InscricaoCampeonatoCriadorModel, ResultadoCampeonatoCriadorModel,
+                    EquipeCampeonatoCriadorModel, MembroEquipeCampeonatoCriadorModel,
+                    EquipeGuildaCampeonatoCriadorModel, ResultadoEquipeCampeonatoCriadorModel,
                     PagamentoCampeonatoCriadorModel, TemporadaRankingModel, utcnow)
 from auth import (hash_senha, verificar_senha, criar_access_token, criar_refresh_token,
                   decodificar_token, obter_usuario_atual, require_admin)
@@ -3037,12 +3039,20 @@ class CriarCampeonatoCriadorBody(BaseModel):
     percentual_criador: float = 0.0
     data_hora: Optional[str] = None
 
+class InscreverEquipeCriadorBody(BaseModel):
+    nome_equipe: str
+    membros_nicks: List[str] = []
+    reservas_nicks: List[str] = []
+    nome_guilda: Optional[str] = None
+    logo_data: Optional[str] = None
+
 class SalaCriadorBody(BaseModel):
     sala_id: str
     sala_senha: Optional[str] = None
 
 class ResultadoCriadorItem(BaseModel):
-    jogador_id: int
+    jogador_id: Optional[int] = None
+    equipe_id: Optional[int] = None
     colocacao: int
     abates: int = 0
 
@@ -3056,6 +3066,16 @@ def _slug_criador(valor: str) -> str:
         raise HTTPException(400, 'Use um link entre 3 e 40 caracteres: letras, numeros e hifen.')
     return slug
 
+def _config_formato_criador(formato: str) -> tuple[str, int]:
+    valor = (formato or 'BR Solo').strip().lower()
+    if valor == 'br duo': return 'equipe', 2
+    if valor == 'br squad': return 'equipe', 4
+    encontrado = re.fullmatch(r'cs\s+([1-4])x\1', valor)
+    if encontrado:
+        tamanho = int(encontrado.group(1))
+        return ('equipe' if tamanho > 1 else 'individual'), tamanho
+    return 'individual', 1
+
 def _criador_do_jogador(db: Session, jogador_id: int, aprovado: bool = False) -> Optional[CriadorFlowFireModel]:
     criador = db.scalar(select(CriadorFlowFireModel).where(CriadorFlowFireModel.jogador_id == jogador_id))
     if aprovado and (not criador or criador.status != 'aprovado'):
@@ -3066,9 +3086,41 @@ def _inscritos_criador(db: Session, evento_id: int) -> list[InscricaoCampeonatoC
     return list(db.scalars(select(InscricaoCampeonatoCriadorModel)
                            .where(InscricaoCampeonatoCriadorModel.campeonato_id == evento_id)).all())
 
+def _equipes_criador(db: Session, evento_id: int) -> list[EquipeCampeonatoCriadorModel]:
+    return list(db.scalars(select(EquipeCampeonatoCriadorModel)
+                           .where(EquipeCampeonatoCriadorModel.campeonato_id == evento_id)).all())
+
+def _membros_equipe_criador(db: Session, equipe_id: int, reservas: bool = False) -> list[JogadorModel]:
+    ids = db.scalars(select(MembroEquipeCampeonatoCriadorModel.jogador_id)
+                     .where(MembroEquipeCampeonatoCriadorModel.equipe_id == equipe_id,
+                            MembroEquipeCampeonatoCriadorModel.reserva == reservas)).all()
+    return [j for j in (db.get(JogadorModel, jogador_id) for jogador_id in ids) if j]
+
+def _serializar_equipe_criador(db: Session, equipe: EquipeCampeonatoCriadorModel) -> dict:
+    vinculo = db.scalar(select(EquipeGuildaCampeonatoCriadorModel)
+                        .where(EquipeGuildaCampeonatoCriadorModel.equipe_id == equipe.id))
+    guilda = db.get(GuildaPerfilModel, vinculo.guilda_id) if vinculo else None
+    return {'id': equipe.id, 'nome': equipe.nome, 'capitao_id': equipe.capitao_id,
+            'membros': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in _membros_equipe_criador(db, equipe.id)],
+            'reservas': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in _membros_equipe_criador(db, equipe.id, True)],
+            'guilda': {'nome': guilda.nome, 'logo_url': guilda.logo_data} if guilda else None}
+
+def _placar_equipes_criador(db: Session, evento_id: int) -> list[dict]:
+    linhas = db.scalars(select(ResultadoEquipeCampeonatoCriadorModel)
+                        .where(ResultadoEquipeCampeonatoCriadorModel.campeonato_id == evento_id)
+                        .order_by(ResultadoEquipeCampeonatoCriadorModel.colocacao)).all()
+    return [{'equipe_id': linha.equipe_id, 'equipe': equipe.nome, 'colocacao': linha.colocacao, 'abates': linha.abates,
+             'guilda': _serializar_equipe_criador(db, equipe)['guilda']}
+            for linha in linhas if (equipe := db.get(EquipeCampeonatoCriadorModel, linha.equipe_id))]
+
 def _cofre_criador(db: Session, evento: CampeonatoCriadorModel) -> dict:
-    inscritos = _inscritos_criador(db, evento.id)
-    arrecadado = round(sum(item.valor_pago for item in inscritos), 2)
+    tipo_inscricao, _ = _config_formato_criador(evento.formato)
+    if tipo_inscricao == 'equipe':
+        inscritos = _equipes_criador(db, evento.id)
+        arrecadado = round(sum(item.valor_pago for item in inscritos), 2)
+    else:
+        inscritos = _inscritos_criador(db, evento.id)
+        arrecadado = round(sum(item.valor_pago for item in inscritos), 2)
     taxa_flowfire = round(arrecadado * TAXA_CRIADOR_FLOWFIRE, 2)
     return {'inscritos': len(inscritos), 'arrecadado': arrecadado, 'taxa_flowfire': taxa_flowfire,
             'cofre_evento': round(arrecadado - taxa_flowfire, 2)}
@@ -3087,16 +3139,18 @@ def _serializar_campeonato_criador(db: Session, evento: CampeonatoCriadorModel, 
     dono = db.get(JogadorModel, criador.jogador_id)
     cofre = _cofre_criador(db, evento)
     dados = {'id': evento.id, 'nome': evento.nome, 'slug': evento.slug, 'formato': evento.formato,
+             'tipo_inscricao': _config_formato_criador(evento.formato)[0], 'tamanho_equipe': _config_formato_criador(evento.formato)[1],
              'descricao': evento.descricao, 'status': evento.status, 'max_jogadores': evento.max_jogadores,
              'taxa_inscricao': evento.taxa_inscricao, 'data_hora': evento.data_hora,
              'premios_percentuais': json.loads(evento.premios_percentuais_json or '[]'),
              'percentual_criador': evento.percentual_criador, 'criador': {'slug': criador.slug, 'nick': dono.nick},
-             'placar': _placar_criador(db, evento.id), **cofre}
+             'placar': _placar_criador(db, evento.id), 'placar_equipes': _placar_equipes_criador(db, evento.id), **cofre}
     if not publico:
         dados.update({'sala_id': evento.sala_id, 'sala_senha': evento.sala_senha,
                       'inscritos_jogadores': [{'id': item.jogador_id, 'nick': db.get(JogadorModel, item.jogador_id).nick,
                                                'guilda': ({'nome': guilda.nome, 'logo_url': guilda.logo_data} if (guilda := _identidade_guilda_do_jogador(db, item.jogador_id)) else None)}
-                                              for item in inscritos]})
+                                              for item in _inscritos_criador(db, evento.id)],
+                      'inscritos_equipes': [_serializar_equipe_criador(db, equipe) for equipe in _equipes_criador(db, evento.id)]})
     return dados
 
 def _dono_evento_criador(db: Session, evento_id: int, jogador: JogadorModel) -> CampeonatoCriadorModel:
@@ -3189,7 +3243,8 @@ def criar_evento_criador(body: CriarCampeonatoCriadorBody, jogador: JogadorModel
     percentual_criador = round(float(body.percentual_criador), 2)
     if not premios or percentual_criador < 0 or abs(sum(premios) + percentual_criador - 100) > 0.01:
         raise HTTPException(400, 'Os premios e a parte do criador precisam somar 100% dos 88% do cofre.')
-    evento = CampeonatoCriadorModel(criador_id=criador.id, nome=nome, slug=slug, formato=(body.formato or 'BR Solo')[:60],
+    formato = (body.formato or 'BR Solo')[:60]
+    evento = CampeonatoCriadorModel(criador_id=criador.id, nome=nome, slug=slug, formato=formato,
         descricao=(body.descricao or '').strip()[:500] or None, max_jogadores=max(2, min(100, int(body.max_jogadores))),
         taxa_inscricao=round(max(.01, float(body.taxa_inscricao)), 2), premios_percentuais_json=json.dumps(premios),
         percentual_criador=percentual_criador, data_hora=(body.data_hora or '').strip()[:80] or None)
@@ -3206,6 +3261,7 @@ def publicar_evento_criador(evento_id: int, jogador: JogadorModel = Depends(obte
 def inscrever_evento_criador(evento_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
     evento = db.get(CampeonatoCriadorModel, evento_id)
     if not evento or evento.status != 'inscricao': raise HTTPException(400, 'Inscricoes nao estao abertas.')
+    if _config_formato_criador(evento.formato)[0] == 'equipe': raise HTTPException(400, 'Este campeonato recebe equipes. Use a inscricao de equipe.')
     if db.scalar(select(InscricaoCampeonatoCriadorModel).where(InscricaoCampeonatoCriadorModel.campeonato_id == evento_id,
                                                                 InscricaoCampeonatoCriadorModel.jogador_id == jogador.id)):
         raise HTTPException(400, 'Voce ja esta inscrito neste campeonato.')
@@ -3216,11 +3272,60 @@ def inscrever_evento_criador(evento_id: int, jogador: JogadorModel = Depends(obt
     db.add(InscricaoCampeonatoCriadorModel(campeonato_id=evento.id, jogador_id=jogador.id, valor_pago=evento.taxa_inscricao))
     db.commit(); return {'message': 'Inscricao confirmada. 12% foram reservados ao FlowFire e 88% ao cofre do evento.'}
 
+@app.post('/criadores/eventos/{evento_id}/inscrever-equipe')
+def inscrever_equipe_evento_criador(evento_id: int, body: InscreverEquipeCriadorBody,
+                                     jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    evento = db.get(CampeonatoCriadorModel, evento_id)
+    if not evento or evento.status != 'inscricao': raise HTTPException(400, 'Inscricoes nao estao abertas.')
+    tipo_inscricao, tamanho_equipe = _config_formato_criador(evento.formato)
+    if tipo_inscricao != 'equipe': raise HTTPException(400, 'Este campeonato recebe jogadores individuais.')
+    nome_equipe = body.nome_equipe.strip()[:60]
+    if not nome_equipe: raise HTTPException(400, 'Informe o nome da equipe.')
+    if db.scalar(select(EquipeCampeonatoCriadorModel).where(EquipeCampeonatoCriadorModel.campeonato_id == evento.id,
+                                                              func.lower(EquipeCampeonatoCriadorModel.nome) == nome_equipe.lower())):
+        raise HTTPException(400, 'Ja existe uma equipe com esse nome.')
+    if len(_equipes_criador(db, evento.id)) >= evento.max_jogadores: raise HTTPException(400, 'Campeonato lotado.')
+    titulares_nicks = {n.strip().lower() for n in body.membros_nicks if n.strip()}; titulares_nicks.add(jogador.nick.lower())
+    reservas_nicks = {n.strip().lower() for n in body.reservas_nicks if n.strip()}
+    if reservas_nicks and tamanho_equipe != 4: raise HTTPException(400, 'Reservas sao permitidos somente em equipes de 4 jogadores.')
+    if len(reservas_nicks) > 2: raise HTTPException(400, 'Cada equipe pode ter no maximo 2 reservas.')
+    if titulares_nicks.intersection(reservas_nicks): raise HTTPException(400, 'Um jogador nao pode ser titular e reserva.')
+    if len(titulares_nicks) != tamanho_equipe: raise HTTPException(400, f'Este formato exige {tamanho_equipe} titulares.')
+    todos_nicks = titulares_nicks.union(reservas_nicks)
+    membros = db.scalars(select(JogadorModel).where(func.lower(JogadorModel.nick).in_(todos_nicks))).all()
+    if len(membros) != len(todos_nicks): raise HTTPException(400, 'Um ou mais jogadores nao foram encontrados.')
+    ids = [m.id for m in membros]
+    ocupados = db.scalar(select(MembroEquipeCampeonatoCriadorModel)
+                         .join(EquipeCampeonatoCriadorModel, MembroEquipeCampeonatoCriadorModel.equipe_id == EquipeCampeonatoCriadorModel.id)
+                         .where(EquipeCampeonatoCriadorModel.campeonato_id == evento.id,
+                                MembroEquipeCampeonatoCriadorModel.jogador_id.in_(ids)))
+    if ocupados: raise HTTPException(400, 'Um jogador ja esta inscrito em outra equipe.')
+    capitao = _lock_jogador(db, jogador.id)
+    if capitao.saldo < evento.taxa_inscricao: raise HTTPException(400, 'Saldo insuficiente para a inscricao da equipe.')
+    registrar_transacao(db, capitao, tipo='inscricao_equipe_criador', delta_saldo=-evento.taxa_inscricao, ref=f'criador:{evento.id}')
+    logo_data, nome_guilda = _validar_logo_guilda(body.logo_data), (body.nome_guilda or '').strip()[:60] or nome_equipe
+    guilda = _identidade_guilda_por_capitao(db, capitao.id)
+    if guilda:
+        if (body.nome_guilda or '').strip(): guilda.nome = nome_guilda
+        if logo_data: guilda.logo_data = logo_data
+    else:
+        guilda = GuildaPerfilModel(capitao_id=capitao.id, nome=nome_guilda, logo_data=logo_data); db.add(guilda); db.flush()
+    equipe = EquipeCampeonatoCriadorModel(campeonato_id=evento.id, nome=nome_equipe, capitao_id=capitao.id, valor_pago=evento.taxa_inscricao)
+    db.add(equipe); db.flush(); db.add(EquipeGuildaCampeonatoCriadorModel(equipe_id=equipe.id, guilda_id=guilda.id))
+    for membro in membros:
+        reserva = membro.nick.lower() in reservas_nicks
+        db.add(MembroEquipeCampeonatoCriadorModel(equipe_id=equipe.id, jogador_id=membro.id, reserva=reserva))
+        vinculo = db.scalar(select(MembroGuildaPerfilModel).where(MembroGuildaPerfilModel.jogador_id == membro.id))
+        if vinculo: vinculo.guilda_id = guilda.id
+        else: db.add(MembroGuildaPerfilModel(guilda_id=guilda.id, jogador_id=membro.id))
+    db.commit(); return {'message': 'Equipe inscrita. 12% foram reservados ao FlowFire e 88% ao cofre do evento.', 'equipe': _serializar_equipe_criador(db, equipe)}
+
 @app.post('/criadores/eventos/{evento_id}/iniciar')
 def iniciar_evento_criador(evento_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
     evento = _dono_evento_criador(db, evento_id, jogador)
     if evento.status != 'inscricao': raise HTTPException(400, 'Campeonato nao pode ser iniciado agora.')
-    if len(_inscritos_criador(db, evento.id)) < 2: raise HTTPException(400, 'Sao necessarios pelo menos dois inscritos.')
+    inscritos = _equipes_criador(db, evento.id) if _config_formato_criador(evento.formato)[0] == 'equipe' else _inscritos_criador(db, evento.id)
+    if len(inscritos) < 2: raise HTTPException(400, 'Sao necessarias pelo menos duas inscricoes.')
     evento.status = 'em_andamento'; db.commit(); return {'message': 'Campeonato iniciado.'}
 
 @app.post('/criadores/eventos/{evento_id}/sala')
@@ -3235,6 +3340,18 @@ def sala_evento_criador(evento_id: int, body: SalaCriadorBody, jogador: JogadorM
 def resultado_evento_criador(evento_id: int, body: ResultadosCriadorBody, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
     evento = _dono_evento_criador(db, evento_id, jogador)
     if evento.status != 'em_andamento': raise HTTPException(400, 'Campeonato nao esta em andamento.')
+    if _config_formato_criador(evento.formato)[0] == 'equipe':
+        equipes = {item.id for item in _equipes_criador(db, evento.id)}
+        ids, posicoes = set(), set()
+        if not body.resultados: raise HTTPException(400, 'Informe ao menos um resultado.')
+        for item in body.resultados:
+            if not item.equipe_id or item.equipe_id not in equipes or item.equipe_id in ids or item.colocacao in posicoes or item.colocacao < 1 or item.abates < 0:
+                raise HTTPException(400, 'Resultado de equipe invalido ou duplicado.')
+            ids.add(item.equipe_id); posicoes.add(item.colocacao)
+        db.execute(delete(ResultadoEquipeCampeonatoCriadorModel).where(ResultadoEquipeCampeonatoCriadorModel.campeonato_id == evento.id))
+        for item in body.resultados:
+            db.add(ResultadoEquipeCampeonatoCriadorModel(campeonato_id=evento.id, equipe_id=item.equipe_id, colocacao=item.colocacao, abates=item.abates))
+        db.commit(); return {'message': 'Placar das equipes salvo. Revise antes de enviar ao FlowFire.'}
     inscritos = {item.jogador_id for item in _inscritos_criador(db, evento.id)}
     ids, posicoes = set(), set()
     if not body.resultados: raise HTTPException(400, 'Informe ao menos um resultado.')
@@ -3250,12 +3367,15 @@ def resultado_evento_criador(evento_id: int, body: ResultadosCriadorBody, jogado
 @app.post('/criadores/eventos/{evento_id}/ocr')
 async def ocr_evento_criador(evento_id: int, imagem: UploadFile = File(...), jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
     evento = _dono_evento_criador(db, evento_id, jogador)
-    inscritos = _inscritos_criador(db, evento.id)
+    tipo_inscricao, _ = _config_formato_criador(evento.formato)
+    inscritos = _equipes_criador(db, evento.id) if tipo_inscricao == 'equipe' else _inscritos_criador(db, evento.id)
     if evento.status != 'em_andamento' or not inscritos: raise HTTPException(400, 'Inicie o campeonato e tenha inscritos antes de usar o OCR.')
     conteudo = await imagem.read()
     if len(conteudo) > 8 * 1024 * 1024: raise HTTPException(413, 'Imagem muito grande (max 8 MB).')
-    mapa = {db.get(JogadorModel, item.jogador_id).nick: item.jogador_id for item in inscritos}
-    prompt = ('Analise este print de placar do Free Fire. Use somente estes nicks inscritos: ' + ', '.join(mapa) + '. '
+    mapa = ({item.nome: item.id for item in inscritos} if tipo_inscricao == 'equipe'
+            else {db.get(JogadorModel, item.jogador_id).nick: item.jogador_id for item in inscritos})
+    alvo = 'nomes de equipes inscritos' if tipo_inscricao == 'equipe' else 'nicks inscritos'
+    prompt = ('Analise este print de placar do Free Fire. Use somente estes ' + alvo + ': ' + ', '.join(mapa) + '. '
               'Retorne APENAS um array JSON: [{"nick_cadastrado":str_ou_null,"colocacao":int,"abates":int}].')
     texto = await ia_generate(prompt, imagem_b64=base64.b64encode(conteudo).decode('utf-8'), mime=imagem.content_type or 'image/png')
     dados = extrair_json(texto)
@@ -3263,21 +3383,24 @@ async def ocr_evento_criador(evento_id: int, imagem: UploadFile = File(...), jog
     resultados = []
     for item in dados if isinstance(dados, list) else []:
         nick = item.get('nick_cadastrado') if isinstance(item, dict) else None
-        resultados.append({'jogador_id': mapa.get(nick), 'jogador_nick': nick, 'colocacao': item.get('colocacao', 0), 'abates': item.get('abates', 0)})
+        resultados.append({('equipe_id' if tipo_inscricao == 'equipe' else 'jogador_id'): mapa.get(nick), 'nome_encontrado': nick, 'colocacao': item.get('colocacao', 0), 'abates': item.get('abates', 0)})
     return {'resultados': resultados}
 
 @app.post('/criadores/eventos/{evento_id}/enviar-revisao')
 def enviar_revisao_evento_criador(evento_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
     evento = _dono_evento_criador(db, evento_id, jogador)
-    if evento.status != 'em_andamento' or not _placar_criador(db, evento.id): raise HTTPException(400, 'Lance o placar antes de enviar para revisao.')
+    placar = _placar_equipes_criador(db, evento.id) if _config_formato_criador(evento.formato)[0] == 'equipe' else _placar_criador(db, evento.id)
+    if evento.status != 'em_andamento' or not placar: raise HTTPException(400, 'Lance o placar antes de enviar para revisao.')
     evento.status = 'aguardando_revisao'; db.commit(); return {'message': 'Resultado enviado ao FlowFire para revisao e pagamento manual.'}
 
 @app.post('/criadores/eventos/{evento_id}/cancelar')
 def cancelar_evento_criador(evento_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
     evento = _dono_evento_criador(db, evento_id, jogador)
     if evento.status not in ('rascunho', 'inscricao'): raise HTTPException(400, 'Esse campeonato nao pode mais ser cancelado pelo criador.')
-    for inscricao in _inscritos_criador(db, evento.id):
-        conta = _lock_jogador(db, inscricao.jogador_id)
+    tipo_inscricao, _ = _config_formato_criador(evento.formato)
+    inscricoes = _equipes_criador(db, evento.id) if tipo_inscricao == 'equipe' else _inscritos_criador(db, evento.id)
+    for inscricao in inscricoes:
+        conta = _lock_jogador(db, inscricao.capitao_id if tipo_inscricao == 'equipe' else inscricao.jogador_id)
         estorno = round(inscricao.valor_pago * (1 - TAXA_CRIADOR_FLOWFIRE), 2)
         registrar_transacao(db, conta, tipo='estorno_evento_criador', delta_saldo=estorno, ref=f'criador:{evento.id}')
     evento.status = 'cancelado'; db.commit(); return {'message': 'Campeonato cancelado. 88% foram estornados; a taxa FlowFire permanece retida.'}
@@ -3305,7 +3428,9 @@ def administrar_criador(criador_id: int, acao: str, _admin: JogadorModel = Depen
 def apurar_evento_criador(evento_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     evento = db.get(CampeonatoCriadorModel, evento_id)
     if not evento or evento.status != 'aguardando_revisao': raise HTTPException(400, 'Evento nao esta aguardando revisao.')
-    placar, cofre = _placar_criador(db, evento.id), _cofre_criador(db, evento)
+    tipo_inscricao, _ = _config_formato_criador(evento.formato)
+    placar = _placar_equipes_criador(db, evento.id) if tipo_inscricao == 'equipe' else _placar_criador(db, evento.id)
+    cofre = _cofre_criador(db, evento)
     if not placar: raise HTTPException(400, 'Placar ausente.')
     percentuais = json.loads(evento.premios_percentuais_json or '[]')
     if len(placar) < len(percentuais):
@@ -3315,7 +3440,16 @@ def apurar_evento_criador(evento_id: int, _admin: JogadorModel = Depends(require
         if indice >= len(placar): break
         valor = round(cofre['cofre_evento'] * float(percentual) / 100, 2)
         pago += valor
-        if valor > 0: db.add(PagamentoCampeonatoCriadorModel(campeonato_id=evento.id, jogador_id=placar[indice]['jogador_id'], tipo='premio', colocacao=indice + 1, valor=valor))
+        if valor > 0:
+            if tipo_inscricao == 'equipe':
+                membros = _membros_equipe_criador(db, placar[indice]['equipe_id'])
+                if not membros: raise HTTPException(400, 'Equipe premiada sem titulares.')
+                centavos, resto = divmod(round(valor * 100), len(membros))
+                for posicao, membro in enumerate(membros):
+                    db.add(PagamentoCampeonatoCriadorModel(campeonato_id=evento.id, jogador_id=membro.id, tipo='premio', colocacao=indice + 1,
+                        valor=(centavos + (1 if posicao < resto else 0)) / 100))
+            else:
+                db.add(PagamentoCampeonatoCriadorModel(campeonato_id=evento.id, jogador_id=placar[indice]['jogador_id'], tipo='premio', colocacao=indice + 1, valor=valor))
     valor_criador = round(cofre['cofre_evento'] - pago, 2)
     criador = db.get(CriadorFlowFireModel, evento.criador_id)
     if valor_criador > 0: db.add(PagamentoCampeonatoCriadorModel(campeonato_id=evento.id, jogador_id=criador.jogador_id, tipo='criador', valor=valor_criador))

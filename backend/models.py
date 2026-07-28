@@ -504,11 +504,46 @@ class InscricaoCampeonatoCriadorModel(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class EquipeCampeonatoCriadorModel(Base):
+    __tablename__ = 'equipes_campeonatos_criadores'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_criadores.id'), nullable=False, index=True)
+    nome: Mapped[str] = mapped_column(String, nullable=False)
+    capitao_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    valor_pago: Mapped[float] = mapped_column(Float, nullable=False)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MembroEquipeCampeonatoCriadorModel(Base):
+    __tablename__ = 'membros_equipes_campeonatos_criadores'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonatos_criadores.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    reserva: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class EquipeGuildaCampeonatoCriadorModel(Base):
+    __tablename__ = 'equipes_guildas_campeonatos_criadores'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonatos_criadores.id'), unique=True, nullable=False, index=True)
+    guilda_id: Mapped[int] = mapped_column(ForeignKey('guildas_perfis.id'), nullable=False, index=True)
+
+
 class ResultadoCampeonatoCriadorModel(Base):
     __tablename__ = 'resultados_campeonatos_criadores'
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_criadores.id'), nullable=False, index=True)
     jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    colocacao: Mapped[int] = mapped_column(Integer, nullable=False)
+    abates: Mapped[int] = mapped_column(Integer, default=0)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ResultadoEquipeCampeonatoCriadorModel(Base):
+    __tablename__ = 'resultados_equipes_campeonatos_criadores'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_criadores.id'), nullable=False, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonatos_criadores.id'), nullable=False, index=True)
     colocacao: Mapped[int] = mapped_column(Integer, nullable=False)
     abates: Mapped[int] = mapped_column(Integer, default=0)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -340,13 +340,15 @@ export interface JogadorEquipeDisponivel {
 export interface PagamentoEquipe { id: number; equipe: string; colocacao: number; valor: number; status: string; }
 
 export interface ResultadoCriador { jogador_id: number; nick: string; colocacao: number; abates: number; guilda?: GuildaIdentidade | null; }
+export interface ResultadoEquipeCriador { equipe_id: number; equipe: string; colocacao: number; abates: number; guilda?: GuildaIdentidade | null; }
 export interface CampeonatoCriador {
   id: number; nome: string; slug: string; formato: string; descricao?: string | null;
+  tipo_inscricao?: 'individual' | 'equipe'; tamanho_equipe?: number;
   status: 'rascunho' | 'inscricao' | 'em_andamento' | 'aguardando_revisao' | 'pagamentos_pendentes' | 'encerrado' | 'cancelado';
   max_jogadores: number; taxa_inscricao: number; data_hora?: string | null; premios_percentuais: number[]; percentual_criador: number;
   inscritos: number; arrecadado: number; taxa_flowfire: number; cofre_evento: number;
-  criador: { slug: string; nick: string }; placar: ResultadoCriador[];
-  sala_id?: string | null; sala_senha?: string | null; inscritos_jogadores?: { id: number; nick: string; guilda?: GuildaIdentidade | null }[];
+  criador: { slug: string; nick: string }; placar: ResultadoCriador[]; placar_equipes?: ResultadoEquipeCriador[];
+  sala_id?: string | null; sala_senha?: string | null; inscritos_jogadores?: { id: number; nick: string; guilda?: GuildaIdentidade | null }[]; inscritos_equipes?: EquipeCampeonato[];
 }
 export interface CriadorPerfil { id?: number; slug: string; bio?: string | null; status?: 'pendente' | 'aprovado' | 'suspenso'; nick?: string; }
 export interface CriadorRanking { posicao: number; slug: string; nick: string; bio?: string | null; eventos_concluidos: number; participantes: number; score: number; }
@@ -445,9 +447,12 @@ export const apiService = {
   async criarEventoCriador(payload: { nome: string; slug: string; formato: string; descricao?: string; max_jogadores: number; taxa_inscricao: number; premios_percentuais: number[]; percentual_criador: number; data_hora?: string }): Promise<CampeonatoCriador> { return (await api.post('/criadores/eventos', payload)).data; },
   async publicarEventoCriador(id: number): Promise<any> { return (await api.post(`/criadores/eventos/${id}/publicar`)).data; },
   async inscreverEventoCriador(id: number): Promise<any> { return (await api.post(`/criadores/eventos/${id}/inscrever`)).data; },
+  async inscreverEquipeEventoCriador(id: number, nomeEquipe: string, membrosNicks: string[], reservasNicks: string[] = [], nomeGuilda?: string, logoData?: string): Promise<any> {
+    return (await api.post(`/criadores/eventos/${id}/inscrever-equipe`, { nome_equipe: nomeEquipe, membros_nicks: membrosNicks, reservas_nicks: reservasNicks, nome_guilda: nomeGuilda, logo_data: logoData })).data;
+  },
   async iniciarEventoCriador(id: number): Promise<any> { return (await api.post(`/criadores/eventos/${id}/iniciar`)).data; },
   async definirSalaCriador(id: number, sala_id: string, sala_senha?: string): Promise<any> { return (await api.post(`/criadores/eventos/${id}/sala`, { sala_id, sala_senha })).data; },
-  async salvarResultadoCriador(id: number, resultados: { jogador_id: number; colocacao: number; abates: number }[]): Promise<any> { return (await api.post(`/criadores/eventos/${id}/resultado`, { resultados })).data; },
+  async salvarResultadoCriador(id: number, resultados: Array<({ jogador_id: number } | { equipe_id: number }) & { colocacao: number; abates: number }>): Promise<any> { return (await api.post(`/criadores/eventos/${id}/resultado`, { resultados })).data; },
   async ocrEventoCriador(id: number, arquivo: File): Promise<any> { const form = new FormData(); form.append('imagem', arquivo); return (await api.post(`/criadores/eventos/${id}/ocr`, form, { headers: { 'Content-Type': 'multipart/form-data' } })).data; },
   async enviarCriadorParaRevisao(id: number): Promise<any> { return (await api.post(`/criadores/eventos/${id}/enviar-revisao`)).data; },
   async cancelarEventoCriador(id: number): Promise<any> { return (await api.post(`/criadores/eventos/${id}/cancelar`)).data; },
