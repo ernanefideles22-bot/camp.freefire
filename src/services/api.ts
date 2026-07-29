@@ -322,7 +322,7 @@ export interface BonusResultadoInput { jogador_id: number; colocacao: number; ab
 
 export interface MembroEquipe { id: number; nick: string; nome: string; }
 export interface GuildaIdentidade { nome: string; logo_url?: string | null; }
-export interface EquipeCampeonato { id: number; nome: string; capitao_id: number; capitao_nick?: string; membros: MembroEquipe[]; reservas?: MembroEquipe[]; salas?: BonusSala[]; guilda?: GuildaIdentidade | null; }
+export interface EquipeCampeonato { id: number; nome: string; capitao_id: number; capitao_nick?: string; slot_ff?: number | null; membros: MembroEquipe[]; reservas?: MembroEquipe[]; salas?: BonusSala[]; guilda?: GuildaIdentidade | null; }
 export interface ConfrontoCS { id: number; fase: number; ordem: number; status: 'aguardando' | 'finalizado' | 'bye'; equipe_a: { id: number; nome: string; guilda?: GuildaIdentidade | null } | null; equipe_b: { id: number; nome: string; guilda?: GuildaIdentidade | null } | null; vencedor_id?: number | null; abates_a: number; abates_b: number; }
 export interface PlacarEquipe { equipe_id: number; equipe: string; posicao: number; pontos: number; abates: number; partidas: number; melhor_colocacao: number | null; guilda?: GuildaIdentidade | null; }
 export interface CampeonatoEquipe {
@@ -350,7 +350,7 @@ export interface CampeonatoCriador {
   max_jogadores: number; taxa_inscricao: number; data_hora?: string | null; premios_percentuais: number[]; percentual_criador: number;
   inscritos: number; arrecadado: number; taxa_flowfire: number; cofre_evento: number;
   criador: { slug: string; nick: string }; placar: ResultadoCriador[]; placar_equipes?: ResultadoEquipeCriador[];
-  sala_id?: string | null; sala_senha?: string | null; inscritos_jogadores?: { id: number; nick: string; guilda?: GuildaIdentidade | null }[]; inscritos_equipes?: EquipeCampeonato[];
+  sala_id?: string | null; sala_senha?: string | null; inscritos_jogadores?: { id: number; nick: string; slot_ff?: number | null; guilda?: GuildaIdentidade | null }[]; inscritos_equipes?: EquipeCampeonato[];
 }
 export interface CriadorPerfil { id?: number; slug: string; bio?: string | null; status?: 'pendente' | 'aprovado' | 'suspenso'; nick?: string; }
 export interface CriadorRanking { posicao: number; slug: string; nick: string; bio?: string | null; eventos_concluidos: number; participantes: number; score: number; }

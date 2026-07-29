@@ -353,6 +353,8 @@ class EquipeCampeonatoModel(Base):
     campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_equipe.id'), nullable=False, index=True)
     nome: Mapped[str] = mapped_column(String, nullable=False)
     capitao_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    # Slot do lobby Free Fire. No BR, uma equipe (ou jogador solo) ocupa um slot.
+    slot_ff: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -517,6 +519,7 @@ class InscricaoCampeonatoCriadorModel(Base):
     campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_criadores.id'), nullable=False, index=True)
     jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
     valor_pago: Mapped[float] = mapped_column(Float, nullable=False)
+    slot_ff: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -527,6 +530,7 @@ class EquipeCampeonatoCriadorModel(Base):
     nome: Mapped[str] = mapped_column(String, nullable=False)
     capitao_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
     valor_pago: Mapped[float] = mapped_column(Float, nullable=False)
+    slot_ff: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

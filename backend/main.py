@@ -2707,6 +2707,7 @@ def _serializar_equipe(db: Session, equipe: EquipeCampeonatoModel) -> dict:
     capitao = db.get(JogadorModel, equipe.capitao_id)
     return {'id': equipe.id, 'nome': equipe.nome, 'capitao_id': equipe.capitao_id,
             'capitao_nick': capitao.nick if capitao else None,
+            'slot_ff': equipe.slot_ff,
             'membros': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in membros],
             'reservas': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in reservas],
             'guilda': _identidade_equipe(db, equipe.id)}
@@ -3106,7 +3107,13 @@ def iniciar_campeonato_equipe(campeonato_id: int, _admin: JogadorModel = Depends
         _criar_fase_cs(db, ev.id, 1, ids)
         ev.status = 'em_andamento'; db.commit()
         return {'message': 'Chave CS sorteada. Os confrontos da primeira fase estão liberados.'}
-    ev.status = 'em_andamento'; db.commit(); return {'message': 'Campeonato iniciado.'}
+    # BR usa um slot por inscrição: no Solo é um jogador, e em Duo/Squad a equipe inteira.
+    random.SystemRandom().shuffle(equipes)
+    for slot, equipe in enumerate(equipes, start=1):
+        equipe.slot_ff = slot
+    ev.status = 'em_andamento'
+    db.commit()
+    return {'message': f'BR iniciado. Slots do Free Fire de 1 a {total} foram sorteados para as equipes.'}
 
 
 @app.post('/admin/equipes/{campeonato_id}/reabrir-inscricoes')
@@ -3123,7 +3130,14 @@ def reabrir_inscricoes_campeonato_equipe(campeonato_id: int, _admin: JogadorMode
         if confronto_finalizado:
             raise HTTPException(400, 'Não é possível reabrir: já existe um confronto CS finalizado.')
         db.execute(delete(ConfrontoCSEquipeModel).where(ConfrontoCSEquipeModel.campeonato_id == ev.id))
-    return _reabrir_inscricoes_admin(db, ev, 'equipe', ResultadoEquipeRodadaModel)
+    resposta = _reabrir_inscricoes_admin(db, ev, 'equipe', ResultadoEquipeRodadaModel)
+    if ev.tipo == 'br':
+        db.execute(update(EquipeCampeonatoModel)
+                   .where(EquipeCampeonatoModel.campeonato_id == ev.id)
+                   .values(slot_ff=None))
+        db.commit()
+        resposta['message'] = 'Inscrições reabertas. Os slots do Free Fire foram zerados e serão sorteados novamente ao iniciar.'
+    return resposta
 
 
 @app.post('/admin/equipes/{campeonato_id}/cancelar')
@@ -3361,7 +3375,7 @@ def _serializar_equipe_criador(db: Session, equipe: EquipeCampeonatoCriadorModel
     vinculo = db.scalar(select(EquipeGuildaCampeonatoCriadorModel)
                         .where(EquipeGuildaCampeonatoCriadorModel.equipe_id == equipe.id))
     guilda = db.get(GuildaPerfilModel, vinculo.guilda_id) if vinculo else None
-    return {'id': equipe.id, 'nome': equipe.nome, 'capitao_id': equipe.capitao_id,
+    return {'id': equipe.id, 'nome': equipe.nome, 'capitao_id': equipe.capitao_id, 'slot_ff': equipe.slot_ff,
             'membros': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in _membros_equipe_criador(db, equipe.id)],
             'reservas': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in _membros_equipe_criador(db, equipe.id, True)],
             'guilda': {'nome': guilda.nome, 'logo_url': guilda.logo_data} if guilda else None}
@@ -3408,7 +3422,7 @@ def _serializar_campeonato_criador(db: Session, evento: CampeonatoCriadorModel, 
              'placar': _placar_criador(db, evento.id), 'placar_equipes': _placar_equipes_criador(db, evento.id), **cofre}
     if not publico:
         dados.update({'sala_id': evento.sala_id, 'sala_senha': evento.sala_senha,
-                      'inscritos_jogadores': [{'id': item.jogador_id, 'nick': db.get(JogadorModel, item.jogador_id).nick,
+                      'inscritos_jogadores': [{'id': item.jogador_id, 'nick': db.get(JogadorModel, item.jogador_id).nick, 'slot_ff': item.slot_ff,
                                                'guilda': ({'nome': guilda.nome, 'logo_url': guilda.logo_data} if (guilda := _identidade_guilda_do_jogador(db, item.jogador_id)) else None)}
                                               for item in _inscritos_criador(db, evento.id)],
                       'inscritos_equipes': [_serializar_equipe_criador(db, equipe) for equipe in _equipes_criador(db, evento.id)]})
@@ -3585,9 +3599,18 @@ def inscrever_equipe_evento_criador(evento_id: int, body: InscreverEquipeCriador
 def iniciar_evento_criador(evento_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
     evento = _dono_evento_criador(db, evento_id, jogador)
     if evento.status != 'inscricao': raise HTTPException(400, 'Campeonato nao pode ser iniciado agora.')
-    inscritos = _equipes_criador(db, evento.id) if _config_formato_criador(evento.formato)[0] == 'equipe' else _inscritos_criador(db, evento.id)
+    tipo_inscricao, _ = _config_formato_criador(evento.formato)
+    inscritos = _equipes_criador(db, evento.id) if tipo_inscricao == 'equipe' else _inscritos_criador(db, evento.id)
     if len(inscritos) < 2: raise HTTPException(400, 'Sao necessarias pelo menos duas inscricoes.')
-    evento.status = 'em_andamento'; db.commit(); return {'message': 'Campeonato iniciado.'}
+    if evento.formato.strip().lower().startswith('br '):
+        random.SystemRandom().shuffle(inscritos)
+        for slot, inscrito in enumerate(inscritos, start=1):
+            inscrito.slot_ff = slot
+    evento.status = 'em_andamento'
+    db.commit()
+    if evento.formato.strip().lower().startswith('br '):
+        return {'message': f'BR iniciado. Slots do Free Fire de 1 a {len(inscritos)} foram sorteados.'}
+    return {'message': 'Campeonato iniciado.'}
 
 @app.post('/criadores/eventos/{evento_id}/sala')
 def sala_evento_criador(evento_id: int, body: SalaCriadorBody, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
