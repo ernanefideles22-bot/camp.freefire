@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Gift, Swords, Trophy } from 'lucide-react';
 import { QuedaBonus } from './QuedaBonus';
 import { CampeonatosEquipe } from './CampeonatosEquipe';
@@ -18,7 +18,17 @@ const opcoes: { id: Categoria; titulo: string; descricao: string; detalhe: strin
 ];
 
 export function Campeonatos({ currentUser, onAddToast }: Props) {
-  const [categoria, setCategoria] = useState<Categoria>('individual');
+  const categoriaDoLink = (): Categoria => {
+    const categoriaLink = window.location.hash.split('/')[1] as Categoria;
+    return ['bonus', 'individual', 'equipes'].includes(categoriaLink) ? categoriaLink : 'individual';
+  };
+  const [categoria, setCategoria] = useState<Categoria>(categoriaDoLink);
+
+  useEffect(() => {
+    const sincronizarLink = () => setCategoria(categoriaDoLink());
+    window.addEventListener('hashchange', sincronizarLink);
+    return () => window.removeEventListener('hashchange', sincronizarLink);
+  }, []);
 
   return (
     <div className="space-y-6">

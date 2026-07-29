@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Trophy, User, Sliders, Shield, Award, LogOut, Swords, House, Crown, Megaphone } from 'lucide-react';
 import { Leaderboard } from './components/Leaderboard';
 import { PlayerPortal } from './components/PlayerPortal';
@@ -14,6 +14,12 @@ import type { Jogador } from './services/api';
 
 type TabType = 'home' | 'leaderboard' | 'player_portal' | 'admin' | 'campeonatos' | 'guilda' | 'criadores';
 
+const abaDoLink = (usuario: Jogador | null): TabType => {
+  if (window.location.hash.startsWith('#criador/')) return 'criadores';
+  if (window.location.hash.startsWith('#campeonatos/')) return 'campeonatos';
+  return usuario ? (usuario.is_admin ? 'admin' : 'player_portal') : 'home';
+};
+
 function App() {
   const [currentUser, setCurrentUser] = useState<Jogador | null>(() => {
     const userJson = localStorage.getItem('currentUser');
@@ -21,8 +27,14 @@ function App() {
     if (userJson && token) { try { return JSON.parse(userJson); } catch { return null; } }
     return null;
   });
-  const [activeTab, setActiveTab] = useState<TabType>(() => window.location.hash.startsWith('#criador/') ? 'criadores' : (currentUser ? (currentUser.is_admin ? 'admin' : 'player_portal') : 'home'));
+  const [activeTab, setActiveTab] = useState<TabType>(() => abaDoLink(currentUser));
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  useEffect(() => {
+    const abrirLink = () => setActiveTab(abaDoLink(currentUser));
+    window.addEventListener('hashchange', abrirLink);
+    return () => window.removeEventListener('hashchange', abrirLink);
+  }, [currentUser]);
 
   const handleAddToast = (type: ToastType, title: string, description?: string) => {
     setToasts(prev => [...prev, { id: Date.now().toString() + Math.random().toString(36).slice(2), type, title, description }]);

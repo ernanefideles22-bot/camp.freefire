@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Gift, Trophy, Users, Play, Check, X, RefreshCw, RotateCcw, AlertTriangle, Plus, Trash2, Send, Ban, Upload } from 'lucide-react';
+import { Gift, Trophy, Users, Play, Check, X, RefreshCw, RotateCcw, Share2, AlertTriangle, Plus, Trash2, Send, Ban, Upload } from 'lucide-react';
 import { apiService } from '../services/api';
 import type { EventoBonus, BonusInscrito, PlacarBonusItem, PagamentoBonus, BonusResultadoInput } from '../services/api';
 import { Spinner } from './Spinner';
+import { compartilharCampeonato } from '../utils/compartilhar';
 
 interface AdminPagoProps {
   onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void;
@@ -170,6 +171,11 @@ export const AdminPago: React.FC<AdminPagoProps> = ({ onAddToast }) => {
   if (loading) return (<div className="ff-card p-8 flex justify-center"><Spinner size="md" className="text-primary" /></div>);
 
   const podeIniciar = !!evento && evento.status === 'inscricao' && evento.inscritos >= evento.min_jogadores;
+  const compartilharLink = async () => {
+    if (!evento) return;
+    try { await compartilharCampeonato(evento.nome, 'individual', evento.id); onAddToast('success', 'Link pronto', 'Envie o campeonato para seus jogadores.'); }
+    catch { /* compartilhamento cancelado */ }
+  };
 
   const nPos = Math.max(1, Math.min(20, parseInt(numPos) || 1));
   const lbl = 'text-[10px] font-bold uppercase tracking-wider text-zinc-500 block mb-1';
@@ -284,6 +290,8 @@ export const AdminPago: React.FC<AdminPagoProps> = ({ onAddToast }) => {
               <span className="text-[10px] text-zinc-500">/ mín. {evento.min_jogadores}</span>
             </div>
           </div>
+
+          {evento.status === 'inscricao' && <button onClick={compartilharLink} className="flex items-center gap-2 self-start rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/15 cursor-pointer"><Share2 className="w-3.5 h-3.5" />Compartilhar campeonato</button>}
 
           {/* INSCRIÇÃO */}
           {evento.status === 'inscricao' && (
