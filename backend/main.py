@@ -3,6 +3,8 @@ import os
 import json
 import base64
 import re
+import unicodedata
+from difflib import SequenceMatcher
 from typing import Optional, List
 
 import httpx
@@ -2707,6 +2709,84 @@ def _serializar_equipe(db: Session, equipe: EquipeCampeonatoModel) -> dict:
             'guilda': _identidade_equipe(db, equipe.id)}
 
 
+def _normalizar_nick_ocr(valor: object) -> str:
+    texto = unicodedata.normalize('NFKD', str(valor or '')).casefold()
+    texto = ''.join(letra for letra in texto if not unicodedata.combining(letra))
+    return ''.join(letra for letra in texto if letra.isalnum())
+
+
+def _numero_ocr(valor: object, padrao: int = 0) -> int:
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return padrao
+
+
+def _vincular_nick_ocr(nick_lido: object, apelidos: dict[str, dict]) -> tuple[Optional[dict], str]:
+    normalizado = _normalizar_nick_ocr(nick_lido)
+    if not normalizado:
+        return None, 'nao identificado'
+    if normalizado in apelidos:
+        return apelidos[normalizado], 'confirmado'
+    candidato, similaridade = None, 0.0
+    for chave, dados in apelidos.items():
+        score = SequenceMatcher(None, normalizado, chave).ratio()
+        if score > similaridade:
+            candidato, similaridade = dados, score
+    return (candidato, 'aproximado') if candidato and similaridade >= 0.72 else (None, 'nao identificado')
+
+
+async def _ler_placar_equipes_por_nick(conteudo: bytes, mime: str, equipes: list[tuple[int, str, list[JogadorModel]]]) -> dict:
+    """Lê os nicks exibidos pelo Free Fire e os converte para as equipes inscritas."""
+    apelidos: dict[str, dict] = {}
+    linhas_contexto = []
+    for equipe_id, nome_equipe, membros in equipes:
+        nicks = [membro.nick for membro in membros if membro and membro.nick]
+        linhas_contexto.append(f'{nome_equipe}: ' + ', '.join(nicks))
+        for membro in membros:
+            chave = _normalizar_nick_ocr(membro.nick)
+            if chave:
+                apelidos[chave] = {'equipe_id': equipe_id, 'equipe_nome': nome_equipe, 'nick_cadastrado': membro.nick}
+    if not apelidos:
+        raise HTTPException(400, 'Não há nicks cadastrados nas equipes deste campeonato.')
+    prompt = (
+        'Analise este print de resultado do Free Fire. O print mostra NICKS DE JOGADORES, não nomes de equipes. '
+        'Use este mapa de equipes e nicks cadastrados:\n' + '\n'.join(linhas_contexto) + '\n'
+        'Para cada linha do placar, leia o nick visível, posição e abates. Relacione o nick a um nick cadastrado apenas se for igual ou muito parecido. '
+        'Retorne APENAS um array JSON, sem markdown: '
+        '[{"nick_detectado":str,"nick_cadastrado":str_ou_null,"colocacao":int,"abates":int}]'
+    )
+    texto = await ia_generate(prompt, imagem_b64=base64.b64encode(conteudo).decode('utf-8'), mime=mime)
+    try:
+        dados = extrair_json(texto)
+    except Exception:
+        raise HTTPException(422, 'A IA não conseguiu ler o placar. Envie um print mais nítido ou lance o resultado manualmente.')
+    if isinstance(dados, dict):
+        dados = next((valor for valor in dados.values() if isinstance(valor, list)), [])
+    por_equipe: dict[int, dict] = {}
+    nao_vinculados = []
+    for item in dados if isinstance(dados, list) else []:
+        if not isinstance(item, dict):
+            continue
+        nick_lido = item.get('nick_cadastrado') or item.get('nick_detectado')
+        vinculo, qualidade = _vincular_nick_ocr(nick_lido, apelidos)
+        linha = {
+            'nick_detectado': item.get('nick_detectado') or nick_lido,
+            'nick_cadastrado': vinculo['nick_cadastrado'] if vinculo else None,
+            'colocacao': _numero_ocr(item.get('colocacao')),
+            'abates': max(0, _numero_ocr(item.get('abates'))),
+            'vinculo': qualidade,
+        }
+        if not vinculo:
+            nao_vinculados.append(linha)
+            continue
+        linha.update({'equipe_id': vinculo['equipe_id'], 'equipe_nome': vinculo['equipe_nome']})
+        anterior = por_equipe.get(vinculo['equipe_id'])
+        if not anterior or (linha['colocacao'] > 0 and (anterior['colocacao'] <= 0 or linha['colocacao'] < anterior['colocacao'])):
+            por_equipe[vinculo['equipe_id']] = linha
+    return {'resultados': list(por_equipe.values()), 'nao_vinculados': nao_vinculados}
+
+
 def _placar_equipes(db: Session, campeonato_id: int) -> list[dict]:
     cfg = _config_evento(db, 'equipe', campeonato_id)
     regra = cfg.regra_pontos if cfg else 'lbff'
@@ -2990,6 +3070,25 @@ def sala_campeonato_equipe(campeonato_id: int, body: BonusSalaBody,
     _salvar_sala_evento(db, 'equipe', campeonato_id, body)
     db.commit()
     return {'message': f'Sala da rodada {body.ordem} salva.'}
+
+
+@app.post('/admin/equipes/{campeonato_id}/ocr')
+async def ocr_campeonato_equipe(campeonato_id: int, imagem: UploadFile = File(...),
+                                _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    if not ev or ev.status != 'em_andamento':
+        raise HTTPException(400, 'Inicie o campeonato antes de usar o OCR.')
+    conteudo = await imagem.read()
+    if len(conteudo) > 8 * 1024 * 1024:
+        raise HTTPException(413, 'Imagem muito grande (máx. 8 MB).')
+    mime = imagem.content_type or 'image/png'
+    if mime not in ('image/jpeg', 'image/png', 'image/gif', 'image/webp'):
+        mime = 'image/png'
+    equipes = db.scalars(select(EquipeCampeonatoModel)
+                         .where(EquipeCampeonatoModel.campeonato_id == ev.id)).all()
+    mapa_equipes = [(equipe.id, equipe.nome, _membros_equipe(db, equipe.id) + _reservas_equipe(db, equipe.id))
+                    for equipe in equipes]
+    return await _ler_placar_equipes_por_nick(conteudo, mime, mapa_equipes)
 
 
 @app.post('/admin/equipes/{campeonato_id}/resultado')
@@ -3416,18 +3515,24 @@ async def ocr_evento_criador(evento_id: int, imagem: UploadFile = File(...), jog
     if evento.status != 'em_andamento' or not inscritos: raise HTTPException(400, 'Inicie o campeonato e tenha inscritos antes de usar o OCR.')
     conteudo = await imagem.read()
     if len(conteudo) > 8 * 1024 * 1024: raise HTTPException(413, 'Imagem muito grande (max 8 MB).')
-    mapa = ({item.nome: item.id for item in inscritos} if tipo_inscricao == 'equipe'
-            else {db.get(JogadorModel, item.jogador_id).nick: item.jogador_id for item in inscritos})
-    alvo = 'nomes de equipes inscritos' if tipo_inscricao == 'equipe' else 'nicks inscritos'
-    prompt = ('Analise este print de placar do Free Fire. Use somente estes ' + alvo + ': ' + ', '.join(mapa) + '. '
+    mime = imagem.content_type or 'image/png'
+    if mime not in ('image/jpeg', 'image/png', 'image/gif', 'image/webp'):
+        mime = 'image/png'
+    if tipo_inscricao == 'equipe':
+        mapa_equipes = [(equipe.id, equipe.nome,
+                          _membros_equipe_criador(db, equipe.id) + _membros_equipe_criador(db, equipe.id, True))
+                         for equipe in inscritos]
+        return await _ler_placar_equipes_por_nick(conteudo, mime, mapa_equipes)
+    mapa = {db.get(JogadorModel, item.jogador_id).nick: item.jogador_id for item in inscritos}
+    prompt = ('Analise este print de placar do Free Fire. Use somente estes nicks inscritos: ' + ', '.join(mapa) + '. '
               'Retorne APENAS um array JSON: [{"nick_cadastrado":str_ou_null,"colocacao":int,"abates":int}].')
-    texto = await ia_generate(prompt, imagem_b64=base64.b64encode(conteudo).decode('utf-8'), mime=imagem.content_type or 'image/png')
+    texto = await ia_generate(prompt, imagem_b64=base64.b64encode(conteudo).decode('utf-8'), mime=mime)
     dados = extrair_json(texto)
     if isinstance(dados, dict): dados = next((valor for valor in dados.values() if isinstance(valor, list)), [])
     resultados = []
     for item in dados if isinstance(dados, list) else []:
         nick = item.get('nick_cadastrado') if isinstance(item, dict) else None
-        resultados.append({('equipe_id' if tipo_inscricao == 'equipe' else 'jogador_id'): mapa.get(nick), 'nome_encontrado': nick, 'colocacao': item.get('colocacao', 0), 'abates': item.get('abates', 0)})
+        resultados.append({'jogador_id': mapa.get(nick), 'nome_encontrado': nick, 'colocacao': item.get('colocacao', 0), 'abates': item.get('abates', 0)})
     return {'resultados': resultados}
 
 @app.post('/criadores/eventos/{evento_id}/enviar-revisao')

@@ -430,6 +430,10 @@ export const apiService = {
   async reabrirInscricoesCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/reabrir-inscricoes`)).data; },
   async cancelarCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/cancelar`)).data; },
   async listarEquipesInscritas(id: number): Promise<EquipeCampeonato[]> { return (await api.get(`/admin/equipes/${id}/inscritos`)).data.equipes ?? []; },
+  async processarOcrEquipe(id: number, arquivo: File): Promise<any> {
+    const dados = new FormData(); dados.append('imagem', arquivo);
+    return (await api.post(`/admin/equipes/${id}/ocr`, dados, { headers: { 'Content-Type': 'multipart/form-data' } })).data;
+  },
   async lancarResultadoEquipe(id: number, ordem: number, resultados: { equipe_id: number; colocacao: number; abates: number }[]): Promise<any> {
     return (await api.post(`/admin/equipes/${id}/resultado`, { ordem, resultados })).data;
   },
