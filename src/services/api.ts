@@ -323,6 +323,7 @@ export interface BonusResultadoInput { jogador_id: number; colocacao: number; ab
 export interface MembroEquipe { id: number; nick: string; nome: string; }
 export interface GuildaIdentidade { nome: string; logo_url?: string | null; }
 export interface EquipeCampeonato { id: number; nome: string; capitao_id: number; capitao_nick?: string; membros: MembroEquipe[]; reservas?: MembroEquipe[]; salas?: BonusSala[]; guilda?: GuildaIdentidade | null; }
+export interface ConfrontoCS { id: number; fase: number; ordem: number; status: 'aguardando' | 'finalizado' | 'bye'; equipe_a: { id: number; nome: string; guilda?: GuildaIdentidade | null } | null; equipe_b: { id: number; nome: string; guilda?: GuildaIdentidade | null } | null; vencedor_id?: number | null; abates_a: number; abates_b: number; }
 export interface PlacarEquipe { equipe_id: number; equipe: string; posicao: number; pontos: number; abates: number; partidas: number; melhor_colocacao: number | null; guilda?: GuildaIdentidade | null; }
 export interface CampeonatoEquipe {
   id: number; nome: string; tipo: 'cs_4x4' | 'br'; modo: '4x4' | 'solo' | 'duo' | 'squad'; tamanho_equipe: number;
@@ -330,6 +331,7 @@ export interface CampeonatoEquipe {
   taxa_inscricao: number; data_hora: string | null; premios: number[]; equipes: number; placar: PlacarEquipe[];
   total_rodadas?: number; inicio?: string | null; fim?: string | null;
   regra_pontos?: 'lbff' | 'cs'; pontos_vitoria?: number; pontos_abate?: number;
+  confrontos_cs?: ConfrontoCS[];
 }
 
 export interface JogadorEquipeDisponivel {
@@ -436,6 +438,9 @@ export const apiService = {
   },
   async lancarResultadoEquipe(id: number, ordem: number, resultados: { equipe_id: number; colocacao: number; abates: number }[]): Promise<any> {
     return (await api.post(`/admin/equipes/${id}/resultado`, { ordem, resultados })).data;
+  },
+  async confirmarConfrontoCs(campeonatoId: number, confrontoId: number, vencedorId: number, abatesA: number, abatesB: number): Promise<any> {
+    return (await api.post(`/admin/equipes/${campeonatoId}/confrontos/${confrontoId}/resultado`, { vencedor_id: vencedorId, abates_a: abatesA, abates_b: abatesB })).data;
   },
   async configurarCampeonatoEquipe(id: number, payload: any): Promise<CampeonatoEquipe> { return (await api.post(`/admin/equipes/${id}/config`, payload)).data; },
   async definirSalaEquipe(id: number, ordem: number, salaId: string, salaSenha: string, horario?: string): Promise<any> { return (await api.post(`/admin/equipes/${id}/sala`, { ordem, sala_id: salaId, sala_senha: salaSenha, horario })).data; },

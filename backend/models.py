@@ -462,6 +462,22 @@ class ResultadoEquipeRodadaModel(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ConfrontoCSEquipeModel(Base):
+    """Chave eliminatória dos campeonatos CS por equipe."""
+    __tablename__ = 'confrontos_cs_equipes'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    campeonato_id: Mapped[int] = mapped_column(ForeignKey('campeonatos_equipe.id'), nullable=False, index=True)
+    fase: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    ordem: Mapped[int] = mapped_column(Integer, nullable=False)
+    equipe_a_id: Mapped[int] = mapped_column(ForeignKey('equipes_campeonato.id'), nullable=False, index=True)
+    equipe_b_id: Mapped[Optional[int]] = mapped_column(ForeignKey('equipes_campeonato.id'), nullable=True, index=True)
+    vencedor_id: Mapped[Optional[int]] = mapped_column(ForeignKey('equipes_campeonato.id'), nullable=True, index=True)
+    abates_a: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    abates_b: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String, nullable=False, default='aguardando', index=True)  # aguardando|finalizado|bye
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 # ====================== CRIADORES FLOWFIRE ======================
 # Os criadores nao recebem saldo automaticamente. A arrecadacao fica registrada
 # no evento e os pagamentos sao liberados manualmente pelo FlowFire.

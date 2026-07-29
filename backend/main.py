@@ -3,6 +3,8 @@ import os
 import json
 import base64
 import re
+import random
+import math
 import unicodedata
 from difflib import SequenceMatcher
 from typing import Optional, List
@@ -25,6 +27,7 @@ from models import (JogadorModel, QuedaModel, InscricaoModel,
                     MembroEquipeCampeonatoModel, ResultadoEquipeCampeonatoModel,
                     PagamentoEquipeCampeonatoModel, ConfiguracaoEventoModel,
                     SalaEventoModel, ResultadoEquipeRodadaModel,
+                    ConfrontoCSEquipeModel,
                     GuildaPerfilModel, MembroGuildaPerfilModel, EquipeGuildaModel,
                     ReservaEquipeCampeonatoModel,
                     CriadorFlowFireModel, CampeonatoCriadorModel,
@@ -2820,6 +2823,66 @@ def _placar_equipes(db: Session, campeonato_id: int) -> list[dict]:
     return linhas
 
 
+def _confrontos_cs(db: Session, campeonato_id: int) -> list[dict]:
+    partidas = list(db.scalars(select(ConfrontoCSEquipeModel)
+                               .where(ConfrontoCSEquipeModel.campeonato_id == campeonato_id)
+                               .order_by(ConfrontoCSEquipeModel.fase, ConfrontoCSEquipeModel.ordem)).all())
+
+    def equipe_dados(equipe_id: Optional[int]) -> Optional[dict]:
+        equipe = db.get(EquipeCampeonatoModel, equipe_id) if equipe_id else None
+        if not equipe:
+            return None
+        return {'id': equipe.id, 'nome': equipe.nome, 'guilda': _identidade_equipe(db, equipe.id)}
+
+    return [{'id': partida.id, 'fase': partida.fase, 'ordem': partida.ordem,
+             'equipe_a': equipe_dados(partida.equipe_a_id), 'equipe_b': equipe_dados(partida.equipe_b_id),
+             'vencedor_id': partida.vencedor_id, 'abates_a': partida.abates_a,
+             'abates_b': partida.abates_b, 'status': partida.status}
+            for partida in partidas]
+
+
+def _criar_fase_cs(db: Session, campeonato_id: int, fase: int, equipes_ids: list[int]):
+    for ordem, inicio in enumerate(range(0, len(equipes_ids), 2), 1):
+        equipe_a_id = equipes_ids[inicio]
+        equipe_b_id = equipes_ids[inicio + 1] if inicio + 1 < len(equipes_ids) else None
+        if equipe_b_id:
+            db.add(ConfrontoCSEquipeModel(campeonato_id=campeonato_id, fase=fase, ordem=ordem,
+                                          equipe_a_id=equipe_a_id, equipe_b_id=equipe_b_id))
+        else:
+            db.add(ConfrontoCSEquipeModel(campeonato_id=campeonato_id, fase=fase, ordem=ordem,
+                                          equipe_a_id=equipe_a_id, vencedor_id=equipe_a_id, status='bye'))
+    db.flush()
+
+
+def _avancar_chave_cs(db: Session, campeonato_id: int):
+    """Quando todos os duelos de uma fase acabam, gera automaticamente a próxima."""
+    fases = db.scalars(select(ConfrontoCSEquipeModel.fase)
+                       .where(ConfrontoCSEquipeModel.campeonato_id == campeonato_id)
+                       .order_by(ConfrontoCSEquipeModel.fase.desc())).all()
+    if not fases:
+        return
+    fase_atual = fases[0]
+    partidas = list(db.scalars(select(ConfrontoCSEquipeModel)
+                               .where(ConfrontoCSEquipeModel.campeonato_id == campeonato_id,
+                                      ConfrontoCSEquipeModel.fase == fase_atual)
+                               .order_by(ConfrontoCSEquipeModel.ordem)).all())
+    if any(partida.status == 'aguardando' for partida in partidas):
+        return
+    vencedores = [partida.vencedor_id for partida in partidas if partida.vencedor_id]
+    if len(vencedores) < 2:
+        return
+    _criar_fase_cs(db, campeonato_id, fase_atual + 1, vencedores)
+
+
+def _chave_cs_encerrada(db: Session, campeonato_id: int) -> bool:
+    partidas = list(db.scalars(select(ConfrontoCSEquipeModel)
+                               .where(ConfrontoCSEquipeModel.campeonato_id == campeonato_id)).all())
+    if not partidas or any(partida.status == 'aguardando' for partida in partidas):
+        return False
+    ultima_fase = max(partida.fase for partida in partidas)
+    return len([partida for partida in partidas if partida.fase == ultima_fase]) == 1
+
+
 def _serializar_campeonato_equipe(db: Session, ev: CampeonatoEquipeModel) -> dict:
     equipes = db.scalars(select(EquipeCampeonatoModel)
                          .where(EquipeCampeonatoModel.campeonato_id == ev.id)).all()
@@ -2834,11 +2897,13 @@ def _serializar_campeonato_equipe(db: Session, ev: CampeonatoEquipeModel) -> dic
             'taxa_inscricao': ev.taxa_inscricao, 'data_hora': ev.data_hora,
             'premios': _premios_equipe(ev), 'equipes': len(equipes),
             'placar': _placar_equipes(db, ev.id),
-            'total_rodadas': _rodadas_evento(db, 'equipe', ev.id),
+            'total_rodadas': (max(1, math.ceil(math.log2(len(equipes)))) if ev.tipo == 'cs_4x4' and len(equipes) > 1
+                               else _rodadas_evento(db, 'equipe', ev.id)),
             'inicio': cfg.inicio if cfg else None, 'fim': cfg.fim if cfg else None,
             'regra_pontos': cfg.regra_pontos if cfg else 'lbff',
             'pontos_vitoria': pesos.get('pontos_vitoria', 1),
-            'pontos_abate': pesos.get('pontos_abate', 1)}
+            'pontos_abate': pesos.get('pontos_abate', 1),
+            'confrontos_cs': _confrontos_cs(db, ev.id) if ev.tipo == 'cs_4x4' else []}
 
 
 class CriarCampeonatoEquipeBody(BaseModel):
@@ -2876,6 +2941,12 @@ class ResultadoEquipeItem(BaseModel):
 class ResultadoEquipesBody(BaseModel):
     ordem: int = 1
     resultados: List[ResultadoEquipeItem]
+
+
+class ResultadoConfrontoCSBody(BaseModel):
+    vencedor_id: int
+    abates_a: int = 0
+    abates_b: int = 0
 
 
 @app.get('/equipes/ativos')
@@ -3024,8 +3095,17 @@ def configurar_campeonato_equipe(campeonato_id: int, body: CriarCampeonatoEquipe
 def iniciar_campeonato_equipe(campeonato_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     ev = db.get(CampeonatoEquipeModel, campeonato_id)
     if not ev or ev.status != 'inscricao': raise HTTPException(400, 'Campeonato nao pode ser iniciado.')
-    total = db.scalar(select(func.count()).select_from(EquipeCampeonatoModel).where(EquipeCampeonatoModel.campeonato_id == ev.id)) or 0
+    equipes = list(db.scalars(select(EquipeCampeonatoModel)
+                               .where(EquipeCampeonatoModel.campeonato_id == ev.id)
+                               .order_by(EquipeCampeonatoModel.id)).all())
+    total = len(equipes)
     if total < ev.min_equipes: raise HTTPException(400, f'Faltam equipes: {total}/{ev.min_equipes}.')
+    if ev.tipo == 'cs_4x4':
+        ids = [equipe.id for equipe in equipes]
+        random.SystemRandom().shuffle(ids)
+        _criar_fase_cs(db, ev.id, 1, ids)
+        ev.status = 'em_andamento'; db.commit()
+        return {'message': 'Chave CS sorteada. Os confrontos da primeira fase estão liberados.'}
     ev.status = 'em_andamento'; db.commit(); return {'message': 'Campeonato iniciado.'}
 
 
@@ -3035,6 +3115,14 @@ def reabrir_inscricoes_campeonato_equipe(campeonato_id: int, _admin: JogadorMode
     ev = db.get(CampeonatoEquipeModel, campeonato_id)
     if not ev:
         raise HTTPException(404, 'Campeonato nao encontrado.')
+    if ev.tipo == 'cs_4x4':
+        confronto_finalizado = db.scalar(select(ConfrontoCSEquipeModel.id).where(
+            ConfrontoCSEquipeModel.campeonato_id == ev.id,
+            ConfrontoCSEquipeModel.status == 'finalizado',
+        )) is not None
+        if confronto_finalizado:
+            raise HTTPException(400, 'Não é possível reabrir: já existe um confronto CS finalizado.')
+        db.execute(delete(ConfrontoCSEquipeModel).where(ConfrontoCSEquipeModel.campeonato_id == ev.id))
     return _reabrir_inscricoes_admin(db, ev, 'equipe', ResultadoEquipeRodadaModel)
 
 
@@ -3091,10 +3179,36 @@ async def ocr_campeonato_equipe(campeonato_id: int, imagem: UploadFile = File(..
     return await _ler_placar_equipes_por_nick(conteudo, mime, mapa_equipes)
 
 
+@app.post('/admin/equipes/{campeonato_id}/confrontos/{confronto_id}/resultado')
+def resultado_confronto_cs(campeonato_id: int, confronto_id: int, body: ResultadoConfrontoCSBody,
+                           _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    ev = db.get(CampeonatoEquipeModel, campeonato_id)
+    confronto = db.get(ConfrontoCSEquipeModel, confronto_id)
+    if not ev or ev.tipo != 'cs_4x4' or ev.status != 'em_andamento' or not confronto or confronto.campeonato_id != ev.id:
+        raise HTTPException(400, 'Confronto CS indisponível.')
+    if confronto.status != 'aguardando' or not confronto.equipe_b_id:
+        raise HTTPException(400, 'Esse confronto já foi definido.')
+    if body.vencedor_id not in (confronto.equipe_a_id, confronto.equipe_b_id):
+        raise HTTPException(400, 'Escolha o vencedor entre as duas equipes do confronto.')
+    if not 0 <= body.abates_a <= MAX_ABATES or not 0 <= body.abates_b <= MAX_ABATES:
+        raise HTTPException(400, f'Abates devem ficar entre 0 e {MAX_ABATES}.')
+    confronto.vencedor_id = body.vencedor_id
+    confronto.abates_a, confronto.abates_b, confronto.status = body.abates_a, body.abates_b, 'finalizado'
+    for equipe_id, abates in ((confronto.equipe_a_id, body.abates_a), (confronto.equipe_b_id, body.abates_b)):
+        db.add(ResultadoEquipeRodadaModel(campeonato_id=ev.id, equipe_id=equipe_id, ordem=confronto.fase,
+                                          colocacao=1 if equipe_id == body.vencedor_id else 2, abates=abates))
+    db.flush()
+    _avancar_chave_cs(db, ev.id)
+    db.commit()
+    return {'message': 'Confronto confirmado. A chave foi atualizada com os vencedores.'}
+
+
 @app.post('/admin/equipes/{campeonato_id}/resultado')
 def resultado_equipes(campeonato_id: int, body: ResultadoEquipesBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     ev = db.get(CampeonatoEquipeModel, campeonato_id)
     if not ev or ev.status != 'em_andamento': raise HTTPException(400, 'Campeonato nao esta em andamento.')
+    if ev.tipo == 'cs_4x4':
+        raise HTTPException(400, 'No CS, confirme o vencedor de cada confronto na chave eliminatória.')
     total_rodadas = _rodadas_evento(db, 'equipe', ev.id)
     if not 1 <= body.ordem <= total_rodadas:
         raise HTTPException(400, f'Rodada invalida. Escolha de 1 a {total_rodadas}.')
@@ -3117,11 +3231,15 @@ def resultado_equipes(campeonato_id: int, body: ResultadoEquipesBody, _admin: Jo
 def apurar_equipes(campeonato_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
     ev = db.get(CampeonatoEquipeModel, campeonato_id)
     if not ev or ev.status != 'em_andamento': raise HTTPException(400, 'Campeonato nao esta em andamento.')
-    ordens = set(db.scalars(select(ResultadoEquipeRodadaModel.ordem)
-                            .where(ResultadoEquipeRodadaModel.campeonato_id == ev.id)).all())
-    esperadas = set(range(1, _rodadas_evento(db, 'equipe', ev.id) + 1))
-    if not esperadas.issubset(ordens):
-        raise HTTPException(400, f'Faltam resultados das rodadas {sorted(esperadas - ordens)}.')
+    if ev.tipo == 'cs_4x4':
+        if not _chave_cs_encerrada(db, ev.id):
+            raise HTTPException(400, 'Finalize todos os confrontos da chave CS antes de apurar os prêmios.')
+    else:
+        ordens = set(db.scalars(select(ResultadoEquipeRodadaModel.ordem)
+                                .where(ResultadoEquipeRodadaModel.campeonato_id == ev.id)).all())
+        esperadas = set(range(1, _rodadas_evento(db, 'equipe', ev.id) + 1))
+        if not esperadas.issubset(ordens):
+            raise HTTPException(400, f'Faltam resultados das rodadas {sorted(esperadas - ordens)}.')
     placar = _placar_equipes(db, ev.id)
     if not placar: raise HTTPException(400, 'Lance os resultados antes de apurar.')
     for pos, premio in enumerate(_premios_equipe(ev), 1):
