@@ -181,10 +181,16 @@ def previa_premiacao(inscritos: int) -> dict:
     }
 
 
-PONTOS_LBFF = {1: 12, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1}
+PONTOS_FFWS = {1: 12, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 3, 9: 2, 10: 1}
+# Mantido para placares antigos que já estavam identificados como LBFF.
+PONTOS_LBFF = PONTOS_FFWS
+
+def calcular_pontos_ffws(colocacao: int, abates: int) -> int:
+    """Tabela FFWS: pontos da colocação somados a 1 ponto por abate."""
+    return PONTOS_FFWS.get(colocacao, 0) + abates
 
 def calcular_pontos_lbff(colocacao: int, abates: int) -> int:
-    return PONTOS_LBFF.get(colocacao, 0) + abates
+    return calcular_pontos_ffws(colocacao, abates)
 
 
 # ====================== IA — ANTHROPIC (Claude, REST) ======================
@@ -2810,9 +2816,13 @@ def _placar_equipes(db: Session, campeonato_id: int) -> list[dict]:
         if not resultados:
             resultados = db.scalars(select(ResultadoEquipeCampeonatoModel)
                                     .where(ResultadoEquipeCampeonatoModel.equipe_id == equipe.id)).all()
-        pontos = sum((pontos_vitoria if r.colocacao == 1 else 0) + r.abates * pontos_abate
-                     for r in resultados) if regra == 'cs' else sum(
-                     calcular_pontos_lbff(r.colocacao, r.abates) for r in resultados)
+        if regra == 'cs':
+            pontos = sum((pontos_vitoria if r.colocacao == 1 else 0) + r.abates * pontos_abate
+                         for r in resultados)
+        elif regra == 'ffws':
+            pontos = sum(calcular_pontos_ffws(r.colocacao, r.abates) for r in resultados)
+        else:
+            pontos = sum(calcular_pontos_lbff(r.colocacao, r.abates) for r in resultados)
         linhas.append({'equipe_id': equipe.id, 'equipe': equipe.nome, 'guilda': _identidade_equipe(db, equipe.id),
                        'pontos': round(pontos, 2),
                        'abates': sum(r.abates for r in resultados),
@@ -2901,7 +2911,7 @@ def _serializar_campeonato_equipe(db: Session, ev: CampeonatoEquipeModel) -> dic
             'total_rodadas': (max(1, math.ceil(math.log2(len(equipes)))) if ev.tipo == 'cs_4x4' and len(equipes) > 1
                                else _rodadas_evento(db, 'equipe', ev.id)),
             'inicio': cfg.inicio if cfg else None, 'fim': cfg.fim if cfg else None,
-            'regra_pontos': cfg.regra_pontos if cfg else 'lbff',
+            'regra_pontos': cfg.regra_pontos if cfg else 'ffws',
             'pontos_vitoria': pesos.get('pontos_vitoria', 1),
             'pontos_abate': pesos.get('pontos_abate', 1),
             'confrontos_cs': _confrontos_cs(db, ev.id) if ev.tipo == 'cs_4x4' else []}
@@ -3060,7 +3070,7 @@ def criar_campeonato_equipe(body: CriarCampeonatoEquipeBody, _admin: JogadorMode
     db.add(ev); db.commit(); db.refresh(ev)
     _aplicar_config_duracao(db, 'equipe', ev.id, body)
     cfg = _config_evento(db, 'equipe', ev.id, True)
-    cfg.regra_pontos = body.regra_pontos if body.regra_pontos in ('lbff', 'cs') else ('cs' if body.tipo == 'cs_4x4' else 'lbff')
+    cfg.regra_pontos = body.regra_pontos if body.regra_pontos in ('ffws', 'lbff', 'cs') else ('cs' if body.tipo == 'cs_4x4' else 'ffws')
     cfg.pesos_json = json.dumps({'pontos_vitoria': max(0, float(body.pontos_vitoria if body.pontos_vitoria is not None else 1)),
                                  'pontos_abate': max(0, float(body.pontos_abate if body.pontos_abate is not None else 1))})
     db.commit(); db.refresh(ev)
@@ -3085,7 +3095,7 @@ def configurar_campeonato_equipe(campeonato_id: int, body: CriarCampeonatoEquipe
         ev.premios_json = json.dumps([max(0.0, float(v)) for v in body.premios][:20])
     _aplicar_config_duracao(db, 'equipe', ev.id, body)
     cfg = _config_evento(db, 'equipe', ev.id, True)
-    cfg.regra_pontos = body.regra_pontos if body.regra_pontos in ('lbff', 'cs') else ('cs' if ev.tipo == 'cs_4x4' else 'lbff')
+    cfg.regra_pontos = body.regra_pontos if body.regra_pontos in ('ffws', 'lbff', 'cs') else ('cs' if ev.tipo == 'cs_4x4' else 'ffws')
     cfg.pesos_json = json.dumps({'pontos_vitoria': max(0, float(body.pontos_vitoria if body.pontos_vitoria is not None else 1)),
                                  'pontos_abate': max(0, float(body.pontos_abate if body.pontos_abate is not None else 1))})
     db.commit(); db.refresh(ev)

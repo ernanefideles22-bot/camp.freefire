@@ -31,7 +31,7 @@ export function AdminEquipes({ onAddToast }: Props) {
   const [rodadas, setRodadas] = useState('3');
   const [inicio, setInicio] = useState('');
   const [fim, setFim] = useState('');
-  const [regraPontos, setRegraPontos] = useState<'lbff' | 'cs'>('cs');
+  const [regraPontos, setRegraPontos] = useState<'ffws' | 'lbff' | 'cs'>('cs');
   const [pontosVitoria, setPontosVitoria] = useState('1');
   const [pontosAbate, setPontosAbate] = useState('1');
   const [ordemSel, setOrdemSel] = useState(1);
@@ -66,7 +66,7 @@ export function AdminEquipes({ onAddToast }: Props) {
       setNome(evento.nome); setDataHora(evento.data_hora ?? ''); setMinimo(String(evento.min_equipes)); setMaximo(String(evento.max_equipes));
       setTaxa(String(evento.taxa_inscricao)); setNumPos(String(evento.premios.length)); setValores(evento.premios.map(String));
       setRodadas(String(evento.total_rodadas ?? 3)); setInicio(evento.inicio ?? ''); setFim(evento.fim ?? '');
-      setRegraPontos(evento.regra_pontos ?? (evento.tipo === 'cs_4x4' ? 'cs' : 'lbff'));
+      setRegraPontos(evento.regra_pontos ?? (evento.tipo === 'cs_4x4' ? 'cs' : 'ffws'));
       setPontosVitoria(String(evento.pontos_vitoria ?? 1)); setPontosAbate(String(evento.pontos_abate ?? 1));
     }
   }, [evento?.id, evento?.status]);
@@ -135,7 +135,7 @@ export function AdminEquipes({ onAddToast }: Props) {
       {tipo !== 'cs_4x4' && <div><label className={label}>Rodadas</label><input type="number" min="1" max="100" value={rodadas} onChange={e => setRodadas(e.target.value)} className={campo} /></div>}
       <div><label className={label}>Inicio do evento</label><input value={inicio} onChange={e => setInicio(e.target.value)} placeholder="ex: 15/07 20:00" className={campo} /></div>
       <div><label className={label}>Fim / prazo</label><input value={fim} onChange={e => setFim(e.target.value)} placeholder="ex: 20/07 23:59" className={campo} /></div>
-      <div><label className={label}>Regra de pontuacao</label><select value={regraPontos} onChange={e => setRegraPontos(e.target.value as 'lbff' | 'cs')} className={campo}><option value="cs">CS: vitorias + abates</option><option value="lbff">BR: colocacao LBFF + abates</option></select></div>
+      <div><label className={label}>Regra de pontuacao</label><select value={regraPontos} onChange={e => setRegraPontos(e.target.value as 'ffws' | 'lbff' | 'cs')} className={campo}><option value="ffws">FFWS: colocação + 1 ponto por abate</option><option value="cs">CS: vitórias + abates</option><option value="lbff">LBFF clássico: colocação + abates</option></select></div>
       {regraPontos === 'cs' && <><div><label className={label}>Pontos por vitoria</label><input type="number" min="0" step="0.1" value={pontosVitoria} onChange={e => setPontosVitoria(e.target.value)} className={campo} /></div><div><label className={label}>Pontos por abate</label><input type="number" min="0" step="0.1" value={pontosAbate} onChange={e => setPontosAbate(e.target.value)} className={campo} /></div></>}
     </div>
     <div><label className={label}>Premio por colocacao (R$)</label><div className="grid grid-cols-4 sm:grid-cols-6 gap-2">{Array.from({ length: nPos }, (_, i) => <div key={i}><span className="text-[9px] text-zinc-500 block text-center mb-1">{i + 1}o</span><input type="number" min="0" step="0.01" value={valores[i] || ''} onChange={e => setValor(i, e.target.value)} className={`${campo} text-center px-1`} /></div>)}</div><p className="text-[10px] text-zinc-500 mt-1">Total: <b className="text-emerald-400">{brl(premios.reduce((soma, valor) => soma + valor, 0))}</b></p></div>

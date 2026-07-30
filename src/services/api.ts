@@ -330,7 +330,7 @@ export interface CampeonatoEquipe {
   status: 'inscricao' | 'em_andamento' | 'aguardando_revisao' | 'pago' | 'cancelado'; min_equipes: number; max_equipes: number;
   taxa_inscricao: number; data_hora: string | null; premios: number[]; equipes: number; placar: PlacarEquipe[];
   total_rodadas?: number; inicio?: string | null; fim?: string | null;
-  regra_pontos?: 'lbff' | 'cs'; pontos_vitoria?: number; pontos_abate?: number;
+  regra_pontos?: 'ffws' | 'lbff' | 'cs'; pontos_vitoria?: number; pontos_abate?: number;
   confrontos_cs?: ConfrontoCS[];
 }
 
