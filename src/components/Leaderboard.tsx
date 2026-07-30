@@ -52,11 +52,33 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
   const segundo = area === 'criadores' ? 'Participantes' : 'Abates';
   const terceiro = area === 'criadores' ? 'Situação' : 'Partidas';
 
-  const compartilhar = async () => {
-    const texto = `Confira o Mural dos Campeões da ${mural?.temporada.nome ?? 'temporada'} no FlowFire.`;
+  const descricaoLinha = (linha: LinhaMuralRanking) => area === 'criadores'
+    ? `${linha.posicao}º ${nomeLinha(linha)} — ${linha.pontos} eventos · ${linha.partidas} participantes`
+    : `${linha.posicao}º ${nomeLinha(linha)} — ${linha.pontos} pts · ${linha.abates} abates`;
+
+  const compartilhar = async (escopo: 'top3' | 'completo') => {
+    const linhasParaCompartilhar = escopo === 'top3' ? linhas.slice(0, 3) : linhas;
+    if (!linhasParaCompartilhar.length) {
+      onAddToast('info', 'Ranking em preparação', 'O compartilhamento estará disponível quando houver resultados.');
+      return;
+    }
+    const tituloArea = configuracao.titulo.toUpperCase();
+    const titulo = escopo === 'top3' ? `TOP 3 — ${tituloArea}` : `RANKING COMPLETO — ${tituloArea}`;
+    const texto = [
+      '🏆 FLOWFIRE CHAMPIONS',
+      `${mural?.temporada.nome ?? 'Temporada atual'} · ${tituloArea}`,
+      '',
+      titulo,
+      ...linhasParaCompartilhar.map(descricaoLinha),
+      '',
+      'Jogue. Suba no ranking. Domine a arena.',
+    ].join('\n');
     try {
-      if (navigator.share) await navigator.share({ title: 'FlowFire Champions', text: texto, url: window.location.href });
-      else { await navigator.clipboard.writeText(window.location.href); onAddToast('success', 'Link copiado', 'Envie o ranking para sua equipe.'); }
+      if (navigator.share) await navigator.share({ title: `FlowFire ${titulo}`, text: texto, url: window.location.href });
+      else {
+        await navigator.clipboard.writeText(`${texto}\n${window.location.href}`);
+        onAddToast('success', 'Ranking copiado', `${escopo === 'top3' ? 'O Top 3' : 'A classificação completa'} está pronta para enviar.`);
+      }
     } catch { /* compartilhamento cancelado pelo jogador */ }
   };
 
@@ -73,7 +95,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ onAddToast }) => {
     <section className="ff-ranking-tabs" aria-label="Área do ranking">{areas.map(item => { const Icone = item.icone; return <button key={item.id} onClick={() => setArea(item.id)} className={area === item.id ? 'is-active' : ''}><Icone className="w-4 h-4" /><span><b>{item.titulo}</b><small>{item.descricao}</small></span></button>; })}</section>
 
     <section className="ff-card overflow-hidden ff-mural-table">
-      <div className="ff-mural-table-head"><div><p className="ff-kicker">{configuracao.titulo}</p><h3>{mural?.temporada.nome ?? 'Temporada em preparação'}</h3></div><button onClick={compartilhar} className="ff-mural-share"><Share2 className="w-4 h-4" />Compartilhar ranking</button></div>
+      <div className="ff-mural-table-head"><div><p className="ff-kicker">{configuracao.titulo}</p><h3>{mural?.temporada.nome ?? 'Temporada em preparação'}</h3></div><div className="ff-mural-share-actions"><button onClick={() => compartilhar('top3')} disabled={!linhas.length} className="ff-mural-share"><Trophy className="w-4 h-4" />Compartilhar Top 3</button><button onClick={() => compartilhar('completo')} disabled={!linhas.length} className="ff-mural-share is-full"><Share2 className="w-4 h-4" />Ranking completo</button></div></div>
       {linhas.length === 0 ? <div className="ff-mural-empty"><Trophy className="w-11 h-11" /><h3>O placar está zerado.</h3><p>A nova temporada começou agora. O primeiro resultado aprovado será o primeiro registro do Mural dos Campeões.</p></div> : <div className="overflow-x-auto"><table className="w-full text-left border-collapse"><thead><tr><th>Pos</th><th>{area === 'equipes' ? 'Equipe' : area === 'criadores' ? 'Criador' : 'Jogador'}</th><th className="text-right">{primeiro}</th><th className="text-right">{segundo}</th><th className="text-right hidden sm:table-cell">{terceiro}</th><th className="text-right">Ganhos (R$)</th></tr></thead><tbody>{linhas.map(linha => <tr key={`${area}-${linha.posicao}-${nomeLinha(linha)}`}><td>{medalha(linha.posicao)}</td><td><div className="flex items-center gap-2">{linha.logo_url && <img src={linha.logo_url} alt="Emblema da guilda" className="w-8 h-8 rounded-lg object-cover border border-primary/35" />}<div><b className="text-white">{nomeLinha(linha)}</b>{linha.status === 'provisorio' && <span className="ff-provisional">provisório</span>}</div></div></td><td className="text-right text-white font-bold">{linha.pontos}{area !== 'criadores' && ' pts'}</td><td className="text-right text-zinc-300">{area === 'criadores' ? linha.partidas : linha.abates}</td><td className="text-right hidden sm:table-cell text-zinc-400">{area === 'criadores' ? (linha.status === 'oficial' ? 'Oficial' : 'Em revisão') : linha.partidas}</td><td className="text-right font-black text-accent-cyan">{dinheiro(linha.ganhos)}</td></tr>)}</tbody></table></div>}
     </section>
 
