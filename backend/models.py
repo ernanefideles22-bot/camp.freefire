@@ -423,6 +423,93 @@ class PagamentoEquipeCampeonatoModel(Base):
     liberado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+# ====================== TORNEIO FUSÃO SUPREMA ======================
+# O formato híbrido mantém BR e CS no mesmo evento: a classificação do BR
+# alimenta a chave de CS, sem duplicar inscrição, equipe ou premiação.
+class TorneioFusaoModel(Base):
+    __tablename__ = 'torneios_fusao'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    nome: Mapped[str] = mapped_column(String, nullable=False, default='Torneio Fusão Suprema')
+    subtitulo: Mapped[str] = mapped_column(String, nullable=False, default='Sobreviva no BR. Domine no CS. Conquiste a Coroa.')
+    descricao: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default='inscricao', index=True)
+    tamanho_equipe: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    min_equipes: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    max_equipes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    max_reservas: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=2)
+    taxa_inscricao: Mapped[float] = mapped_column(Float, nullable=False, default=3.0)
+    data_br: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    data_cs: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    rodadas_br: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    classificados: Mapped[int] = mapped_column(Integer, nullable=False, default=16)
+    pontos_colocacao_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pontos_abate: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    desempates_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    chaveamento: Mapped[str] = mapped_column(String, nullable=False, default='seed')
+    series_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    vantagem: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    premios_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class EquipeFusaoModel(Base):
+    __tablename__ = 'equipes_fusao'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    torneio_id: Mapped[int] = mapped_column(ForeignKey('torneios_fusao.id'), nullable=False, index=True)
+    nome: Mapped[str] = mapped_column(String, nullable=False)
+    capitao_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    nome_guilda: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    logo_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    slot_br: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class MembroEquipeFusaoModel(Base):
+    __tablename__ = 'membros_equipes_fusao'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_fusao.id'), nullable=False, index=True)
+    jogador_id: Mapped[int] = mapped_column(ForeignKey('jogadores.id'), nullable=False, index=True)
+    reserva: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class ResultadoFusaoBRModel(Base):
+    __tablename__ = 'resultados_fusao_br'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    torneio_id: Mapped[int] = mapped_column(ForeignKey('torneios_fusao.id'), nullable=False, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_fusao.id'), nullable=False, index=True)
+    ordem: Mapped[int] = mapped_column(Integer, nullable=False)
+    colocacao: Mapped[int] = mapped_column(Integer, nullable=False)
+    abates: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ConfrontoFusaoCSModel(Base):
+    __tablename__ = 'confrontos_fusao_cs'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    torneio_id: Mapped[int] = mapped_column(ForeignKey('torneios_fusao.id'), nullable=False, index=True)
+    fase: Mapped[int] = mapped_column(Integer, nullable=False)
+    ordem: Mapped[int] = mapped_column(Integer, nullable=False)
+    serie_md: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    equipe_a_id: Mapped[Optional[int]] = mapped_column(ForeignKey('equipes_fusao.id'), nullable=True)
+    equipe_b_id: Mapped[Optional[int]] = mapped_column(ForeignKey('equipes_fusao.id'), nullable=True)
+    vitorias_a: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    vitorias_b: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    vencedor_id: Mapped[Optional[int]] = mapped_column(ForeignKey('equipes_fusao.id'), nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default='aguardando')
+
+
+class PagamentoFusaoModel(Base):
+    __tablename__ = 'pagamentos_fusao'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    torneio_id: Mapped[int] = mapped_column(ForeignKey('torneios_fusao.id'), nullable=False, index=True)
+    equipe_id: Mapped[int] = mapped_column(ForeignKey('equipes_fusao.id'), nullable=False, index=True)
+    colocacao_final: Mapped[int] = mapped_column(Integer, nullable=False)
+    valor: Mapped[float] = mapped_column(Float, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default='pendente', index=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    liberado_em: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class ConfiguracaoEventoModel(Base):
     """Configuracoes extras sem migrar as tabelas legadas de cada modalidade."""
     __tablename__ = 'configuracoes_eventos'

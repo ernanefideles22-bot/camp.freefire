@@ -28,6 +28,8 @@ from models import (JogadorModel, QuedaModel, InscricaoModel,
                     PagamentoEquipeCampeonatoModel, ConfiguracaoEventoModel,
                     SalaEventoModel, ResultadoEquipeRodadaModel,
                     ConfrontoCSEquipeModel,
+                    TorneioFusaoModel, EquipeFusaoModel, MembroEquipeFusaoModel,
+                    ResultadoFusaoBRModel, ConfrontoFusaoCSModel, PagamentoFusaoModel,
                     GuildaPerfilModel, MembroGuildaPerfilModel, EquipeGuildaModel,
                     ReservaEquipeCampeonatoModel,
                     CriadorFlowFireModel, CampeonatoCriadorModel,
@@ -3781,3 +3783,390 @@ def liberar_pagamento_evento_criador(pagamento_id: int, _admin: JogadorModel = D
                                   PagamentoCampeonatoCriadorModel.status == 'pendente')) or 0
     if not pendentes: db.get(CampeonatoCriadorModel, pagamento.campeonato_id).status = 'encerrado'
     db.commit(); return {'message': 'Pagamento liberado manualmente.'}
+
+
+# ====================== TORNEIO FUSÃO SUPREMA ======================
+# Um único evento, BR classificatório seguido de chave CS. As configurações
+# ficam no próprio torneio para que o administrador não dependa de limites fixos.
+FUSAO_PONTOS_PADRAO = {'1': 15, '2': 12, '3': 10, '4': 8, '5': 7, '6': 6, '7': 5, '8': 4, '9': 3, '10': 2, '11-16': 1}
+FUSAO_DESEMPATES_PADRAO = ['pontos_total', 'booyahs', 'abates', 'ultima_colocacao', 'ultima_abates']
+FUSAO_SERIES_PADRAO = {'oitavas': 3, 'quartas': 3, 'semifinal': 5, 'final': 7, 'padrao': 3}
+
+
+def _fusao_json(valor: Optional[str], padrao):
+    try:
+        return json.loads(valor) if valor else padrao
+    except Exception:
+        return padrao
+
+
+def _pontos_colocacao_fusao(config: dict, colocacao: int) -> float:
+    direto = config.get(str(colocacao))
+    if direto is not None:
+        return max(0, float(direto))
+    for chave, valor in config.items():
+        if '-' in str(chave):
+            try:
+                inicio, fim = (int(x.strip()) for x in str(chave).split('-', 1))
+                if inicio <= colocacao <= fim:
+                    return max(0, float(valor))
+            except (ValueError, TypeError):
+                continue
+    return 0.0
+
+
+def _membros_fusao(db: Session, equipe_id: int, incluir_reservas: bool = False) -> list[JogadorModel]:
+    registros = db.scalars(select(MembroEquipeFusaoModel).where(MembroEquipeFusaoModel.equipe_id == equipe_id)).all()
+    return [j for registro in registros if (incluir_reservas or not registro.reserva)
+            for j in [db.get(JogadorModel, registro.jogador_id)] if j]
+
+
+def _serializar_equipe_fusao(db: Session, equipe: EquipeFusaoModel) -> dict:
+    membros = _membros_fusao(db, equipe.id)
+    reservas = [j for j in _membros_fusao(db, equipe.id, True) if j.id not in {m.id for m in membros}]
+    capitao = db.get(JogadorModel, equipe.capitao_id)
+    return {'id': equipe.id, 'nome': equipe.nome, 'capitao_id': equipe.capitao_id,
+            'capitao_nick': capitao.nick if capitao else None, 'slot_br': equipe.slot_br,
+            'membros': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in membros],
+            'reservas': [{'id': j.id, 'nick': j.nick, 'nome': j.nome} for j in reservas],
+            'guilda': {'nome': equipe.nome_guilda, 'logo_url': equipe.logo_data} if equipe.nome_guilda else None}
+
+
+def _placar_fusao(db: Session, torneio: TorneioFusaoModel) -> list[dict]:
+    pontos_cfg = _fusao_json(torneio.pontos_colocacao_json, FUSAO_PONTOS_PADRAO)
+    linhas = []
+    for equipe in db.scalars(select(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio.id)).all():
+        resultados = list(db.scalars(select(ResultadoFusaoBRModel).where(ResultadoFusaoBRModel.torneio_id == torneio.id,
+                                     ResultadoFusaoBRModel.equipe_id == equipe.id).order_by(ResultadoFusaoBRModel.ordem)).all())
+        pontos_posicao = sum(_pontos_colocacao_fusao(pontos_cfg, item.colocacao) for item in resultados)
+        abates = sum(item.abates for item in resultados)
+        ultimo = resultados[-1] if resultados else None
+        linhas.append({'equipe_id': equipe.id, 'equipe': equipe.nome,
+                       'guilda': {'nome': equipe.nome_guilda, 'logo_url': equipe.logo_data} if equipe.nome_guilda else None,
+                       'pontos_colocacao': round(pontos_posicao, 2), 'pontos_abate': round(abates * torneio.pontos_abate, 2),
+                       'pontos': round(pontos_posicao + abates * torneio.pontos_abate, 2), 'abates': abates,
+                       'booyahs': sum(1 for item in resultados if item.colocacao == 1), 'quedas': len(resultados),
+                       'ultima_colocacao': ultimo.colocacao if ultimo else None, 'ultima_abates': ultimo.abates if ultimo else 0})
+    linhas.sort(key=lambda linha: (-linha['pontos'], -linha['booyahs'], -linha['abates'],
+                                   linha['ultima_colocacao'] or 99999, -linha['ultima_abates'], linha['equipe'].lower()))
+    for posicao, linha in enumerate(linhas, 1):
+        linha['posicao'] = posicao
+        linha['classificado'] = posicao <= torneio.classificados
+    return linhas
+
+
+def _fase_nome_fusao(quantidade_duelos: int) -> str:
+    return {1: 'Final', 2: 'Semifinal', 4: 'Quartas de final', 8: 'Oitavas de final', 16: '16 avos de final'}.get(quantidade_duelos, f'Fase de {quantidade_duelos * 2}')
+
+
+def _serie_fusao(torneio: TorneioFusaoModel, quantidade_duelos: int) -> int:
+    series = _fusao_json(torneio.series_json, FUSAO_SERIES_PADRAO)
+    chave = {1: 'final', 2: 'semifinal', 4: 'quartas', 8: 'oitavas'}.get(quantidade_duelos, 'padrao')
+    try:
+        valor = int(series.get(chave, series.get('padrao', 3)))
+        return valor if valor > 0 and valor % 2 else 3
+    except (ValueError, TypeError):
+        return 3
+
+
+def _dados_confrontos_fusao(db: Session, torneio_id: int) -> list[dict]:
+    partidas = list(db.scalars(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id)
+                               .order_by(ConfrontoFusaoCSModel.fase, ConfrontoFusaoCSModel.ordem)).all())
+    total_por_fase = {fase: sum(1 for partida in partidas if partida.fase == fase) for fase in {p.fase for p in partidas}}
+    def equipe(equipe_id):
+        item = db.get(EquipeFusaoModel, equipe_id) if equipe_id else None
+        return _serializar_equipe_fusao(db, item) if item else None
+    return [{'id': partida.id, 'fase': partida.fase, 'fase_nome': _fase_nome_fusao(total_por_fase[partida.fase]),
+             'ordem': partida.ordem, 'serie_md': partida.serie_md, 'equipe_a': equipe(partida.equipe_a_id),
+             'equipe_b': equipe(partida.equipe_b_id), 'vitorias_a': partida.vitorias_a, 'vitorias_b': partida.vitorias_b,
+             'vencedor_id': partida.vencedor_id, 'status': partida.status} for partida in partidas]
+
+
+def _serializar_fusao(db: Session, torneio: TorneioFusaoModel) -> dict:
+    equipes = list(db.scalars(select(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio.id)).all())
+    return {'id': torneio.id, 'nome': torneio.nome, 'subtitulo': torneio.subtitulo, 'descricao': torneio.descricao,
+            'status': torneio.status, 'tamanho_equipe': torneio.tamanho_equipe, 'min_equipes': torneio.min_equipes,
+            'max_equipes': torneio.max_equipes, 'max_reservas': torneio.max_reservas, 'taxa_inscricao': torneio.taxa_inscricao,
+            'data_br': torneio.data_br, 'data_cs': torneio.data_cs, 'rodadas_br': torneio.rodadas_br,
+            'classificados': torneio.classificados, 'pontos_colocacao': _fusao_json(torneio.pontos_colocacao_json, FUSAO_PONTOS_PADRAO),
+            'pontos_abate': torneio.pontos_abate, 'desempates': _fusao_json(torneio.desempates_json, FUSAO_DESEMPATES_PADRAO),
+            'chaveamento': torneio.chaveamento, 'series': _fusao_json(torneio.series_json, FUSAO_SERIES_PADRAO),
+            'vantagem': torneio.vantagem, 'premios': _fusao_json(torneio.premios_json, []), 'equipes': len(equipes),
+            'inscritos_equipes': [_serializar_equipe_fusao(db, equipe) for equipe in equipes], 'placar_br': _placar_fusao(db, torneio),
+            'confrontos_cs': _dados_confrontos_fusao(db, torneio.id)}
+
+
+class ConfigurarFusaoBody(BaseModel):
+    nome: str = 'Torneio Fusão Suprema'
+    subtitulo: str = 'Sobreviva no BR. Domine no CS. Conquiste a Coroa.'
+    descricao: Optional[str] = None
+    tamanho_equipe: int = 2
+    min_equipes: int = 2
+    max_equipes: Optional[int] = None
+    max_reservas: Optional[int] = 2
+    taxa_inscricao: float = 3.0
+    data_br: Optional[str] = None
+    data_cs: Optional[str] = None
+    rodadas_br: int = 5
+    classificados: int = 16
+    pontos_colocacao: dict = FUSAO_PONTOS_PADRAO
+    pontos_abate: float = 1.0
+    desempates: list[str] = FUSAO_DESEMPATES_PADRAO
+    chaveamento: str = 'seed'
+    series: dict = FUSAO_SERIES_PADRAO
+    vantagem: Optional[str] = None
+    premios: list[float] = []
+
+
+class InscreverFusaoBody(BaseModel):
+    nome_equipe: str
+    membros_nicks: list[str] = []
+    reservas_nicks: list[str] = []
+    nome_guilda: Optional[str] = None
+    logo_data: Optional[str] = None
+
+
+class ResultadoFusaoBRInput(BaseModel):
+    equipe_id: int
+    colocacao: int
+    abates: int = 0
+
+
+class ResultadoFusaoBRBody(BaseModel):
+    ordem: int
+    resultados: list[ResultadoFusaoBRInput]
+
+
+class ResultadoFusaoCSBody(BaseModel):
+    vitorias_a: int
+    vitorias_b: int
+
+
+def _aplicar_config_fusao(torneio: TorneioFusaoModel, body: ConfigurarFusaoBody):
+    if body.tamanho_equipe < 1 or body.min_equipes < 2 or body.rodadas_br < 1 or body.classificados < 2:
+        raise HTTPException(400, 'Tamanho da equipe, mínimo, quedas e classificados precisam ser maiores que zero.')
+    if body.max_equipes is not None and body.max_equipes > 0 and body.max_equipes < body.min_equipes:
+        raise HTTPException(400, 'O limite de equipes não pode ser menor que o mínimo.')
+    if body.max_reservas is not None and body.max_reservas < 0:
+        raise HTTPException(400, 'O número de reservas não pode ser negativo.')
+    if body.taxa_inscricao < 0 or body.pontos_abate < 0:
+        raise HTTPException(400, 'Valores financeiros e pontos não podem ser negativos.')
+    if body.chaveamento not in ('seed', 'sorteio'):
+        raise HTTPException(400, 'Escolha chaveamento por classificação ou sorteio.')
+    for valor in body.series.values():
+        try:
+            if int(valor) < 1 or int(valor) % 2 == 0: raise ValueError
+        except (ValueError, TypeError):
+            raise HTTPException(400, 'Cada série do CS precisa ser MD ímpar: 1, 3, 5, 7...')
+    torneio.nome, torneio.subtitulo, torneio.descricao = body.nome.strip() or 'Torneio Fusão Suprema', body.subtitulo.strip() or 'Sobreviva no BR. Domine no CS. Conquiste a Coroa.', body.descricao
+    torneio.tamanho_equipe, torneio.min_equipes = body.tamanho_equipe, body.min_equipes
+    torneio.max_equipes = body.max_equipes if body.max_equipes and body.max_equipes > 0 else None
+    torneio.max_reservas = body.max_reservas
+    torneio.taxa_inscricao, torneio.data_br, torneio.data_cs = body.taxa_inscricao, body.data_br, body.data_cs
+    torneio.rodadas_br, torneio.classificados = body.rodadas_br, body.classificados
+    torneio.pontos_colocacao_json, torneio.pontos_abate = json.dumps(body.pontos_colocacao), body.pontos_abate
+    torneio.desempates_json, torneio.chaveamento, torneio.series_json = json.dumps(body.desempates), body.chaveamento, json.dumps(body.series)
+    torneio.vantagem, torneio.premios_json = body.vantagem, json.dumps([round(max(0, float(v)), 2) for v in body.premios])
+
+
+@app.get('/fusao/atual')
+def fusao_atual(db: Session = Depends(get_db)):
+    torneio = db.scalar(select(TorneioFusaoModel).where(TorneioFusaoModel.status.notin_(['encerrado', 'cancelado'])).order_by(TorneioFusaoModel.id.desc()))
+    return {'torneio': _serializar_fusao(db, torneio) if torneio else None}
+
+
+@app.get('/fusao/historico')
+def fusao_historico(db: Session = Depends(get_db)):
+    itens = db.scalars(select(TorneioFusaoModel).where(TorneioFusaoModel.status.in_(['encerrado', 'cancelado'])).order_by(TorneioFusaoModel.id.desc()).limit(20)).all()
+    return {'torneios': [_serializar_fusao(db, item) for item in itens]}
+
+
+@app.get('/fusao/{torneio_id}/minha-equipe')
+def minha_equipe_fusao(torneio_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    equipe = db.scalar(select(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id, EquipeFusaoModel.capitao_id == jogador.id))
+    return {'equipe': _serializar_equipe_fusao(db, equipe) if equipe else None}
+
+
+@app.post('/fusao/{torneio_id}/inscrever')
+def inscrever_fusao(torneio_id: int, body: InscreverFusaoBody, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    torneio = db.get(TorneioFusaoModel, torneio_id)
+    if not torneio or torneio.status != 'inscricao': raise HTTPException(400, 'As inscrições deste torneio não estão abertas.')
+    if db.scalar(select(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id, EquipeFusaoModel.capitao_id == jogador.id)):
+        raise HTTPException(400, 'Você já inscreveu uma equipe neste torneio.')
+    total = db.scalar(select(func.count()).select_from(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id)) or 0
+    if torneio.max_equipes and total >= torneio.max_equipes: raise HTTPException(400, 'As vagas do torneio foram preenchidas.')
+    nicks = [jogador.nick] + [n.strip() for n in body.membros_nicks if n.strip()]
+    nicks = list(dict.fromkeys(nicks))
+    if len(nicks) != torneio.tamanho_equipe: raise HTTPException(400, f'Esta configuração exige exatamente {torneio.tamanho_equipe} titulares, contando o capitão.')
+    membros = db.scalars(select(JogadorModel).where(JogadorModel.nick.in_(nicks))).all()
+    if len(membros) != len(nicks): raise HTTPException(400, 'Um ou mais nicks titulares não foram encontrados.')
+    reservas_nicks = list(dict.fromkeys(n.strip() for n in body.reservas_nicks if n.strip()))
+    if set(n.casefold() for n in reservas_nicks) & set(n.casefold() for n in nicks): raise HTTPException(400, 'Um titular não pode também ser reserva.')
+    if torneio.max_reservas is not None and len(reservas_nicks) > torneio.max_reservas: raise HTTPException(400, f'Este torneio permite até {torneio.max_reservas} reserva(s).')
+    reservas = db.scalars(select(JogadorModel).where(JogadorModel.nick.in_(reservas_nicks))).all()
+    if len(reservas) != len(reservas_nicks): raise HTTPException(400, 'Um ou mais nicks reservas não foram encontrados.')
+    conta = _lock_jogador(db, jogador.id)
+    if conta.saldo < torneio.taxa_inscricao: raise HTTPException(400, 'Saldo insuficiente para a inscrição da equipe.')
+    equipe = EquipeFusaoModel(torneio_id=torneio.id, nome=body.nome_equipe.strip() or f'Equipe de {jogador.nick}', capitao_id=jogador.id,
+                               nome_guilda=body.nome_guilda.strip() if body.nome_guilda else None, logo_data=_validar_logo_guilda(body.logo_data), slot_br=total + 1)
+    db.add(equipe); db.flush()
+    for membro in membros: db.add(MembroEquipeFusaoModel(equipe_id=equipe.id, jogador_id=membro.id))
+    for reserva in reservas: db.add(MembroEquipeFusaoModel(equipe_id=equipe.id, jogador_id=reserva.id, reserva=True))
+    registrar_transacao(db, conta, tipo='inscricao_torneio_fusao', delta_saldo=-torneio.taxa_inscricao, ref=f'fusao:{torneio.id}:{equipe.id}')
+    db.commit(); return {'message': 'Equipe inscrita na Fusão Suprema.', 'equipe': _serializar_equipe_fusao(db, equipe)}
+
+
+@app.post('/admin/fusao/criar')
+def criar_fusao(body: ConfigurarFusaoBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    existe = db.scalar(select(TorneioFusaoModel).where(TorneioFusaoModel.status.notin_(['encerrado', 'cancelado'])))
+    if existe: raise HTTPException(400, 'Já existe uma Fusão Suprema ativa. Encerre ou cancele-a antes de criar outra.')
+    torneio = TorneioFusaoModel(); _aplicar_config_fusao(torneio, body); db.add(torneio); db.commit(); db.refresh(torneio)
+    return _serializar_fusao(db, torneio)
+
+
+@app.post('/admin/fusao/{torneio_id}/config')
+def configurar_fusao(torneio_id: int, body: ConfigurarFusaoBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    torneio = db.get(TorneioFusaoModel, torneio_id)
+    if not torneio or torneio.status != 'inscricao': raise HTTPException(400, 'A configuração só pode ser alterada durante as inscrições.')
+    _aplicar_config_fusao(torneio, body); db.commit(); return _serializar_fusao(db, torneio)
+
+
+@app.post('/admin/fusao/{torneio_id}/iniciar-br')
+def iniciar_br_fusao(torneio_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    torneio = db.get(TorneioFusaoModel, torneio_id)
+    if not torneio or torneio.status != 'inscricao': raise HTTPException(400, 'O torneio não está em inscrições.')
+    total = db.scalar(select(func.count()).select_from(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id)) or 0
+    if total < torneio.min_equipes: raise HTTPException(400, f'São necessárias pelo menos {torneio.min_equipes} equipes.')
+    if torneio.classificados > total: raise HTTPException(400, 'A quantidade de classificados não pode superar as equipes inscritas.')
+    torneio.status = 'br_em_andamento'; db.commit(); return {'message': 'BR classificatório iniciado.'}
+
+
+@app.post('/admin/fusao/{torneio_id}/br/resultado')
+def resultado_br_fusao(torneio_id: int, body: ResultadoFusaoBRBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    torneio = db.get(TorneioFusaoModel, torneio_id)
+    if not torneio or torneio.status != 'br_em_andamento': raise HTTPException(400, 'O BR não está em andamento.')
+    if body.ordem < 1 or body.ordem > torneio.rodadas_br: raise HTTPException(400, 'Número de queda inválido.')
+    equipes = {e.id for e in db.scalars(select(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id)).all()}
+    if {r.equipe_id for r in body.resultados} != equipes or len({r.colocacao for r in body.resultados}) != len(body.resultados):
+        raise HTTPException(400, 'Informe uma colocação única para todas as equipes inscritas.')
+    db.execute(delete(ResultadoFusaoBRModel).where(ResultadoFusaoBRModel.torneio_id == torneio_id, ResultadoFusaoBRModel.ordem == body.ordem))
+    for item in body.resultados:
+        if item.colocacao < 1 or item.abates < 0: raise HTTPException(400, 'Colocação e abates inválidos.')
+        db.add(ResultadoFusaoBRModel(torneio_id=torneio_id, equipe_id=item.equipe_id, ordem=body.ordem, colocacao=item.colocacao, abates=item.abates))
+    db.commit(); return {'message': f'Queda {body.ordem} salva.', 'placar': _placar_fusao(db, torneio)}
+
+
+@app.post('/admin/fusao/{torneio_id}/br/ocr')
+async def ocr_br_fusao(torneio_id: int, imagem: UploadFile = File(...), _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    torneio = db.get(TorneioFusaoModel, torneio_id)
+    if not torneio: raise HTTPException(404, 'Torneio não encontrado.')
+    equipes = [(e.id, e.nome, _membros_fusao(db, e.id, True)) for e in db.scalars(select(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id)).all()]
+    return await _ler_placar_equipes_por_nick(await imagem.read(), imagem.content_type or 'image/png', equipes)
+
+
+def _seeds_fusao(total_slots: int) -> list[int]:
+    seeds = [1]
+    while len(seeds) < total_slots:
+        tamanho = len(seeds) * 2
+        seeds = [valor for seed in seeds for valor in (seed, tamanho + 1 - seed)]
+    return seeds
+
+
+def _avancar_fusao(db: Session, partida: ConfrontoFusaoCSModel, vencedor_id: int):
+    partida.vencedor_id, partida.status = vencedor_id, 'finalizado' if partida.status != 'bye' else 'bye'
+    proxima = db.scalar(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == partida.torneio_id,
+                                                             ConfrontoFusaoCSModel.fase == partida.fase + 1,
+                                                             ConfrontoFusaoCSModel.ordem == math.ceil(partida.ordem / 2)))
+    if not proxima: return
+    if partida.ordem % 2: proxima.equipe_a_id = vencedor_id
+    else: proxima.equipe_b_id = vencedor_id
+
+
+@app.post('/admin/fusao/{torneio_id}/finalizar-br')
+def finalizar_br_fusao(torneio_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    torneio = db.get(TorneioFusaoModel, torneio_id)
+    if not torneio or torneio.status != 'br_em_andamento': raise HTTPException(400, 'O BR não está em andamento.')
+    rodadas = {r.ordem for r in db.scalars(select(ResultadoFusaoBRModel).where(ResultadoFusaoBRModel.torneio_id == torneio_id)).all()}
+    if len(rodadas) < torneio.rodadas_br: raise HTTPException(400, 'Lance todas as quedas antes de fechar o BR.')
+    classificados = _placar_fusao(db, torneio)[:torneio.classificados]
+    if len(classificados) < 2: raise HTTPException(400, 'São necessárias ao menos duas equipes classificadas.')
+    ids = [linha['equipe_id'] for linha in classificados]
+    if torneio.chaveamento == 'sorteio': random.shuffle(ids)
+    slots = 1
+    while slots < len(ids): slots *= 2
+    por_seed = {indice + 1: equipe_id for indice, equipe_id in enumerate(ids)}
+    ordem_seeds = _seeds_fusao(slots)
+    db.execute(delete(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id))
+    total_fases = int(math.log2(slots))
+    for fase in range(1, total_fases + 1):
+        duelos = slots // (2 ** fase)
+        for ordem in range(1, duelos + 1):
+            if fase == 1:
+                a, b = por_seed.get(ordem_seeds[(ordem - 1) * 2]), por_seed.get(ordem_seeds[(ordem - 1) * 2 + 1])
+            else: a = b = None
+            db.add(ConfrontoFusaoCSModel(torneio_id=torneio_id, fase=fase, ordem=ordem, serie_md=_serie_fusao(torneio, duelos), equipe_a_id=a, equipe_b_id=b))
+    db.flush()
+    for partida in db.scalars(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id, ConfrontoFusaoCSModel.fase == 1)).all():
+        if bool(partida.equipe_a_id) != bool(partida.equipe_b_id):
+            partida.status = 'bye'; _avancar_fusao(db, partida, partida.equipe_a_id or partida.equipe_b_id)
+    torneio.status = 'cs_em_andamento'; db.commit(); return {'message': 'Chave CS gerada com os classificados do BR.', 'confrontos': _dados_confrontos_fusao(db, torneio_id)}
+
+
+@app.post('/admin/fusao/{torneio_id}/cs/{confronto_id}/resultado')
+def resultado_cs_fusao(torneio_id: int, confronto_id: int, body: ResultadoFusaoCSBody, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    torneio, partida = db.get(TorneioFusaoModel, torneio_id), db.get(ConfrontoFusaoCSModel, confronto_id)
+    if not torneio or not partida or partida.torneio_id != torneio_id or torneio.status != 'cs_em_andamento' or partida.status != 'aguardando': raise HTTPException(400, 'Confronto indisponível.')
+    alvo = partida.serie_md // 2 + 1
+    if min(body.vitorias_a, body.vitorias_b) < 0 or max(body.vitorias_a, body.vitorias_b) != alvo or body.vitorias_a == body.vitorias_b:
+        raise HTTPException(400, f'Informe um placar válido para MD{partida.serie_md}; o vencedor precisa chegar a {alvo}.')
+    partida.vitorias_a, partida.vitorias_b = body.vitorias_a, body.vitorias_b
+    _avancar_fusao(db, partida, partida.equipe_a_id if body.vitorias_a > body.vitorias_b else partida.equipe_b_id)
+    final = db.scalar(select(func.max(ConfrontoFusaoCSModel.fase)).where(ConfrontoFusaoCSModel.torneio_id == torneio_id))
+    if partida.fase == final: torneio.status = 'aguardando_revisao'
+    db.commit(); return {'message': 'Resultado CS confirmado.', 'confrontos': _dados_confrontos_fusao(db, torneio_id)}
+
+
+@app.post('/admin/fusao/{torneio_id}/cs/{confronto_id}/ocr')
+async def ocr_cs_fusao(torneio_id: int, confronto_id: int, imagem: UploadFile = File(...), _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    partida = db.get(ConfrontoFusaoCSModel, confronto_id)
+    if not partida or partida.torneio_id != torneio_id or not partida.equipe_a_id or not partida.equipe_b_id: raise HTTPException(400, 'Confronto inválido para OCR.')
+    a, b = db.get(EquipeFusaoModel, partida.equipe_a_id), db.get(EquipeFusaoModel, partida.equipe_b_id)
+    prompt = f'Leia o placar deste confronto Free Fire MD{partida.serie_md}. Equipe A: {a.nome}, nicks: {", ".join(j.nick for j in _membros_fusao(db, a.id, True))}. Equipe B: {b.nome}, nicks: {", ".join(j.nick for j in _membros_fusao(db, b.id, True))}. Retorne APENAS JSON {{"vitorias_a":numero,"vitorias_b":numero,"confianca":"alta|media|baixa"}}. Não invente resultado.'
+    texto = await ia_generate(prompt, imagem_b64=base64.b64encode(await imagem.read()).decode('utf-8'), mime=imagem.content_type or 'image/png')
+    try: return {'sugestao': extrair_json(texto)}
+    except Exception: raise HTTPException(422, 'A IA não conseguiu ler o confronto. Preencha o placar manualmente.')
+
+
+@app.post('/admin/fusao/{torneio_id}/apurar')
+def apurar_fusao(torneio_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    torneio = db.get(TorneioFusaoModel, torneio_id)
+    if not torneio or torneio.status != 'aguardando_revisao': raise HTTPException(400, 'Finalize o CS antes de apurar os prêmios.')
+    if db.scalar(select(PagamentoFusaoModel).where(PagamentoFusaoModel.torneio_id == torneio_id)): raise HTTPException(400, 'Prêmios já foram apurados.')
+    final = db.scalar(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id).order_by(ConfrontoFusaoCSModel.fase.desc()))
+    ordem = [final.vencedor_id, final.equipe_b_id if final.vencedor_id == final.equipe_a_id else final.equipe_a_id]
+    ordem += [linha['equipe_id'] for linha in _placar_fusao(db, torneio) if linha['equipe_id'] not in ordem]
+    for posicao, valor in enumerate(_fusao_json(torneio.premios_json, []), 1):
+        if posicao <= len(ordem) and float(valor) > 0: db.add(PagamentoFusaoModel(torneio_id=torneio_id, equipe_id=ordem[posicao - 1], colocacao_final=posicao, valor=float(valor)))
+    torneio.status = 'pagamentos_pendentes'; db.commit(); return {'message': 'Prêmios apurados. Faça as liberações manualmente.'}
+
+
+@app.get('/admin/fusao/{torneio_id}/pagamentos')
+def pagamentos_fusao(torneio_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    itens = db.scalars(select(PagamentoFusaoModel).where(PagamentoFusaoModel.torneio_id == torneio_id).order_by(PagamentoFusaoModel.colocacao_final)).all()
+    return {'pagamentos': [{'id': p.id, 'equipe': db.get(EquipeFusaoModel, p.equipe_id).nome, 'colocacao': p.colocacao_final, 'valor': p.valor, 'status': p.status} for p in itens]}
+
+
+@app.post('/admin/fusao/pagamentos/{pagamento_id}/liberar')
+def liberar_pagamento_fusao(pagamento_id: int, _admin: JogadorModel = Depends(require_admin), db: Session = Depends(get_db)):
+    pagamento = db.get(PagamentoFusaoModel, pagamento_id)
+    if not pagamento or pagamento.status != 'pendente': raise HTTPException(400, 'Pagamento inválido.')
+    membros = _membros_fusao(db, pagamento.equipe_id)
+    if not membros: raise HTTPException(400, 'A equipe premiada não tem titulares.')
+    centavos, resto = divmod(round(pagamento.valor * 100), len(membros))
+    for indice, membro in enumerate(membros):
+        valor = (centavos + (1 if indice < resto else 0)) / 100
+        registrar_transacao(db, _lock_jogador(db, membro.id), tipo='premio_torneio_fusao', delta_saldo=valor, delta_sacavel=valor, ref=f'fusao:{pagamento.torneio_id}:{pagamento.id}:{membro.id}')
+    pagamento.status, pagamento.liberado_em = 'liberado', utcnow()
+    if not db.scalar(select(PagamentoFusaoModel).where(PagamentoFusaoModel.torneio_id == pagamento.torneio_id, PagamentoFusaoModel.status == 'pendente')):
+        db.get(TorneioFusaoModel, pagamento.torneio_id).status = 'encerrado'
+    db.commit(); return {'message': 'Prêmio liberado manualmente aos titulares da equipe.'}

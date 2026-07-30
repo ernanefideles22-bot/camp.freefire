@@ -341,6 +341,14 @@ export interface JogadorEquipeDisponivel {
 }
 export interface PagamentoEquipe { id: number; equipe: string; colocacao: number; valor: number; status: string; }
 
+export interface PlacarFusao { equipe_id: number; equipe: string; guilda?: GuildaIdentidade | null; posicao: number; pontos: number; pontos_colocacao: number; pontos_abate: number; abates: number; booyahs: number; quedas: number; ultima_colocacao?: number | null; classificado: boolean; }
+export interface ConfrontoFusao { id: number; fase: number; fase_nome: string; ordem: number; serie_md: number; status: string; equipe_a: EquipeCampeonato | null; equipe_b: EquipeCampeonato | null; vitorias_a: number; vitorias_b: number; vencedor_id?: number | null; }
+export interface TorneioFusao {
+  id: number; nome: string; subtitulo: string; descricao?: string | null; status: string; tamanho_equipe: number; min_equipes: number; max_equipes?: number | null; max_reservas?: number | null; taxa_inscricao: number;
+  data_br?: string | null; data_cs?: string | null; rodadas_br: number; classificados: number; pontos_colocacao: Record<string, number>; pontos_abate: number; desempates: string[]; chaveamento: 'seed' | 'sorteio'; series: Record<string, number>; vantagem?: string | null; premios: number[]; equipes: number; inscritos_equipes: EquipeCampeonato[]; placar_br: PlacarFusao[]; confrontos_cs: ConfrontoFusao[];
+}
+export interface PagamentoFusao { id: number; equipe: string; colocacao: number; valor: number; status: string; }
+
 export interface ResultadoCriador { jogador_id: number; nick: string; colocacao: number; abates: number; guilda?: GuildaIdentidade | null; }
 export interface ResultadoEquipeCriador { equipe_id: number; equipe: string; colocacao: number; abates: number; guilda?: GuildaIdentidade | null; }
 export interface CampeonatoCriador {
@@ -447,6 +455,23 @@ export const apiService = {
   async apurarCampeonatoEquipe(id: number): Promise<any> { return (await api.post(`/admin/equipes/${id}/apurar`)).data; },
   async listarPagamentosEquipe(id: number): Promise<PagamentoEquipe[]> { return (await api.get(`/admin/equipes/${id}/pagamentos`)).data.pagamentos ?? []; },
   async processarPagamentoEquipe(id: number, acao: 'liberar' | 'rejeitar'): Promise<any> { return (await api.post(`/admin/equipes/pagamento/${id}/${acao}`)).data; },
+
+  // ---------- TORNEIO FUSÃO SUPREMA ----------
+  async obterFusaoAtual(): Promise<TorneioFusao | null> { return (await api.get('/fusao/atual')).data?.torneio ?? null; },
+  async obterHistoricoFusao(): Promise<TorneioFusao[]> { return (await api.get('/fusao/historico')).data?.torneios ?? []; },
+  async obterMinhaEquipeFusao(id: number): Promise<EquipeCampeonato | null> { return (await api.get(`/fusao/${id}/minha-equipe`)).data?.equipe ?? null; },
+  async inscreverFusao(id: number, payload: { nome_equipe: string; membros_nicks: string[]; reservas_nicks: string[]; nome_guilda?: string; logo_data?: string }): Promise<any> { return (await api.post(`/fusao/${id}/inscrever`, payload)).data; },
+  async criarFusao(payload: any): Promise<TorneioFusao> { return (await api.post('/admin/fusao/criar', payload)).data as TorneioFusao; },
+  async configurarFusao(id: number, payload: any): Promise<TorneioFusao> { return (await api.post(`/admin/fusao/${id}/config`, payload)).data as TorneioFusao; },
+  async iniciarBrFusao(id: number): Promise<any> { return (await api.post(`/admin/fusao/${id}/iniciar-br`)).data; },
+  async salvarResultadoBrFusao(id: number, ordem: number, resultados: { equipe_id: number; colocacao: number; abates: number }[]): Promise<any> { return (await api.post(`/admin/fusao/${id}/br/resultado`, { ordem, resultados })).data; },
+  async ocrBrFusao(id: number, arquivo: File): Promise<any> { const form = new FormData(); form.append('imagem', arquivo); return (await api.post(`/admin/fusao/${id}/br/ocr`, form, { headers: { 'Content-Type': 'multipart/form-data' } })).data; },
+  async finalizarBrFusao(id: number): Promise<any> { return (await api.post(`/admin/fusao/${id}/finalizar-br`)).data; },
+  async salvarResultadoCsFusao(id: number, confrontoId: number, vitorias_a: number, vitorias_b: number): Promise<any> { return (await api.post(`/admin/fusao/${id}/cs/${confrontoId}/resultado`, { vitorias_a, vitorias_b })).data; },
+  async ocrCsFusao(id: number, confrontoId: number, arquivo: File): Promise<any> { const form = new FormData(); form.append('imagem', arquivo); return (await api.post(`/admin/fusao/${id}/cs/${confrontoId}/ocr`, form, { headers: { 'Content-Type': 'multipart/form-data' } })).data; },
+  async apurarFusao(id: number): Promise<any> { return (await api.post(`/admin/fusao/${id}/apurar`)).data; },
+  async pagamentosFusao(id: number): Promise<PagamentoFusao[]> { return (await api.get(`/admin/fusao/${id}/pagamentos`)).data?.pagamentos ?? []; },
+  async liberarPagamentoFusao(id: number): Promise<any> { return (await api.post(`/admin/fusao/pagamentos/${id}/liberar`)).data; },
 
   // ---------- CRIADORES FLOWFIRE ----------
   async solicitarCriador(payload: { slug: string; bio?: string }): Promise<any> { return (await api.post('/criadores/solicitar', payload)).data; },

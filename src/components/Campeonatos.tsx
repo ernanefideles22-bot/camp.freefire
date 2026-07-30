@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Gift, Swords, Trophy } from 'lucide-react';
+import { Crown, Gift, Swords } from 'lucide-react';
 import { QuedaBonus } from './QuedaBonus';
 import { CampeonatosEquipe } from './CampeonatosEquipe';
+import { TorneioFusao } from './TorneioFusao';
 import type { Jogador } from '../services/api';
 
-type Categoria = 'bonus' | 'individual' | 'equipes';
+type Categoria = 'bonus' | 'fusao' | 'equipes';
 
 interface Props {
   currentUser: Jogador | null;
@@ -13,14 +14,15 @@ interface Props {
 
 const opcoes: { id: Categoria; titulo: string; descricao: string; detalhe: string; Icone: typeof Gift }[] = [
   { id: 'bonus', titulo: 'Grátis', descricao: 'Quedas bônus', detalhe: 'Entrada livre', Icone: Gift },
-  { id: 'individual', titulo: 'Individual', descricao: 'Torneios pagos', detalhe: 'Ranking por evento', Icone: Trophy },
+  { id: 'fusao', titulo: 'Fusão Suprema', descricao: 'BR + CS no mesmo torneio', detalhe: 'Conquiste a Coroa', Icone: Crown },
   { id: 'equipes', titulo: 'Equipes', descricao: 'CS e BR', detalhe: '1x1 até Squad', Icone: Swords },
 ];
 
 export function Campeonatos({ currentUser, onAddToast }: Props) {
   const categoriaDoLink = (): Categoria => {
     const categoriaLink = window.location.hash.split('/')[1] as Categoria;
-    return ['bonus', 'individual', 'equipes'].includes(categoriaLink) ? categoriaLink : 'individual';
+    if (categoriaLink === 'individual') return 'fusao';
+    return ['bonus', 'fusao', 'equipes'].includes(categoriaLink) ? categoriaLink : 'fusao';
   };
   const [categoria, setCategoria] = useState<Categoria>(categoriaDoLink);
 
@@ -52,7 +54,7 @@ export function Campeonatos({ currentUser, onAddToast }: Props) {
         ))}
       </div>
       {categoria === 'bonus' && <QuedaBonus currentUser={currentUser} onAddToast={onAddToast} />}
-      {categoria === 'individual' && <QuedaBonus tipo="pago" currentUser={currentUser} onAddToast={onAddToast} />}
+      {categoria === 'fusao' && <TorneioFusao currentUser={currentUser} onAddToast={onAddToast} />}
       {categoria === 'equipes' && <CampeonatosEquipe currentUser={currentUser} onAddToast={onAddToast} />}
     </div>
   );

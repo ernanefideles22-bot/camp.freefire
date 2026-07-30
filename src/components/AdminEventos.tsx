@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { Crown, Gift, Swords, Trophy } from 'lucide-react';
+import { Crown, Gift, Swords } from 'lucide-react';
 import { AdminBonus } from './AdminBonus';
 import { AdminEquipes } from './AdminEquipes';
-import { AdminPago } from './AdminPago';
+import { AdminFusao } from './AdminFusao';
 import { AdminCriadores } from './AdminCriadores';
 
-type Categoria = 'bonus' | 'individual' | 'equipes' | 'criadores';
+type Categoria = 'bonus' | 'fusao' | 'equipes' | 'criadores';
 interface Props { onAddToast: (type: 'success' | 'error' | 'warning' | 'info', title: string, desc?: string) => void; }
 
 export function AdminEventos({ onAddToast }: Props) {
-  const [categoria, setCategoria] = useState<Categoria>('individual');
+  const [categoria, setCategoria] = useState<Categoria>('fusao');
   const opcoes: { id: Categoria; label: string; Icone: typeof Gift }[] = [
-    { id: 'individual', label: 'Individual', Icone: Trophy },
+    { id: 'fusao', label: 'Fusão Suprema', Icone: Crown },
     { id: 'equipes', label: 'Equipes', Icone: Swords },
     { id: 'bonus', label: 'Bônus', Icone: Gift },
     { id: 'criadores', label: 'Criadores', Icone: Crown },
@@ -24,7 +24,7 @@ export function AdminEventos({ onAddToast }: Props) {
     <div className="ff-command-tabs max-w-full">
       {opcoes.map(({ id, label, Icone }) => <button key={id} onClick={() => setCategoria(id)} className={`whitespace-nowrap flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-black uppercase tracking-wider cursor-pointer ${categoria === id ? 'is-active' : ''}`}><Icone className="w-3.5 h-3.5" />{label}</button>)}
     </div>
-    {categoria === 'individual' && <AdminPago onAddToast={onAddToast} />}
+    {categoria === 'fusao' && <AdminFusao onAddToast={onAddToast} />}
     {categoria === 'equipes' && <AdminEquipes onAddToast={onAddToast} />}
     {categoria === 'bonus' && <AdminBonus onAddToast={onAddToast} />}
     {categoria === 'criadores' && <AdminCriadores onAddToast={onAddToast} />}
