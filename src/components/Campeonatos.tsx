@@ -20,7 +20,7 @@ const opcoes: { id: Categoria; titulo: string; descricao: string; detalhe: strin
 
 export function Campeonatos({ currentUser, onAddToast }: Props) {
   const categoriaDoLink = (): Categoria => {
-    const categoriaLink = window.location.hash.split('/')[1] as Categoria;
+    const categoriaLink = window.location.hash.split('/')[1];
     if (categoriaLink === 'individual') return 'fusao';
     return ['bonus', 'fusao', 'equipes'].includes(categoriaLink) ? categoriaLink : 'fusao';
   };
