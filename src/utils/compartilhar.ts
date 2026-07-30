@@ -1,4 +1,4 @@
-export type CategoriaCampeonato = 'bonus' | 'individual' | 'equipes';
+export type CategoriaCampeonato = 'bonus' | 'individual' | 'equipes' | 'fusao';
 
 export function linkCampeonato(categoria: CategoriaCampeonato, eventoId: number) {
   return `${window.location.origin}/#campeonatos/${categoria}/${eventoId}`;
