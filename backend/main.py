@@ -3790,7 +3790,7 @@ def liberar_pagamento_evento_criador(pagamento_id: int, _admin: JogadorModel = D
 # ficam no próprio torneio para que o administrador não dependa de limites fixos.
 FUSAO_PONTOS_PADRAO = {'1': 15, '2': 12, '3': 10, '4': 8, '5': 7, '6': 6, '7': 5, '8': 4, '9': 3, '10': 2, '11-16': 1}
 FUSAO_DESEMPATES_PADRAO = ['pontos_total', 'booyahs', 'abates', 'ultima_colocacao', 'ultima_abates']
-FUSAO_SERIES_PADRAO = {'oitavas': 3, 'quartas': 3, 'semifinal': 5, 'final': 7, 'padrao': 3}
+FUSAO_SERIES_PADRAO = {'oitavas': 3, 'quartas': 3, 'semifinal': 5, 'terceiro_lugar': 3, 'final': 7, 'padrao': 3}
 
 
 def _fusao_json(valor: Optional[str], padrao):
@@ -3869,14 +3869,24 @@ def _serie_fusao(torneio: TorneioFusaoModel, quantidade_duelos: int) -> int:
         return 3
 
 
+def _serie_terceiro_lugar_fusao(torneio: TorneioFusaoModel) -> int:
+    series = _fusao_json(torneio.series_json, FUSAO_SERIES_PADRAO)
+    try:
+        valor = int(series.get('terceiro_lugar', series.get('padrao', 3)))
+        return valor if valor > 0 and valor % 2 else 3
+    except (ValueError, TypeError):
+        return 3
+
+
 def _dados_confrontos_fusao(db: Session, torneio_id: int) -> list[dict]:
-    partidas = list(db.scalars(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id)
-                               .order_by(ConfrontoFusaoCSModel.fase, ConfrontoFusaoCSModel.ordem)).all())
+    partidas = list(db.scalars(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id)).all())
+    partidas.sort(key=lambda partida: (999 if partida.fase == 0 else partida.fase, partida.ordem))
     total_por_fase = {fase: sum(1 for partida in partidas if partida.fase == fase) for fase in {p.fase for p in partidas}}
     def equipe(equipe_id):
         item = db.get(EquipeFusaoModel, equipe_id) if equipe_id else None
         return _serializar_equipe_fusao(db, item) if item else None
-    return [{'id': partida.id, 'fase': partida.fase, 'fase_nome': _fase_nome_fusao(total_por_fase[partida.fase]),
+    return [{'id': partida.id, 'fase': partida.fase,
+             'fase_nome': 'Disputa de 3º lugar' if partida.fase == 0 else _fase_nome_fusao(total_por_fase[partida.fase]),
              'ordem': partida.ordem, 'serie_md': partida.serie_md, 'equipe_a': equipe(partida.equipe_a_id),
              'equipe_b': equipe(partida.equipe_b_id), 'vitorias_a': partida.vitorias_a, 'vitorias_b': partida.vitorias_b,
              'vencedor_id': partida.vencedor_id, 'status': partida.status} for partida in partidas]
@@ -4105,6 +4115,11 @@ def finalizar_br_fusao(torneio_id: int, _admin: JogadorModel = Depends(require_a
                 a, b = por_seed.get(ordem_seeds[(ordem - 1) * 2]), por_seed.get(ordem_seeds[(ordem - 1) * 2 + 1])
             else: a = b = None
             db.add(ConfrontoFusaoCSModel(torneio_id=torneio_id, fase=fase, ordem=ordem, serie_md=_serie_fusao(torneio, duelos), equipe_a_id=a, equipe_b_id=b))
+    # A disputa de 3º só existe quando há uma semifinal. Ela recebe os dois
+    # perdedores automaticamente, sem interferir no caminho da final.
+    if total_fases >= 2:
+        db.add(ConfrontoFusaoCSModel(torneio_id=torneio_id, fase=0, ordem=1,
+                                     serie_md=_serie_terceiro_lugar_fusao(torneio)))
     db.flush()
     for partida in db.scalars(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id, ConfrontoFusaoCSModel.fase == 1)).all():
         if bool(partida.equipe_a_id) != bool(partida.equipe_b_id):
@@ -4120,9 +4135,25 @@ def resultado_cs_fusao(torneio_id: int, confronto_id: int, body: ResultadoFusaoC
     if min(body.vitorias_a, body.vitorias_b) < 0 or max(body.vitorias_a, body.vitorias_b) != alvo or body.vitorias_a == body.vitorias_b:
         raise HTTPException(400, f'Informe um placar válido para MD{partida.serie_md}; o vencedor precisa chegar a {alvo}.')
     partida.vitorias_a, partida.vitorias_b = body.vitorias_a, body.vitorias_b
-    _avancar_fusao(db, partida, partida.equipe_a_id if body.vitorias_a > body.vitorias_b else partida.equipe_b_id)
+    vencedor_id = partida.equipe_a_id if body.vitorias_a > body.vitorias_b else partida.equipe_b_id
+    perdedor_id = partida.equipe_b_id if vencedor_id == partida.equipe_a_id else partida.equipe_a_id
+    _avancar_fusao(db, partida, vencedor_id)
     final = db.scalar(select(func.max(ConfrontoFusaoCSModel.fase)).where(ConfrontoFusaoCSModel.torneio_id == torneio_id))
-    if partida.fase == final: torneio.status = 'aguardando_revisao'
+    if partida.fase == final - 1:
+        terceiro = db.scalar(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id,
+                                                                  ConfrontoFusaoCSModel.fase == 0,
+                                                                  ConfrontoFusaoCSModel.ordem == 1))
+        if terceiro:
+            if partida.ordem == 1: terceiro.equipe_a_id = perdedor_id
+            else: terceiro.equipe_b_id = perdedor_id
+    finalizado = db.scalar(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id,
+                                                                ConfrontoFusaoCSModel.fase == final,
+                                                                ConfrontoFusaoCSModel.ordem == 1))
+    terceiro = db.scalar(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id,
+                                                              ConfrontoFusaoCSModel.fase == 0,
+                                                              ConfrontoFusaoCSModel.ordem == 1))
+    if finalizado and finalizado.status == 'finalizado' and (not terceiro or terceiro.status == 'finalizado'):
+        torneio.status = 'aguardando_revisao'
     db.commit(); return {'message': 'Resultado CS confirmado.', 'confrontos': _dados_confrontos_fusao(db, torneio_id)}
 
 
@@ -4143,7 +4174,12 @@ def apurar_fusao(torneio_id: int, _admin: JogadorModel = Depends(require_admin),
     if not torneio or torneio.status != 'aguardando_revisao': raise HTTPException(400, 'Finalize o CS antes de apurar os prêmios.')
     if db.scalar(select(PagamentoFusaoModel).where(PagamentoFusaoModel.torneio_id == torneio_id)): raise HTTPException(400, 'Prêmios já foram apurados.')
     final = db.scalar(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id).order_by(ConfrontoFusaoCSModel.fase.desc()))
+    terceiro = db.scalar(select(ConfrontoFusaoCSModel).where(ConfrontoFusaoCSModel.torneio_id == torneio_id,
+                                                              ConfrontoFusaoCSModel.fase == 0,
+                                                              ConfrontoFusaoCSModel.ordem == 1))
     ordem = [final.vencedor_id, final.equipe_b_id if final.vencedor_id == final.equipe_a_id else final.equipe_a_id]
+    if terceiro and terceiro.vencedor_id:
+        ordem += [terceiro.vencedor_id, terceiro.equipe_b_id if terceiro.vencedor_id == terceiro.equipe_a_id else terceiro.equipe_a_id]
     ordem += [linha['equipe_id'] for linha in _placar_fusao(db, torneio) if linha['equipe_id'] not in ordem]
     for posicao, valor in enumerate(_fusao_json(torneio.premios_json, []), 1):
         if posicao <= len(ordem) and float(valor) > 0: db.add(PagamentoFusaoModel(torneio_id=torneio_id, equipe_id=ordem[posicao - 1], colocacao_final=posicao, valor=float(valor)))
