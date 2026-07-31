@@ -3934,6 +3934,27 @@ class InscreverFusaoBody(BaseModel):
     reservas_nicks: list[str] = []
     nome_guilda: Optional[str] = None
     logo_data: Optional[str] = None
+    usar_pacote_manager: bool = False
+
+
+PACOTE_MANAGER_FUSAO_VALOR = 12.0
+PACOTE_MANAGER_FUSAO_EQUIPES = 3
+
+
+def _ref_pacote_manager_fusao(torneio_id: int) -> str:
+    return f'pacote_manager_fusao:{torneio_id}'
+
+
+def _resumo_pacote_manager_fusao(db: Session, torneio_id: int, jogador_id: int) -> dict:
+    pacote = db.scalar(select(TransacaoModel).where(TransacaoModel.jogador_id == jogador_id,
+                                                    TransacaoModel.tipo == 'pacote_manager_fusao',
+                                                    TransacaoModel.ref == _ref_pacote_manager_fusao(torneio_id)))
+    usadas = db.scalar(select(func.count()).select_from(EquipeFusaoModel)
+                        .where(EquipeFusaoModel.torneio_id == torneio_id,
+                               EquipeFusaoModel.capitao_id == jogador_id)) or 0
+    return {'ativo': bool(pacote), 'valor': PACOTE_MANAGER_FUSAO_VALOR,
+            'limite_equipes': PACOTE_MANAGER_FUSAO_EQUIPES, 'usadas': usadas,
+            'restantes': max(0, PACOTE_MANAGER_FUSAO_EQUIPES - usadas)}
 
 
 class ResultadoFusaoBRInput(BaseModel):
@@ -3997,17 +4018,49 @@ def minha_equipe_fusao(torneio_id: int, jogador: JogadorModel = Depends(obter_us
     return {'equipe': _serializar_equipe_fusao(db, equipe) if equipe else None}
 
 
+@app.get('/fusao/{torneio_id}/pacote-manager')
+def pacote_manager_fusao(torneio_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    torneio = db.get(TorneioFusaoModel, torneio_id)
+    if not torneio: raise HTTPException(404, 'Torneio não encontrado.')
+    return {'pacote': _resumo_pacote_manager_fusao(db, torneio_id, jogador.id)}
+
+
+@app.post('/fusao/{torneio_id}/pacote-manager')
+def comprar_pacote_manager_fusao(torneio_id: int, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
+    torneio = db.get(TorneioFusaoModel, torneio_id)
+    if not torneio or torneio.status != 'inscricao': raise HTTPException(400, 'O pacote só pode ser adquirido durante as inscrições.')
+    resumo = _resumo_pacote_manager_fusao(db, torneio_id, jogador.id)
+    if resumo['ativo']: return {'message': 'Seu pacote Manager já está ativo.', 'pacote': resumo}
+    if resumo['usadas']: raise HTTPException(400, 'O pacote Manager precisa ser comprado antes da primeira equipe deste torneio.')
+    conta = _lock_jogador(db, jogador.id)
+    if conta.saldo < PACOTE_MANAGER_FUSAO_VALOR: raise HTTPException(400, 'Saldo insuficiente para o pacote Manager.')
+    registrar_transacao(db, conta, tipo='pacote_manager_fusao', delta_saldo=-PACOTE_MANAGER_FUSAO_VALOR,
+                        ref=_ref_pacote_manager_fusao(torneio_id))
+    db.commit()
+    return {'message': 'Pacote Manager ativado: crie até 3 equipes sem nova cobrança.',
+            'pacote': _resumo_pacote_manager_fusao(db, torneio_id, jogador.id)}
+
+
 @app.post('/fusao/{torneio_id}/inscrever')
 def inscrever_fusao(torneio_id: int, body: InscreverFusaoBody, jogador: JogadorModel = Depends(obter_usuario_atual), db: Session = Depends(get_db)):
     torneio = db.get(TorneioFusaoModel, torneio_id)
     if not torneio or torneio.status != 'inscricao': raise HTTPException(400, 'As inscrições deste torneio não estão abertas.')
-    if db.scalar(select(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id, EquipeFusaoModel.capitao_id == jogador.id)):
+    pacote = _resumo_pacote_manager_fusao(db, torneio_id, jogador.id)
+    usar_pacote = bool(body.usar_pacote_manager and pacote['ativo'])
+    if body.usar_pacote_manager and not usar_pacote:
+        raise HTTPException(400, 'Ative primeiro o pacote Manager para usar essa inscrição.')
+    if usar_pacote and pacote['restantes'] <= 0:
+        raise HTTPException(400, 'As 3 inscrições do seu pacote Manager já foram usadas.')
+    if not usar_pacote and db.scalar(select(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id, EquipeFusaoModel.capitao_id == jogador.id)):
         raise HTTPException(400, 'Você já inscreveu uma equipe neste torneio.')
     total = db.scalar(select(func.count()).select_from(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id)) or 0
     if torneio.max_equipes and total >= torneio.max_equipes: raise HTTPException(400, 'As vagas do torneio foram preenchidas.')
-    nicks = [jogador.nick] + [n.strip() for n in body.membros_nicks if n.strip()]
+    nicks = ([n.strip() for n in body.membros_nicks if n.strip()] if usar_pacote
+             else [jogador.nick] + [n.strip() for n in body.membros_nicks if n.strip()])
     nicks = list(dict.fromkeys(nicks))
-    if len(nicks) != torneio.tamanho_equipe: raise HTTPException(400, f'Esta configuração exige exatamente {torneio.tamanho_equipe} titulares, contando o capitão.')
+    if len(nicks) != torneio.tamanho_equipe:
+        detalhe = 'sem incluir o manager' if usar_pacote else 'contando o capitão'
+        raise HTTPException(400, f'Esta configuração exige exatamente {torneio.tamanho_equipe} titulares, {detalhe}.')
     membros = db.scalars(select(JogadorModel).where(JogadorModel.nick.in_(nicks))).all()
     if len(membros) != len(nicks): raise HTTPException(400, 'Um ou mais nicks titulares não foram encontrados.')
     reservas_nicks = list(dict.fromkeys(n.strip() for n in body.reservas_nicks if n.strip()))
@@ -4016,13 +4069,14 @@ def inscrever_fusao(torneio_id: int, body: InscreverFusaoBody, jogador: JogadorM
     reservas = db.scalars(select(JogadorModel).where(JogadorModel.nick.in_(reservas_nicks))).all()
     if len(reservas) != len(reservas_nicks): raise HTTPException(400, 'Um ou mais nicks reservas não foram encontrados.')
     conta = _lock_jogador(db, jogador.id)
-    if conta.saldo < torneio.taxa_inscricao: raise HTTPException(400, 'Saldo insuficiente para a inscrição da equipe.')
+    if not usar_pacote and conta.saldo < torneio.taxa_inscricao: raise HTTPException(400, 'Saldo insuficiente para a inscrição da equipe.')
     equipe = EquipeFusaoModel(torneio_id=torneio.id, nome=body.nome_equipe.strip() or f'Equipe de {jogador.nick}', capitao_id=jogador.id,
                                nome_guilda=body.nome_guilda.strip() if body.nome_guilda else None, logo_data=_validar_logo_guilda(body.logo_data), slot_br=total + 1)
     db.add(equipe); db.flush()
     for membro in membros: db.add(MembroEquipeFusaoModel(equipe_id=equipe.id, jogador_id=membro.id))
     for reserva in reservas: db.add(MembroEquipeFusaoModel(equipe_id=equipe.id, jogador_id=reserva.id, reserva=True))
-    registrar_transacao(db, conta, tipo='inscricao_torneio_fusao', delta_saldo=-torneio.taxa_inscricao, ref=f'fusao:{torneio.id}:{equipe.id}')
+    if not usar_pacote:
+        registrar_transacao(db, conta, tipo='inscricao_torneio_fusao', delta_saldo=-torneio.taxa_inscricao, ref=f'fusao:{torneio.id}:{equipe.id}')
     db.commit(); return {'message': 'Equipe inscrita na Fusão Suprema.', 'equipe': _serializar_equipe_fusao(db, equipe)}
 
 

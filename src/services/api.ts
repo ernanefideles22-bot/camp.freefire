@@ -348,6 +348,7 @@ export interface TorneioFusao {
   data_br?: string | null; data_cs?: string | null; rodadas_br: number; classificados: number; pontos_colocacao: Record<string, number>; pontos_abate: number; desempates: string[]; chaveamento: 'seed' | 'sorteio'; series: Record<string, number>; vantagem?: string | null; premios: number[]; equipes: number; inscritos_equipes: EquipeCampeonato[]; placar_br: PlacarFusao[]; confrontos_cs: ConfrontoFusao[];
 }
 export interface PagamentoFusao { id: number; equipe: string; colocacao: number; valor: number; status: string; }
+export interface PacoteManagerFusao { ativo: boolean; valor: number; limite_equipes: number; usadas: number; restantes: number; }
 
 export interface ResultadoCriador { jogador_id: number; nick: string; colocacao: number; abates: number; guilda?: GuildaIdentidade | null; }
 export interface ResultadoEquipeCriador { equipe_id: number; equipe: string; colocacao: number; abates: number; guilda?: GuildaIdentidade | null; }
@@ -460,7 +461,9 @@ export const apiService = {
   async obterFusaoAtual(): Promise<TorneioFusao | null> { return (await api.get('/fusao/atual')).data?.torneio ?? null; },
   async obterHistoricoFusao(): Promise<TorneioFusao[]> { return (await api.get('/fusao/historico')).data?.torneios ?? []; },
   async obterMinhaEquipeFusao(id: number): Promise<EquipeCampeonato | null> { return (await api.get(`/fusao/${id}/minha-equipe`)).data?.equipe ?? null; },
-  async inscreverFusao(id: number, payload: { nome_equipe: string; membros_nicks: string[]; reservas_nicks: string[]; nome_guilda?: string; logo_data?: string }): Promise<any> { return (await api.post(`/fusao/${id}/inscrever`, payload)).data; },
+  async inscreverFusao(id: number, payload: { nome_equipe: string; membros_nicks: string[]; reservas_nicks: string[]; nome_guilda?: string; logo_data?: string; usar_pacote_manager?: boolean }): Promise<any> { return (await api.post(`/fusao/${id}/inscrever`, payload)).data; },
+  async pacoteManagerFusao(id: number): Promise<PacoteManagerFusao> { return (await api.get(`/fusao/${id}/pacote-manager`)).data.pacote as PacoteManagerFusao; },
+  async comprarPacoteManagerFusao(id: number): Promise<{ message: string; pacote: PacoteManagerFusao }> { return (await api.post(`/fusao/${id}/pacote-manager`)).data; },
   async criarFusao(payload: any): Promise<TorneioFusao> { return (await api.post('/admin/fusao/criar', payload)).data as TorneioFusao; },
   async configurarFusao(id: number, payload: any): Promise<TorneioFusao> { return (await api.post(`/admin/fusao/${id}/config`, payload)).data as TorneioFusao; },
   async iniciarBrFusao(id: number): Promise<any> { return (await api.post(`/admin/fusao/${id}/iniciar-br`)).data; },
