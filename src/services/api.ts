@@ -461,7 +461,7 @@ export const apiService = {
   async obterFusaoAtual(): Promise<TorneioFusao | null> { return (await api.get('/fusao/atual')).data?.torneio ?? null; },
   async obterHistoricoFusao(): Promise<TorneioFusao[]> { return (await api.get('/fusao/historico')).data?.torneios ?? []; },
   async obterMinhaEquipeFusao(id: number): Promise<EquipeCampeonato | null> { return (await api.get(`/fusao/${id}/minha-equipe`)).data?.equipe ?? null; },
-  async inscreverFusao(id: number, payload: { nome_equipe: string; membros_nicks: string[]; reservas_nicks: string[]; nome_guilda?: string; logo_data?: string; usar_pacote_manager?: boolean }): Promise<any> { return (await api.post(`/fusao/${id}/inscrever`, payload)).data; },
+  async inscreverFusao(id: number, payload: { nome_equipe: string; membros_nicks: string[]; reservas_nicks: string[]; nome_guilda?: string; logo_data?: string; usar_pacote_manager?: boolean; manager_joga?: boolean }): Promise<any> { return (await api.post(`/fusao/${id}/inscrever`, payload)).data; },
   async pacoteManagerFusao(id: number): Promise<PacoteManagerFusao> { return (await api.get(`/fusao/${id}/pacote-manager`)).data.pacote as PacoteManagerFusao; },
   async comprarPacoteManagerFusao(id: number): Promise<{ message: string; pacote: PacoteManagerFusao }> { return (await api.post(`/fusao/${id}/pacote-manager`)).data; },
   async criarFusao(payload: any): Promise<TorneioFusao> { return (await api.post('/admin/fusao/criar', payload)).data as TorneioFusao; },

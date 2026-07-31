@@ -3935,6 +3935,7 @@ class InscreverFusaoBody(BaseModel):
     nome_guilda: Optional[str] = None
     logo_data: Optional[str] = None
     usar_pacote_manager: bool = False
+    manager_joga: bool = False
 
 
 PACOTE_MANAGER_FUSAO_VALOR = 12.0
@@ -4055,14 +4056,20 @@ def inscrever_fusao(torneio_id: int, body: InscreverFusaoBody, jogador: JogadorM
         raise HTTPException(400, 'Você já inscreveu uma equipe neste torneio.')
     total = db.scalar(select(func.count()).select_from(EquipeFusaoModel).where(EquipeFusaoModel.torneio_id == torneio_id)) or 0
     if torneio.max_equipes and total >= torneio.max_equipes: raise HTTPException(400, 'As vagas do torneio foram preenchidas.')
-    nicks = ([n.strip() for n in body.membros_nicks if n.strip()] if usar_pacote
+    nicks = (([jogador.nick] if body.manager_joga else []) + [n.strip() for n in body.membros_nicks if n.strip()] if usar_pacote
              else [jogador.nick] + [n.strip() for n in body.membros_nicks if n.strip()])
     nicks = list(dict.fromkeys(nicks))
     if len(nicks) != torneio.tamanho_equipe:
-        detalhe = 'sem incluir o manager' if usar_pacote else 'contando o capitão'
+        detalhe = 'sem incluir o manager' if usar_pacote and not body.manager_joga else 'contando o capitão/manager'
         raise HTTPException(400, f'Esta configuração exige exatamente {torneio.tamanho_equipe} titulares, {detalhe}.')
     membros = db.scalars(select(JogadorModel).where(JogadorModel.nick.in_(nicks))).all()
     if len(membros) != len(nicks): raise HTTPException(400, 'Um ou mais nicks titulares não foram encontrados.')
+    if usar_pacote and body.manager_joga and db.scalar(
+        select(MembroEquipeFusaoModel).join(EquipeFusaoModel, EquipeFusaoModel.id == MembroEquipeFusaoModel.equipe_id)
+        .where(EquipeFusaoModel.torneio_id == torneio_id, MembroEquipeFusaoModel.jogador_id == jogador.id,
+               MembroEquipeFusaoModel.reserva.is_(False))
+    ):
+        raise HTTPException(400, 'O manager pode jogar por apenas uma equipe neste torneio.')
     reservas_nicks = list(dict.fromkeys(n.strip() for n in body.reservas_nicks if n.strip()))
     if set(n.casefold() for n in reservas_nicks) & set(n.casefold() for n in nicks): raise HTTPException(400, 'Um titular não pode também ser reserva.')
     if torneio.max_reservas is not None and len(reservas_nicks) > torneio.max_reservas: raise HTTPException(400, f'Este torneio permite até {torneio.max_reservas} reserva(s).')
