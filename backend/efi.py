@@ -290,6 +290,21 @@ async def _consultar_cob(txid: str) -> dict:
     return await _api('GET', f'/v2/cob/{txid}')
 
 
+async def _devolucao_confirmada(item: dict) -> bool:
+    """Reconsulta a devolucao na API da Efi (nunca confia no payload do webhook).
+    True somente se a Efi confirmar status DEVOLVIDO."""
+    e2e = item.get('endToEndId', '')
+    devs = item.get('devolucoes') or []
+    dev_id = devs[0].get('id', '') if devs else ''
+    if not (e2e and dev_id):
+        return False
+    try:
+        d = await _api('GET', f'/v2/pix/{e2e}/devolucao/{dev_id}')
+    except HTTPException:
+        return False
+    return (d.get('status') or '').upper() == 'DEVOLVIDO'
+
+
 @router.post('/webhook')
 @router.post('/webhook/pix')  # a Efi acrescenta /pix ao fim da URL registrada (doc oficial)
 async def pix_webhook(request: Request, db: Session = Depends(get_db)):
@@ -328,8 +343,12 @@ async def pix_webhook(request: Request, db: Session = Depends(get_db)):
 
         # Devolucao apos credito -> reverte.
         if item.get('devolucoes') and cobranca.status == 'pago':
-            estornado = _estornar_pagamento(db, cobranca)
-            resultados.append({'txid': txid, 'status': 'estornado', 'estornado': estornado})
+            # NUNCA confia no payload: reconsulta a devolucao na API antes de estornar.
+            if await _devolucao_confirmada(item):
+                estornado = _estornar_pagamento(db, cobranca)
+                resultados.append({'txid': txid, 'status': 'estornado', 'estornado': estornado})
+            else:
+                resultados.append({'txid': txid, 'status': 'devolucao_nao_confirmada'})
             continue
 
         dados = await _consultar_cob(txid)  # fonte de verdade
@@ -381,7 +400,7 @@ def _id_envio(code: str) -> str:
 
 
 async def asaas_transferir_pix(chave: str, tipo_chave: str, valor: float,
-                               code: str, description: str = '') -> dict:
+                               code: str, description: str = '', cpf: str = '') -> dict:
     """Envia PIX por chave (saque). Mantem a assinatura do asaas.py.
     Retorna dict normalizado contendo 'id' (=idEnvio) e 'status', para main.py."""
     if tipo_chave not in TIPOS_VALIDOS:
@@ -389,11 +408,15 @@ async def asaas_transferir_pix(chave: str, tipo_chave: str, valor: float,
     if not EFI_PIX_KEY:
         raise HTTPException(503, 'Integracao Efi nao configurada (EFI_PIX_KEY).')
     id_envio = _id_envio(code)
+    favorecido = {'chave': chave}
+    _cpf_fav = ''.join(c for c in (cpf or '') if c.isdigit())
+    if len(_cpf_fav) == 11:
+        favorecido['cpf'] = _cpf_fav  # Efi RECUSA o envio se a chave nao pertencer a este CPF
     payload = {
         'valor': f'{round(valor, 2):.2f}',
         'pagador': {'chave': EFI_PIX_KEY,
                     'infoPagador': (description or 'Saque Camp FreeFire')[:140]},
-        'favorecido': {'chave': chave},
+        'favorecido': favorecido,
     }
     data = await _api('PUT', f'/v3/gn/pix/{id_envio}', payload)
     # Normaliza para o formato que main.py espera (espelho do Asaas: 'id'+'status').
