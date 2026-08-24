@@ -4,7 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/add-champions-intro.yml'
-      - 'public/champions/flowfire-intro.mp4'
+      - 'public/champions/intro-inline.js'
 permissions:
   contents: write
 jobs:
@@ -12,19 +12,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inject intro splash
+      - name: Wire embedded intro
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('public/champions/index.html')
           s=p.read_text(encoding='utf-8')
-          if 'id="flowfireIntro"' in s:
-              print('Intro already installed')
-              raise SystemExit
-          css='''<style id="flowfire-intro-style">#flowfireIntro{position:fixed;inset:0;z-index:9999;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;transition:opacity .65s ease,visibility .65s ease}#flowfireIntro.hide{opacity:0;visibility:hidden;pointer-events:none}#flowfireIntro video{width:100%;height:100%;object-fit:cover;background:#000}#flowfireIntro:after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 90px rgba(0,0,0,.65)}#skipIntro{position:absolute;right:18px;bottom:calc(22px + env(safe-area-inset-bottom));z-index:2;border:1px solid rgba(255,145,52,.65);border-radius:12px;padding:10px 15px;background:rgba(5,4,7,.68);backdrop-filter:blur(10px);color:#fff;font-family:'Oxanium',Arial,sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.06em;cursor:pointer}body.intro-lock{overflow:hidden}@media(max-width:680px){#flowfireIntro video{object-fit:cover}#skipIntro{right:14px;bottom:calc(18px + env(safe-area-inset-bottom));font-size:12px}}</style>'''
-          splash='''<div id="flowfireIntro" aria-label="Abertura Flowfire Champions"><video id="introVideo" autoplay muted playsinline preload="auto"><source src="./flowfire-intro.mp4" type="video/mp4"></video><button id="skipIntro" type="button">Pular</button></div>'''
-          js='''<script id="flowfire-intro-script">(()=>{const splash=document.getElementById('flowfireIntro'),video=document.getElementById('introVideo'),skip=document.getElementById('skipIntro');if(!splash||!video)return;document.body.classList.add('intro-lock');let done=false;const finish=()=>{if(done)return;done=true;splash.classList.add('hide');document.body.classList.remove('intro-lock');setTimeout(()=>splash.remove(),700)};skip?.addEventListener('click',finish);video.addEventListener('ended',finish,{once:true});video.addEventListener('error',finish,{once:true});const play=video.play();if(play&&play.catch)play.catch(()=>{video.muted=true;video.play().catch(finish)});setTimeout(()=>{if(video.readyState<2)finish()},5000);setTimeout(finish,18000)})();</script>'''
-          s=s.replace('</head>',css+'</head>',1).replace('<body>','<body>'+splash,1).replace('</body>',js+'</body>',1)
+          marker='<script id="flowfire-intro-script">'
+          loader='<script src="./intro-inline.js?v=2"></script>'
+          if loader not in s:
+              if marker not in s:
+                  raise SystemExit('intro marker not found')
+              s=s.replace(marker,loader+marker,1)
           p.write_text(s,encoding='utf-8')
           PY
       - name: Commit generated page
@@ -33,5 +32,5 @@ jobs:
           git config user.name "flowfire-bot"
           git config user.email "actions@users.noreply.github.com"
           git add public/champions/index.html
-          git commit -m "feat: enable Champions video splash"
+          git commit -m "fix: use embedded Champions intro video"
           git push
