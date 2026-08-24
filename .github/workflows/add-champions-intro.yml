@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Wire embedded intro
+      - name: Wire embedded intro and fit full video
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -24,6 +24,8 @@ jobs:
               if marker not in s:
                   raise SystemExit('intro marker not found')
               s=s.replace(marker,loader+marker,1)
+          s=s.replace('#flowfireIntro video{width:100%;height:100%;object-fit:cover;background:#000}', '#flowfireIntro video{width:100%;height:100%;object-fit:contain;background:#000}')
+          s=s.replace('@media(max-width:680px){#flowfireIntro video{object-fit:cover}', '@media(max-width:680px){#flowfireIntro video{object-fit:contain}')
           p.write_text(s,encoding='utf-8')
           PY
       - name: Commit generated page
@@ -32,5 +34,5 @@ jobs:
           git config user.name "flowfire-bot"
           git config user.email "actions@users.noreply.github.com"
           git add public/champions/index.html
-          git commit -m "fix: use embedded Champions intro video"
+          git commit -m "fix: contain Champions intro video"
           git push
