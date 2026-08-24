@@ -1,0 +1,37 @@
+name: Add Champions CS Phase
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/add-cs-phase.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add CS bracket UI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('public/champions/index.html')
+          s=p.read_text(encoding='utf-8')
+          if 'id="csPhase"' in s: raise SystemExit(0)
+          css='''<style id="cs-phase-style">.cs-phase{padding:42px 0}.cs-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:18px}.cs-bracket{display:grid;grid-template-columns:repeat(4,minmax(230px,1fr));gap:18px;overflow-x:auto;padding:8px 2px 18px}.cs-round{display:grid;gap:12px;align-content:center}.cs-round h3{font-family:\'Russo One\',sans-serif;color:#ff9a3d;text-transform:uppercase;font-weight:400;transform:skewX(-4deg);font-size:14px}.cs-match{background:linear-gradient(160deg,#17121b,#0d0a10);border:1px solid #322738;border-radius:14px;padding:10px;display:grid;gap:7px;min-width:220px}.cs-team{display:flex;align-items:center;gap:8px;padding:9px;border-radius:9px;background:#09070c;border:1px solid #2d2434;cursor:pointer}.cs-team.win{border-color:#ff7a00;box-shadow:0 0 12px rgba(255,100,0,.16)}.cs-team img{width:30px;height:30px;object-fit:contain;border-radius:6px}.cs-team span{font-weight:700;font-size:12px}.cs-empty{color:#756b7b}.cs-champion{margin-top:14px;padding:16px;border:1px solid rgba(255,122,0,.5);border-radius:14px;text-align:center;background:rgba(255,90,0,.06)}.cs-champion strong{font-family:\'Russo One\',sans-serif;color:#ffd34d}.admin-cs{margin-top:18px;padding:14px;border:1px solid #322738;border-radius:14px;background:#0d0a10}.admin-cs small{color:#958b9e}@media(max-width:680px){.cs-bracket{grid-template-columns:repeat(4,230px)}} </style>'''
+          s=s.replace('</head>',css+'</head>',1)
+          sec='''<section class="cs-phase" id="csPhase"><div class="container"><div class="eyebrow">SEGUNDA FASE • MODO CS</div><h2>CHAVE CS</h2><div class="cs-toolbar"><div class="note">TOP 16 DO BR • ELIMINAÇÃO DIRETA</div><button class="btn" id="generateCsBtn" style="display:none">GERAR CHAVE CS COM TOP 16</button></div><div class="cs-bracket" id="csBracket"></div><div id="csChampion"></div></div></section>'''
+          pos=s.find('<footer')
+          if pos<0: pos=s.find('</body>')
+          s=s[:pos]+sec+s[pos:]
+          js=r'''<script id="cs-phase-script">(()=>{const rounds=[['R16','OITAVAS',8],['QF','QUARTAS',4],['SF','SEMIFINAIS',2],['F','FINAL',1]];let cs=[];function esc(v){return String(v||'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]))}function team(id){return (window.teams||teams||[]).find(t=>t.id===id)}function teamHtml(id,w,m){const t=team(id);if(!t)return '<div class="cs-team cs-empty">Aguardando vencedor</div>';return `<div class="cs-team ${w===id?'win':''}" data-mid="${m.id}" data-tid="${id}">${t.logo_data?`<img src="${t.logo_data}">`:''}<span>${esc(t.name)}</span></div>`}async function loadCS(){try{const r=await fetch(`${SUPABASE_URL}/rest/v1/flowfire_manual_cs_matches?select=*&order=match_number.asc`,{headers:{apikey:SUPABASE_ANON,Authorization:`Bearer ${SUPABASE_ANON}`}});cs=await r.json();renderCS()}catch(e){console.error(e)}}function renderCS(){const root=document.getElementById('csBracket');if(!root)return;root.innerHTML=rounds.map(([key,label])=>`<div class="cs-round"><h3>${label}</h3>${cs.filter(m=>m.round===key).sort((a,b)=>a.match_number-b.match_number).map(m=>`<div class="cs-match"><small>CONFRONTO ${m.match_number}</small>${teamHtml(m.team1_id,m.winner_id,m)}${teamHtml(m.team2_id,m.winner_id,m)}</div>`).join('')||'<div class="cs-match cs-empty">Chave ainda não gerada</div>'}</div>`).join('');const f=cs.find(m=>m.round==='F'&&m.winner_id),champ=f&&team(f.winner_id);document.getElementById('csChampion').innerHTML=champ?`<div class="cs-champion">🏆 CAMPEÃO DA FUSÃO SUPREMA<br><strong>${esc(champ.name)}</strong></div>`:'';root.querySelectorAll('.cs-team[data-tid]').forEach(el=>el.onclick=()=>setWinner(el.dataset.mid,el.dataset.tid))}async function adminCallCS(payload){let key=sessionStorage.getItem('flowfireAdminKey')||window.adminKey||'';if(!key){key=prompt('Senha do administrador:')||'';if(!key)return null}const r=await fetch(`${SUPABASE_URL}/functions/v1/flowfire-manual-admin`,{method:'POST',headers:{'Content-Type':'application/json','x-admin-key':key},body:JSON.stringify(payload)});const j=await r.json();if(!r.ok){alert(j.error||'Erro');return null}sessionStorage.setItem('flowfireAdminKey',key);return j.data}async function setWinner(mid,tid){if(!confirm('Definir esta equipe como vencedora do confronto?'))return;const ok=await adminCallCS({action:'set_cs_winner',match_id:mid,winner_id:tid});if(ok)loadCS()}async function generate(){if(!confirm('Gerar/reiniciar a chave CS usando o TOP 16 atual do ranking BR?'))return;const ok=await adminCallCS({action:'generate_cs_bracket'});if(ok)loadCS()}document.getElementById('generateCsBtn').onclick=generate;const obs=new MutationObserver(()=>{const modal=document.querySelector('.modal.open');document.getElementById('generateCsBtn').style.display=modal?'inline-block':'none'});obs.observe(document.body,{attributes:true,subtree:true,attributeFilter:['class']});setTimeout(loadCS,900);setInterval(loadCS,15000);window.loadCS=loadCS})();</script>'''
+          s=s.replace('</body>',js+'</body>',1)
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit page
+        run: |
+          git config user.name flowfire-bot
+          git config user.email actions@users.noreply.github.com
+          git add public/champions/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: implement CS knockout bracket'
+          git push
