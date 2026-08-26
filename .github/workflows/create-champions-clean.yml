@@ -8,6 +8,7 @@ on:
       - 'public/champions/cs-phase.js'
       - 'public/champions/admin-fix.js'
       - 'public/champions/intro-inline.js'
+      - 'public/champions/clean-settings.js'
 permissions:
   contents: write
 jobs:
@@ -23,6 +24,7 @@ jobs:
           cp public/champions/cs-phase.js public/champions-clean/cs-phase.js
           cp public/champions/admin-fix.js public/champions-clean/admin-fix.js
           cp public/champions/intro-inline.js public/champions-clean/intro-inline.js
+          cp public/champions/clean-settings.js public/champions-clean/clean-settings.js
           cp public/champions/flowfire-intro.mp4 public/champions-clean/flowfire-intro.mp4 || true
           python - <<'PY'
           from pathlib import Path
@@ -35,12 +37,20 @@ jobs:
             'flowfire-manual-admin':'flowfire-clean-admin',
             './cs-phase.js?v=1':'./cs-phase.js?v=clean1',
             './admin-fix.js?v=2':'./admin-fix.js?v=clean1',
-            './admin-fix.js?v=1':'./admin-fix.js?v=clean1'
+            './admin-fix.js?v=1':'./admin-fix.js?v=clean1',
+            "period.textContent=settings.period||'—';":"period.textContent=settings.period||'';"
           }
           for p in files:
             s=p.read_text(encoding='utf-8')
             for a,b in repl.items(): s=s.replace(a,b)
             p.write_text(s,encoding='utf-8')
+          p=Path('public/champions-clean/index.html')
+          s=p.read_text(encoding='utf-8')
+          marker='<script src="./admin-fix.js?v=clean1"></script>'
+          settings='<script src="./clean-settings.js?v=1"></script>'
+          if settings not in s:
+              s=s.replace(marker,marker+settings,1)
+          p.write_text(s,encoding='utf-8')
           PY
       - name: Commit clean copy
         run: |
