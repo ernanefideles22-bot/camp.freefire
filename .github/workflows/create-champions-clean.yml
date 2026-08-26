@@ -1,0 +1,52 @@
+name: Create Clean Champions Copy
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/create-champions-clean.yml'
+      - 'public/champions/index.html'
+      - 'public/champions/cs-phase.js'
+      - 'public/champions/admin-fix.js'
+      - 'public/champions/intro-inline.js'
+permissions:
+  contents: write
+jobs:
+  build-clean-copy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate isolated clean landing
+        run: |
+          rm -rf public/champions-clean
+          mkdir -p public/champions-clean
+          cp public/champions/index.html public/champions-clean/index.html
+          cp public/champions/cs-phase.js public/champions-clean/cs-phase.js
+          cp public/champions/admin-fix.js public/champions-clean/admin-fix.js
+          cp public/champions/intro-inline.js public/champions-clean/intro-inline.js
+          cp public/champions/flowfire-intro.mp4 public/champions-clean/flowfire-intro.mp4 || true
+          python - <<'PY'
+          from pathlib import Path
+          files=[Path('public/champions-clean/index.html'),Path('public/champions-clean/cs-phase.js')]
+          repl={
+            'flowfire_manual_teams':'flowfire_clean_teams',
+            'flowfire_manual_results':'flowfire_clean_results',
+            'flowfire_manual_settings':'flowfire_clean_settings',
+            'flowfire_manual_cs_matches':'flowfire_clean_cs_matches',
+            'flowfire-manual-admin':'flowfire-clean-admin',
+            './cs-phase.js?v=1':'./cs-phase.js?v=clean1',
+            './admin-fix.js?v=2':'./admin-fix.js?v=clean1',
+            './admin-fix.js?v=1':'./admin-fix.js?v=clean1'
+          }
+          for p in files:
+            s=p.read_text(encoding='utf-8')
+            for a,b in repl.items(): s=s.replace(a,b)
+            p.write_text(s,encoding='utf-8')
+          PY
+      - name: Commit clean copy
+        run: |
+          if git diff --quiet -- public/champions-clean; then exit 0; fi
+          git config user.name "flowfire-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/champions-clean
+          git commit -m "feat: publish isolated clean Champions landing"
+          git push
