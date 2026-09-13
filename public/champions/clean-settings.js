@@ -13,9 +13,25 @@
     if(pi && document.activeElement!==pi)pi.value=settings?.period||'';
     if(mi && document.activeElement!==mi)mi.value=settings?.game_mode||'';
   }
+  function syncTop8Cs(){
+    const info=document.querySelector('#csPublic .cs-info');
+    if(info)info.textContent='Os 8 melhores do BR avançam para a fase eliminatória em CS.';
+    const btn=[...document.querySelectorAll('#cs button.btn')].find(b=>b.textContent.includes('Gerar chave CS'));
+    if(btn)btn.textContent='Gerar chave CS com Top 8 do BR';
+    const small=document.querySelector('#cs .admin-cs small');
+    if(small)small.textContent='Isso recria a chave usando os 8 melhores da classificação BR atual.';
+    const msg=document.getElementById('csAdminMsg');
+    if(msg && msg.textContent.includes('16 classificados'))msg.textContent=msg.textContent.replace('16 classificados','8 classificados');
+    if(!document.getElementById('cs-top8-style')){
+      const s=document.createElement('style');
+      s.id='cs-top8-style';
+      s.textContent='#csBracket{grid-template-columns:repeat(3,minmax(235px,1fr))!important}#csBracket .cs-round:first-child{display:none!important}@media(max-width:680px){#csBracket{grid-template-columns:repeat(3,235px)!important}}';
+      document.head.appendChild(s);
+    }
+  }
   function install(){
     const tabs=document.querySelector('#panel .tabs');
-    if(!tabs||document.getElementById('camp')){syncSettings();return;}
+    if(!tabs||document.getElementById('camp')){syncSettings();syncTop8Cs();return;}
     const b=document.createElement('button');
     b.className='tab'; b.type='button'; b.textContent='Campeonato'; b.onclick=()=>tab('camp');
     tabs.appendChild(b);
@@ -35,11 +51,13 @@
       }catch(e){msg.style.color='#ffb5be';msg.textContent=e?.message||'Não foi possível salvar.'}
     };
     syncSettings();
+    syncTop8Cs();
   }
   const oldRender=window.render;
-  if(typeof oldRender==='function')window.render=function(){oldRender();install();syncSettings();};
+  if(typeof oldRender==='function')window.render=function(){oldRender();install();syncSettings();syncTop8Cs();};
   const oldOpen=window.openAdmin;
-  if(typeof oldOpen==='function')window.openAdmin=function(){oldOpen();install();syncSettings();};
-  document.addEventListener('DOMContentLoaded',()=>{install();syncSettings();});
-  setTimeout(()=>{install();syncSettings();},400);
+  if(typeof oldOpen==='function')window.openAdmin=function(){oldOpen();install();syncSettings();syncTop8Cs();};
+  document.addEventListener('DOMContentLoaded',()=>{install();syncSettings();syncTop8Cs();});
+  setInterval(syncTop8Cs,700);
+  setTimeout(()=>{install();syncSettings();syncTop8Cs();},400);
 })();
