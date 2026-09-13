@@ -47,7 +47,8 @@ jobs:
           p=Path('public/champions-clean/index.html')
           s=p.read_text(encoding='utf-8')
           marker='<script src="./admin-fix.js?v=clean1"></script>'
-          settings='<script src="./clean-settings.js?v=1"></script>'
+          settings='<script src="./clean-settings.js?v=2"></script>'
+          s=s.replace('<script src="./clean-settings.js?v=1"></script>','')
           if settings not in s:
               s=s.replace(marker,marker+settings,1)
           p.write_text(s,encoding='utf-8')
